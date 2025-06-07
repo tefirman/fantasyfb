@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 import logging
 
 from ..utils.config import PlayerConfig
-from .. import sportsref_nfl as sr
+from ..utils import sportsref_nfl as sr
 
 logger = logging.getLogger(__name__)
 
