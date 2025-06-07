@@ -33,7 +33,7 @@ class DataManager:
         self.yahoo_client = yahoo_client
         self.cache = DataCache()
         
-    def load_league_info(self, team_name: str = None) -> Tuple[str, List[Dict]]:
+    def load_league_info(self, season: int, team_name: str = None) -> Tuple[str, List[Dict]]:
         """
         Load basic league information from Yahoo API.
         
@@ -55,7 +55,7 @@ class DataManager:
         leagues_data = self.yahoo_client.get_user_leagues()
         
         # Find the right league
-        lg_id, teams = self._select_league(leagues_data, team_name)
+        lg_id, teams = self._select_league(leagues_data, season, team_name)
         
         # Cache the result
         result = (lg_id, teams)
@@ -202,11 +202,22 @@ class DataManager:
         """Get current NFL week from Yahoo API."""
         return self.yahoo_client.get_current_week(lg_id)
     
-    def _select_league(self, leagues_data: Dict, team_name: str = None) -> Tuple[str, List[Dict]]:
+    def _select_league(self, leagues_data: Dict, season: int, league_name: str) -> Tuple[str, List[Dict]]:
         """Select the appropriate league from user's leagues."""
         # Implementation of your existing league selection logic
         # This would extract the right league based on team_name
         pass
+        # for ind in range(leagues_data["count"]):
+        #     game = leagues_data[str(ind)]["game"]
+        #     if game[0]["code"] == "nfl" \
+        #     and game[0]["season"] == str(season) \
+        #     and game[0]["name"] == league_name:
+        #         lg_id = game[0]["id"]
+        #         teams = game[1]["teams"]
+        #     return lg_id, teams
+        # raise ValueError(
+        #     f"Can't find a league by the name of {league_name} for the {season} season"
+        # )
     
     def _process_settings(self, settings_raw: Dict) -> Dict:
         """Process raw Yahoo settings into clean format."""

@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fantasyfb"
+version = "0.1.0"
+authors = [
+    {name = "Taylor Firman", email = "tefirman@gmail.com"},
+]
+description = "Fantasy Football Analysis Package with Monte Carlo Simulations"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop", 
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Games/Entertainment",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "pandas>=1.5.0",
+    "numpy>=1.21.0",
+    "requests>=2.25.0",
+    "beautifulsoup4>=4.9.0",
+    "yahoo-oauth>=1.0.0",
+    "yahoo-fantasy-api>=2.0.0",
+    "python-dotenv>=0.19.0",
+    "geopy>=2.2.0",
+    "xlsxwriter>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black>=21.0",
+    "flake8>=3.9",
+    "mypy>=0.910",
+]
+
+[project.urls]
+Homepage = "https://github.com/tefirman/fantasyfb"
+Repository = "https://github.com/tefirman/fantasyfb"
+Issues = "https://github.com/tefirman/fantasyfb/issues"
+
+[project.scripts]
+fantasyfb = "fantasyfb.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fantasyfb*"]
+exclude = ["tests*"]
