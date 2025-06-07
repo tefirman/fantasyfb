@@ -54,6 +54,6 @@ Issues = "https://github.com/tefirman/fantasyfb/issues"
 fantasyfb = "fantasyfb.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["fantasyfb*"]
 exclude = ["tests*"]
