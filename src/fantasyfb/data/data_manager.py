@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .yahoo_client import YahooClient
 from ..utils.cache import DataCache
-from .. import sportsref_nfl as sr
+from ..utils import sportsref_nfl as sr
 
 logger = logging.getLogger(__name__)
 
