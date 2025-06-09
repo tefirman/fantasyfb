@@ -30,7 +30,7 @@ class League:
     
     def __init__(
         self,
-        name: str = None,
+        team_name: str = None,
         season: int = None,
         week: int = None,
         config: LeagueConfig = None,
@@ -51,7 +51,8 @@ class League:
         # Basic league info
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         self.season = season if season else self.latest_season
-        self.name = name
+        self.team_name = team_name
+        self.week = week
         
         # Initialize components
         self.yahoo_client = YahooClient()
@@ -71,7 +72,7 @@ class League:
         """Load essential league data from Yahoo API."""
         try:
             # Load league settings and teams
-            self.lg_id, self.teams = self.data_manager.load_league_info(self.name)
+            self.lg_id = self.data_manager.load_league_id(self.season, self.team_name)[0]
             self.settings, self.scoring, self.roster_spots = self.data_manager.load_league_settings(self.lg_id)
             
             # Load current week
@@ -82,7 +83,7 @@ class League:
             self.nfl_teams = self.data_manager.load_nfl_teams()
             self.nfl_schedule = self.data_manager.load_nfl_schedule(self.season)
             
-            logger.info(f"Loaded league data for {len(self.teams)} teams")
+            logger.info(f"Loaded league data for {self.lg_id}")
             
         except Exception as e:
             logger.error(f"Failed to load league data: {e}")

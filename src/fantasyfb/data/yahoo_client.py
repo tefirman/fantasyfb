@@ -253,7 +253,7 @@ class YahooClient:
         
         return vals
     
-    def get_all_rosters(self, lg_id: str, week: int) -> Dict[str, List[Dict]]:
+    def get_league_rosters(self, lg_id: str, week: int) -> Dict[str, List[Dict]]:
         """Get current rosters for all teams."""
         logger.info(f"Fetching all rosters for week {week}...")
         

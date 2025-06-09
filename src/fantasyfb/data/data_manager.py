@@ -33,7 +33,7 @@ class DataManager:
         self.yahoo_client = yahoo_client
         self.cache = DataCache()
         
-    def load_league_info(self, season: int, team_name: str = None) -> Tuple[str, List[Dict]]:
+    def load_league_id(self, season: int, team_name: str = None) -> Tuple[str, List[Dict]]:
         """
         Load basic league information from Yahoo API.
         
@@ -55,10 +55,10 @@ class DataManager:
         leagues_data = self.yahoo_client.get_user_leagues()
         
         # Find the right league
-        lg_id, teams = self._select_league(leagues_data, season, team_name)
+        lg_id, team = self._select_league(leagues_data, season, team_name)
         
         # Cache the result
-        result = (lg_id, teams)
+        result = (lg_id, team)
         self.cache.save_data(cache_key, result)
         
         return result
@@ -202,22 +202,38 @@ class DataManager:
         """Get current NFL week from Yahoo API."""
         return self.yahoo_client.get_current_week(lg_id)
     
-    def _select_league(self, leagues_data: Dict, season: int, league_name: str) -> Tuple[str, List[Dict]]:
+    def _select_league(self, leagues_data: Dict, season: int, team_name: str) -> Tuple[str, List[Dict]]:
         """Select the appropriate league from user's leagues."""
         # Implementation of your existing league selection logic
         # This would extract the right league based on team_name
-        pass
-        # for ind in range(leagues_data["count"]):
-        #     game = leagues_data[str(ind)]["game"]
-        #     if game[0]["code"] == "nfl" \
-        #     and game[0]["season"] == str(season) \
-        #     and game[0]["name"] == league_name:
-        #         lg_id = game[0]["id"]
-        #         teams = game[1]["teams"]
-        #     return lg_id, teams
-        # raise ValueError(
-        #     f"Can't find a league by the name of {league_name} for the {season} season"
-        # )
+        for ind in range(leagues_data["count"]):
+            game = leagues_data[str(ind)]["game"]
+            if type(game) == dict:
+                continue
+            if game[0]["code"] == "nfl" \
+            and game[0]["season"] == str(season):
+                teams = game[1]["teams"]
+                details = [teams[str(ind)]["team"][0] for ind in range(teams["count"])]
+                names = [
+                    [val["name"] for val in team if "name" in val][0]
+                    for team in details
+                ]
+                if teams["count"] > 1:
+                    # If user has more than one team, use the team_name input or prompt them to pick one
+                    while team_name not in names:
+                        print("Found multiple fantasy teams: " + ", ".join(names))
+                        team_name = input("Which team would you like to analyze? ")
+                    team = teams[str(names.index(team_name))]["team"][0]
+                else:
+                    # If user has only one team, use that one and override whatever name was given
+                    team = teams["0"]["team"][0]
+                    team_name = names[0]
+                team_key = [val["team_key"] for val in team if "team_key" in val][0]
+                lg_id = ".".join(team_key.split(".")[:3])
+                return lg_id, team
+        raise ValueError(
+            f"Can't find a team by the name of {team_name} for the {season} season"
+        )
     
     def _process_settings(self, settings_raw: Dict) -> Dict:
         """Process raw Yahoo settings into clean format."""
