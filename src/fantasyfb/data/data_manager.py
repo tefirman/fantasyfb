@@ -143,7 +143,7 @@ class DataManager:
         # Load from GitHub (your existing source)
         nfl_teams = pd.read_csv(
             "https://raw.githubusercontent.com/"
-            + "tefirman/FantasySports/main/res/football/team_abbrevs.csv"
+            + "tefirman/fantasy-data/main/fantasyfb/team_abbrevs.csv"
         )
         
         self.cache.save_data(cache_key, nfl_teams)

@@ -104,7 +104,7 @@ def get_intl_games():
     soup = BeautifulSoup(response, "html.parser")
     tables = soup.find_all("table", attrs={"class": "wikitable sortable"})[1:-1]
     intl_games = pd.concat(pd.read_html(StringIO(str(tables))), ignore_index=True)
-    intl_games = intl_games.loc[~intl_games.Date.isnull() & ~intl_games.Date.isin(["TBD"])].reset_index(drop=True)
+    intl_games = intl_games.loc[~intl_games.Date.isnull() & ~intl_games.Date.isin(["TBD", "TBA"])].reset_index(drop=True)
     intl_games.Year = intl_games.Year.astype(str).str.split(" ").str[0].astype(int)
     intl_games["team1"] = intl_games["Designated home team"].str.split("\[").str[0]
     intl_games["team2"] = intl_games["Designated visitor"].str.split("\[").str[0]
