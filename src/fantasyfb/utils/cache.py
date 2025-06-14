@@ -26,7 +26,7 @@ class DataCache:
     - Injury data: 1 hour (changes frequently)
     """
     
-    def __init__(self, cache_dir: str = "cache"):
+    def __init__(self, cache_dir: str = ".cache"):
         """
         Initialize cache system.
         

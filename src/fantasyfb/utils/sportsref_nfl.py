@@ -21,32 +21,45 @@ from io import StringIO
 import shutil
 import gzip
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 base_url = "https://www.pro-football-reference.com/"
 """Base URL for Pro Football Reference used in all page requests."""
 
-def get_page(endpoint: str):
+def get_page(endpoint: str, cache_dir: str = ".cache"):
     """
     Pulls down the raw html for the specified endpoint of Pro Football Reference
-    and adds an additional four second delay to avoid triggering the 1hr jailtime
-    for exceeding 20 requests per minute.
-
-    Args:
-        endpoint (str): relative location of the page to pull down.
-
-    Returns:
-        bs4.BeautifulSoup: parsed html of the specified endpoint.
+    with caching to avoid repeated requests.
     """
-    time.sleep(4)
+    # Create cache directory if it doesn't exist
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    # Create cache filename from endpoint, handling .htm extension
+    base_name = endpoint.replace('/', '_').replace('.htm', '')
+    cache_file = os.path.join(cache_dir, f"{base_name}.html")
+    
+    # Check if we have a cached version less than 24 hours old
+    if os.path.exists(cache_file):
+        file_age = time.time() - os.path.getmtime(cache_file)
+        if file_age < 24 * 3600:  # 24 hours
+            with open(cache_file, 'r') as f:
+                return BeautifulSoup(f.read(), "html.parser")
+    
+    # If no cache or cache expired, make the request
+    time.sleep(4)  # Keep the rate limiting
     try:
         response = requests.get(base_url + endpoint).text
     except requests.exceptions.ConnectionError as e:
         print('GETTING CONNECTION ERROR AGAIN!!!')
         print(endpoint)
         sys.exit(1)
+    
+    # Save to cache
+    with open(cache_file, 'w') as f:
+        f.write(response)
+    
     uncommented = response.replace("<!--", "").replace("-->", "")
-    soup = BeautifulSoup(uncommented, "html.parser")
-    return soup
+    return BeautifulSoup(uncommented, "html.parser")
 
 
 def parse_table(raw_text: BeautifulSoup, table_name: str):
@@ -190,17 +203,21 @@ def get_stadiums():
     return stadiums
 
 
-def get_team_stadium(abbrev: str, season: int):
+def get_team_stadium(abbrev: str, season: int, cache_dir: str = ".cache/stadiums"):
     """
-    Identifies the home stadium of the specified team during the specified season.
-
-    Args:
-        abbrev (str): team abbreviation according to Pro Football Reference  
-        season (int): year of the NFL season of interest
-
-    Returns:
-        str: stadium identifier according to Pro Football Reference
+    Identifies the home stadium of the specified team during the specified season with caching.
     """
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, f"stadium_{abbrev}_{season}.txt")
+    
+    # Check cache
+    if os.path.exists(cache_file):
+        file_age = time.time() - os.path.getmtime(cache_file)
+        if file_age < 24 * 3600:  # 24 hours
+            with open(cache_file, 'r') as f:
+                return f.read().strip()
+    
+    # If no cache or cache expired, fetch from web
     raw_text = get_page("teams/{}/{}.htm".format(abbrev.lower(), int(season)))
     team_info = raw_text.find(id="meta").find_all("p")
     stadium_info = [val for val in team_info if val.text.startswith("Stadium:")]
@@ -222,6 +239,11 @@ def get_team_stadium(abbrev: str, season: int):
     else:
         stadium_info = stadium_info[0]
         stadium_id = stadium_info.find("a").attrs["href"].split("/")[-1].split(".")[0]
+    
+    # Save to cache
+    with open(cache_file, 'w') as f:
+        f.write(str(stadium_id))
+    
     return stadium_id
 
 
@@ -364,48 +386,50 @@ class Schedule:
 
     def get_schedules(self, start: int, finish: int):
         """
-        Pulls the full NFL schedules for the seasons provided.
-
-        Args:
-            start (int): first season of interest
-            finish (int): last season of interest
+        Pulls the full NFL schedules for the seasons provided using parallel processing.
         """
-        self.schedule = pd.DataFrame(columns=["season"])
-        for season in range(int(start), int(finish) + 1):
+        def fetch_season(season):
+            print(f"Fetching schedule for season {season}...")
             raw_text = get_page("years/{}/games.htm".format(season))
             season_sched = parse_table(raw_text, "games")
             season_sched.week_num = season_sched.week_num.astype(str).str.split('.').str[0]
             season_sched = season_sched.loc[~season_sched.week_num.astype(str).str.startswith('Pre')].reset_index(drop=True)
             season_sched['season'] = season
-            if "game_date" not in season_sched.columns: # Current season
+            
+            if "game_date" not in season_sched.columns:  # Current season
                 season_sched['game_date'] = season_sched.boxscore_word + ', ' + \
                 (datetime.datetime.now().year + season_sched.boxscore_word.str.startswith('January').astype(int)).astype(str)
-                season_sched = season_sched.rename(columns={'visitor_team':'winner',\
-                'visitor_team_abbrev':'winner_abbrev','home_team':'loser','home_team_abbrev':'loser_abbrev'})
+                season_sched = season_sched.rename(columns={'visitor_team':'winner',
+                    'visitor_team_abbrev':'winner_abbrev','home_team':'loser','home_team_abbrev':'loser_abbrev'})
                 season_sched[['yards_win','to_win','yards_lose','to_lose']] = None
-            # self.schedule = pd.concat([self.schedule, season_sched.dropna(axis=1)], ignore_index=True)
-            self.schedule = pd.concat([self.schedule, season_sched], ignore_index=True)
+            
+            print(f"Completed fetching schedule for season {season}")
+            return season_sched
+        
+        print(f"\nStarting to fetch schedules for seasons {start} through {finish}")
+        print("This may take a few minutes due to rate limiting...")
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            season_schedules = list(executor.map(fetch_season, range(int(start), int(finish) + 1)))
+        
+        print("\nAll seasons fetched, combining data...")
+        self.schedule = pd.concat([pd.DataFrame(columns=["season"])] + season_schedules, ignore_index=True)
+        print("Schedule data ready!")
 
     def add_weeks(self):
         """
-        Infers season week based on game dates for each season.
+        Optimized version of add_weeks using vectorized operations.
         """
         self.schedule.game_date = pd.to_datetime(self.schedule.game_date, format="mixed")
-        min_date = self.schedule.groupby("season").game_date.min().reset_index()
-        self.schedule = pd.merge(
-            left=self.schedule,
-            right=min_date,
-            how="inner",
-            on="season",
-            suffixes=("", "_min"),
-        )
+        min_dates = self.schedule.groupby("season").game_date.min()
         self.schedule["days_into_season"] = (
-            self.schedule.game_date - self.schedule.game_date_min
+            self.schedule.game_date - self.schedule.season.map(min_dates)
         ).dt.days
         self.schedule["week"] = self.schedule.days_into_season // 7 + 1
-        # NFL scheduled 2024 Christmas games on a Wednesday... Why...
-        mismatch = (self.schedule.week_num != self.schedule.week.astype(str)) & self.schedule.week_num.str.isnumeric()
-        self.schedule.loc[mismatch,"week"] = self.schedule.loc[mismatch,"week_num"].astype(int)
+        
+        # Handle special cases
+        mask = (self.schedule.week_num != self.schedule.week.astype(str)) & self.schedule.week_num.str.isnumeric()
+        self.schedule.loc[mask, "week"] = self.schedule.loc[mask, "week_num"].astype(int)
 
     def convert_to_home_away(self):
         """

@@ -5,11 +5,8 @@ Data Manager - handles all data loading, caching, and API interactions.
 
 import pandas as pd
 import os
-import time
-import datetime
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 import logging
-from pathlib import Path
 
 from .yahoo_client import YahooClient
 from ..utils.cache import DataCache
