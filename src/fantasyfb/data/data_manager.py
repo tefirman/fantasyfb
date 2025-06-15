@@ -260,4 +260,5 @@ class DataManager:
     def _process_nfl_schedule(self, schedule: pd.DataFrame) -> pd.DataFrame:
         """Process NFL schedule data."""
         # Your existing NFL schedule processing logic
-        pass
+        return schedule # Just returning as is for now
+        # pass

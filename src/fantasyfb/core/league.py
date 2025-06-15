@@ -5,7 +5,7 @@ Core League class - handles league settings, teams, and basic data loading.
 
 import pandas as pd
 import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 import logging
 
 from ..data.yahoo_client import YahooClient
@@ -66,7 +66,7 @@ class League:
         self._simulator = None
         self._trade_analyzer = None
         
-        logger.info(f"Initialized league: {self.name} for season {self.season}")
+        logger.info(f"Initialized league: {self.team_name} for season {self.season}")
     
     def _load_league_data(self):
         """Load essential league data from Yahoo API."""
@@ -220,8 +220,8 @@ class League:
     
     def get_team_name(self) -> str:
         """Get the user's team name."""
-        return self.name
+        return self.team_name
     
     def get_other_teams(self) -> List[Dict]:
         """Get all other teams in the league."""
-        return [team for team in self.teams if team['name'] != self.name]
+        return [team for team in self.teams if team['name'] != self.team_name]
