@@ -5,7 +5,7 @@ Player Analyzer - handles player statistics, projections, and WAR calculations.
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional
+from typing import Dict
 import logging
 
 from ..utils.config import PlayerConfig
@@ -77,7 +77,7 @@ class PlayerAnalyzer:
         
         corrections = pd.read_csv(
             "https://raw.githubusercontent.com/"
-            + "tefirman/FantasySports/main/res/football/name_corrections.csv"
+            + "tefirman/fantasy-data/main/fantasyfb/name_corrections.csv"
         )
         
         players = pd.merge(left=players, right=corrections, how="left", on="name")
@@ -164,7 +164,7 @@ class PlayerAnalyzer:
             try:
                 inj_proj = pd.read_csv(
                     "https://raw.githubusercontent.com/"
-                    + "tefirman/FantasySports/main/res/football/injured_list.csv"
+                    + "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
                 )
                 inj_proj = inj_proj.loc[inj_proj.until >= self.league.current_week]
                 

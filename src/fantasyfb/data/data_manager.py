@@ -5,6 +5,7 @@ Data Manager - handles all data loading, caching, and API interactions.
 
 import pandas as pd
 import os
+import datetime
 from typing import Dict, List, Tuple
 import logging
 
@@ -562,7 +563,18 @@ class DataManager:
                 "https://raw.githubusercontent.com/"
                 + "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
             )
-            inj_proj = inj_proj.loc[inj_proj.until >= self.get_current_week()]
+            
+            # Use current week - we'll estimate it from the season
+            current_week = 1  # Default fallback
+            try:
+                current_year = datetime.datetime.now().year
+                if season == current_year or (season == current_year - 1 and datetime.datetime.now().month < 6):
+                    # It's the current season, estimate week from date
+                    current_week = min(max(1, (datetime.datetime.now() - datetime.datetime(current_year, 9, 1)).days // 7), 18)
+            except:
+                current_week = 1
+                
+            inj_proj = inj_proj.loc[inj_proj.until >= current_week]
             
             players = pd.merge(
                 left=players,
@@ -619,9 +631,14 @@ class DataManager:
 
     def _add_depth_charts(self, players: pd.DataFrame, season: int) -> pd.DataFrame:
         """Add depth chart information."""
-        current_week = self.get_current_week()
+        # Note: We don't have access to lg_id here, so we'll use a simpler approach
+        # For current season, try to use current depth charts; otherwise use defaults
         
-        if season == self.latest_season and current_week == self.current_week:
+        current_year = datetime.datetime.now().year
+        is_current_season = (season == current_year or 
+                           (season == current_year - 1 and datetime.datetime.now().month < 6))
+        
+        if is_current_season:
             # Use current depth charts from ESPN
             try:
                 depth_charts = sr.get_all_depth_charts()
