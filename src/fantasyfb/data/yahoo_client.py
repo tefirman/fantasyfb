@@ -39,6 +39,8 @@ class YahooClient:
         self.credentials_file = credentials_file
         self._oauth = None
         self._gm = None
+        self._lg = None
+        self._current_lg_id = None
         self._last_request_time = 0
         self._min_request_interval = 3  # seconds between requests
         
@@ -156,15 +158,30 @@ class YahooClient:
         
         return self._safe_api_call(_get_leagues)
     
+    def get_league(self, lg_id: str):
+        """Get or create league object, caching it for reuse."""
+        if self._lg is None or self._current_lg_id != lg_id:
+            self._lg = self._gm.to_league(lg_id)
+            self._current_lg_id = lg_id
+        return self._lg
+    
     def get_league_settings(self, lg_id: str) -> Dict:
         """Get league settings and scoring configuration."""
         logger.info(f"Fetching league settings for {lg_id}...")
         
         def _get_settings():
-            lg = self._gm.to_league(lg_id)
+            lg = self.get_league(lg_id)
             return lg.yhandler.get_settings_raw(lg_id)
         
         return self._safe_api_call(_get_settings)
+    
+    def get_league_standings(self, lg_id: str) -> Dict:
+        """Get league standings."""
+        def _get_standings():
+            lg = self.get_league(lg_id)
+            return lg.yhandler.get_standings_raw(lg_id)
+        
+        return self._safe_api_call(_get_standings)
     
     def get_all_players(self, lg_id: str, injury_tries: int = 10) -> List[Dict]:
         """
@@ -179,7 +196,7 @@ class YahooClient:
         """
         logger.info("Fetching all players...")
         
-        lg = self._gm.to_league(lg_id)
+        lg = self.get_league(lg_id)
         
         # Try multiple times to get injury data
         for attempt in range(injury_tries):
@@ -257,7 +274,7 @@ class YahooClient:
         """Get current rosters for all teams."""
         logger.info(f"Fetching all rosters for week {week}...")
         
-        lg = self._gm.to_league(lg_id)
+        lg = self.get_league(lg_id)
         rosters = {}
         
         # Get team list first
@@ -293,7 +310,7 @@ class YahooClient:
         """Get fantasy league schedule."""
         logger.info("Fetching league schedule...")
         
-        lg = self._gm.to_league(lg_id)
+        lg = self.get_league(lg_id)
         schedule = []
         
         for team in teams:
@@ -330,5 +347,5 @@ class YahooClient:
     
     def get_current_week(self, lg_id: str) -> int:
         """Get current NFL week."""
-        lg = self._gm.to_league(lg_id)
+        lg = self.get_league(lg_id)
         return lg.current_week()

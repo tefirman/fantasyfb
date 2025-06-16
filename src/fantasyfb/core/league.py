@@ -75,6 +75,9 @@ class League:
             self.lg_id = self.data_manager.load_league_id(self.season, self.team_name)[0]
             self.settings, self.scoring, self.roster_spots = self.data_manager.load_league_settings(self.lg_id)
             
+            # Load all teams in the league
+            self.teams = self.data_manager.load_fantasy_teams(self.lg_id)
+
             # Load current week
             self.current_week = self.data_manager.get_current_week(self.lg_id)
             self.week = self.week if self.week else self.current_week

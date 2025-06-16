@@ -90,6 +90,40 @@ class DataManager:
         
         return result
     
+    def load_fantasy_teams(self, lg_id: str) -> List[Dict]:
+        """Load all fantasy teams in the league."""
+        cache_key = f"fantasy_teams_{lg_id}"
+        cached = self.cache.get_cached_data(cache_key, max_age_hours=24)
+        
+        if cached is not None:
+            return cached
+        
+        logger.info("Loading fantasy teams...")
+        
+        # Use the YahooClient's method to get league standings
+        league_info = self.yahoo_client.get_league_standings(lg_id)
+        teams_info = league_info["fantasy_content"]["league"][1]["standings"][0]["teams"]
+        
+        teams = []
+        for ind in range(teams_info["count"]):
+            team_data = teams_info[str(ind)]["team"][0]
+            team = {
+                "team_key": team_data[0]["team_key"],
+                "name": team_data[2]["name"],
+            }
+            
+            # Add manager if available
+            try:
+                if len(team_data) > 3 and "managers" in team_data[-1]:
+                    team["manager"] = team_data[-1]["managers"][0]["manager"]["nickname"]
+            except:
+                team["manager"] = "Unknown"
+            
+            teams.append(team)
+        
+        self.cache.save_data(cache_key, teams)
+        return teams
+
     def load_players(self, lg_id: str, season: int, week: int, force_refresh: bool = False) -> pd.DataFrame:
         """
         Load all NFL players eligible for the league.
@@ -116,7 +150,7 @@ class DataManager:
         players_raw = self.yahoo_client.get_all_players(lg_id)
         
         # Get current rosters
-        rosters = self.yahoo_client.get_all_rosters(lg_id, week)
+        rosters = self.yahoo_client.get_league_rosters(lg_id, week)
         
         # Process and merge data
         players = self._process_players(players_raw, rosters)
@@ -438,7 +472,7 @@ class DataManager:
         """Apply name corrections between Yahoo and Pro Football Reference."""
         corrections = pd.read_csv(
             "https://raw.githubusercontent.com/"
-            + "tefirman/FantasySports/main/res/football/name_corrections.csv"
+            + "tefirman/fantasy-data/main/fantasyfb/name_corrections.csv"
         )
         
         players = pd.merge(left=players, right=corrections, how="left", on="name")
@@ -526,7 +560,7 @@ class DataManager:
         try:
             inj_proj = pd.read_csv(
                 "https://raw.githubusercontent.com/"
-                + "tefirman/FantasySports/main/res/football/injured_list.csv"
+                + "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
             )
             inj_proj = inj_proj.loc[inj_proj.until >= self.get_current_week()]
             
