@@ -104,7 +104,12 @@ class SeasonSimulator:
         """Generate weekly scoring projections for all teams."""
         logger.debug("Generating weekly projections...")
         
-        projections = pd.DataFrame(columns=["fantasy_team", "week", "points_avg", "points_var"])
+        projections = pd.DataFrame({
+            "fantasy_team": pd.Series(dtype='str'),
+            "week": pd.Series(dtype='int'),
+            "points_avg": pd.Series(dtype='float'),
+            "points_var": pd.Series(dtype='float')
+        })
         
         # For each week in the season
         for week in range(1, 18):  # NFL weeks 1-17
@@ -125,7 +130,11 @@ class SeasonSimulator:
             team_projections["week"] = week
             team_projections["points_var"] = team_projections["points_stdev"] ** 2
             
-            projections = pd.concat([projections, team_projections], ignore_index=True)
+            if not team_projections.empty:
+                if projections.empty:
+                    projections = team_projections.copy()
+                else:
+                    projections = pd.concat([projections, team_projections], ignore_index=True)
         
         return projections
     

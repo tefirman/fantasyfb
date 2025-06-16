@@ -586,7 +586,13 @@ class DataManager:
             
             # Use projection where available
             has_proj = ~players.until_proj.isnull()
-            players.loc[has_proj, 'until'] = players.loc[has_proj, 'until_proj']
+            if has_proj.any():
+                # Convert to numeric, handling any problematic values like empty lists
+                proj_values = players.loc[has_proj, 'until_proj'].copy()
+                # Handle empty lists and other non-numeric values
+                proj_values = proj_values.apply(lambda x: float('nan') if isinstance(x, list) and len(x) == 0 else x)
+                proj_values = pd.to_numeric(proj_values, errors='coerce')
+                players.loc[has_proj, 'until'] = proj_values
             players = players.drop(columns=['until_proj'], errors='ignore')
             
         except Exception as e:
