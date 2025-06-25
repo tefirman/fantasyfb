@@ -70,6 +70,30 @@ def sample_players():
 
 
 @pytest.fixture
+def sample_nfl_schedule():
+    """Sample NFL schedule for testing."""
+    return pd.DataFrame({
+        "season": [2024] * 6,
+        "week": [1, 2, 3, 1, 2, 3],
+        "team": ["BUF", "BUF", "BUF", "SF", "SF", "SF"],
+        "elo_diff": [0.1, -0.2, 0.0, 0.3, -0.1, 0.2],
+        "opp_elo": [1500, 1520, 1480, 1510, 1530, 1490]
+    })
+
+
+@pytest.fixture
+def sample_fantasy_schedule():
+    """Sample fantasy league schedule."""
+    return pd.DataFrame({
+        "week": [1, 1, 2, 2],
+        "team_1": ["Team A", "Team C", "Team A", "Team C"],
+        "team_2": ["Team B", "Team D", "Team D", "Team B"],
+        "score_1": [120.5, 95.2, None, None],  # Some completed, some future
+        "score_2": [110.3, 105.8, None, None]
+    })
+
+
+@pytest.fixture
 def mock_yahoo_response():
     """Mock Yahoo API response structure."""
     return {
