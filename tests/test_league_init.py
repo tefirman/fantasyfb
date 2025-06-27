@@ -13,6 +13,7 @@ from datetime import datetime
 
 from fantasyfb.core.league import League
 from fantasyfb.utils.config import LeagueConfig
+from tests.fixtures import load_real_fixture
 
 
 class TestLeagueInitialization:
@@ -23,103 +24,15 @@ class TestLeagueInitialization:
         """Mock Yahoo API client to avoid real API calls during testing."""
         mock_client = Mock()
         
-        # Mock league ID discovery
-        mock_client.get_user_leagues.return_value = {
-            "count": 1,
-            "0": {
-                "game": [
-                    {"code": "nfl", "season": "2024"},
-                    {
-                        "teams": {
-                            "count": 1,
-                            "0": {
-                                "team": [
-                                    {
-                                        "team_key": "123.l.456789.t.1",
-                                        "name": "The Algorithm"
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-        
-        # Mock league settings
-        mock_client.get_league_settings.return_value = {
-            "fantasy_content": {
-                "league": [
-                    {},
-                    {
-                        "settings": [
-                            {
-                                "playoff_start_week": "14",
-                                "num_playoff_teams": "6",
-                                "stat_categories": {
-                                    "stats": [
-                                        {"stat": {"stat_id": "4", "display_name": "Pass Yds"}},
-                                        {"stat": {"stat_id": "5", "display_name": "Pass TD"}},
-                                    ]
-                                },
-                                "stat_modifiers": {
-                                    "stats": [
-                                        {"stat": {"stat_id": "4", "value": "0.04"}},
-                                        {"stat": {"stat_id": "5", "value": "6"}},
-                                    ]
-                                },
-                                "roster_positions": [
-                                    {"roster_position": {"position": "QB", "count": "1"}},
-                                    {"roster_position": {"position": "RB", "count": "2"}},
-                                    {"roster_position": {"position": "WR", "count": "2"}},
-                                    {"roster_position": {"position": "TE", "count": "1"}},
-                                    {"roster_position": {"position": "W/R/T", "count": "1"}},
-                                    {"roster_position": {"position": "K", "count": "1"}},
-                                    {"roster_position": {"position": "DEF", "count": "1"}},
-                                    {"roster_position": {"position": "BN", "count": "6"}},
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            }
-        }
-        
-        # Mock league standings (for teams)
-        mock_client.get_league_standings.return_value = {
-            "fantasy_content": {
-                "league": [
-                    {},
-                    {
-                        "standings": [
-                            {
-                                "teams": {
-                                    "count": 2,
-                                    "0": {
-                                        "team": [
-                                            {
-                                                "team_key": "123.l.456789.t.1",
-                                                "name": "The Algorithm"
-                                            }
-                                        ]
-                                    },
-                                    "1": {
-                                        "team": [
-                                            {
-                                                "team_key": "123.l.456789.t.2", 
-                                                "name": "Opponent Team"
-                                            }
-                                        ]
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                ]
-            }
-        }
-        
-        # Mock current week
+        # Use real API response structure
+        user_leagues = load_real_fixture("user_leagues")
+        league_settings = load_real_fixture("league_settings")
+        league_standings = load_real_fixture("league_standings")
+
+        # Feed mock with realistic data
+        mock_client.get_user_leagues.return_value = user_leagues
+        mock_client.get_league_settings.return_value = league_settings
+        mock_client.get_league_standings.return_value = league_standings
         mock_client.get_current_week.return_value = 10
         
         return mock_client
