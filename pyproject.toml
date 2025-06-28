@@ -61,10 +61,16 @@ include = ["fantasyfb*"]
 exclude = ["tests*"]
 
 [tool.ruff]
-# Same line length as Black
 line-length = 88
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv", 
+    "build",
+    "dist",
+]
 
-# Enable these rule sets
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings  
@@ -75,20 +81,10 @@ select = [
     "UP", # pyupgrade
 ]
 
-# Ignore specific rules if needed
 ignore = [
     "E501",  # Line too long (Black handles this)
 ]
 
-# Exclude certain directories
-exclude = [
-    ".git",
-    "__pycache__",
-    ".venv",
-    "build",
-    "dist",
-]
-
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 # Allow unused imports in __init__.py files
 "__init__.py" = ["F401"]
