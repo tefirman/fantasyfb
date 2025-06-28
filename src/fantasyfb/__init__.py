@@ -16,10 +16,4 @@ __version__ = "0.1.0"
 __author__ = "Taylor Firman"
 
 # Main exports
-__all__ = [
-    "League",
-    "Player",
-    "SeasonSimulator",
-    "TradeAnalyzer",
-    "YahooClient"
-]
+__all__ = ["League", "Player", "SeasonSimulator", "TradeAnalyzer", "YahooClient"]

@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class League:
     """
     Main League class that coordinates fantasy league analysis.
-    
+
     This class now focuses on:
     - League settings and configuration
     - Team management
@@ -35,11 +35,11 @@ class League:
         season: int = None,
         week: int = None,
         config: LeagueConfig = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize a League object.
-        
+
         Args:
             name: Fantasy team name
             season: NFL season year
@@ -50,7 +50,9 @@ class League:
         self.config = config or LeagueConfig(**kwargs)
 
         # Basic league info
-        self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
+        self.latest_season = datetime.datetime.now().year - int(
+            datetime.datetime.now().month < 6
+        )
         self.season = season if season else self.latest_season
         self.team_name = team_name
         self.week = week
@@ -73,8 +75,12 @@ class League:
         """Load essential league data from Yahoo API."""
         try:
             # Load league settings and teams
-            self.lg_id = self.data_manager.load_league_id(self.season, self.team_name)[0]
-            self.settings, self.scoring, self.roster_spots = self.data_manager.load_league_settings(self.lg_id)
+            self.lg_id = self.data_manager.load_league_id(self.season, self.team_name)[
+                0
+            ]
+            self.settings, self.scoring, self.roster_spots = (
+                self.data_manager.load_league_settings(self.lg_id)
+            )
 
             # Load all teams in the league
             self.teams = self.data_manager.load_fantasy_teams(self.lg_id)
@@ -98,8 +104,7 @@ class League:
         """Lazy load player analyzer."""
         if self._player_analyzer is None:
             self._player_analyzer = PlayerAnalyzer(
-                league=self,
-                config=self.config.player_config
+                league=self, config=self.config.player_config
             )
         return self._player_analyzer
 
@@ -108,8 +113,7 @@ class League:
         """Lazy load season simulator."""
         if self._simulator is None:
             self._simulator = SeasonSimulator(
-                league=self,
-                config=self.config.simulation_config
+                league=self, config=self.config.simulation_config
             )
         return self._simulator
 
@@ -117,30 +121,25 @@ class League:
     def trade_analyzer(self) -> TradeAnalyzer:
         """Lazy load trade analyzer."""
         if self._trade_analyzer is None:
-            self._trade_analyzer = TradeAnalyzer(
-                league=self,
-                simulator=self.simulator
-            )
+            self._trade_analyzer = TradeAnalyzer(league=self, simulator=self.simulator)
         return self._trade_analyzer
 
     def load_players(self, force_refresh: bool = False) -> pd.DataFrame:
         """
         Load and process player data.
-        
+
         Args:
             force_refresh: Force refresh of cached data
-            
+
         Returns:
             DataFrame with processed player data
         """
-        if not hasattr(self, 'players') or force_refresh:
+        if not hasattr(self, "players") or force_refresh:
             logger.info("Loading player data...")
 
             # Get raw player data
             self.players = self.data_manager.load_players(
-                self.lg_id,
-                self.season,
-                self.week
+                self.lg_id, self.season, self.week
             )
 
             # Process with player analyzer
@@ -152,33 +151,27 @@ class League:
 
     def get_schedule(self) -> pd.DataFrame:
         """Get processed fantasy schedule."""
-        if not hasattr(self, 'schedule'):
+        if not hasattr(self, "schedule"):
             self.schedule = self.data_manager.load_fantasy_schedule(
-                self.lg_id,
-                self.teams,
-                self.season,
-                self.week
+                self.lg_id, self.teams, self.season, self.week
             )
         return self.schedule
 
     def season_sims(
-        self,
-        postseason: bool = True,
-        payouts: List[float] = None
+        self, postseason: bool = True, payouts: List[float] = None
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Run season simulations.
-        
+
         Args:
             postseason: Include playoff simulations
             payouts: Prize structure
-            
+
         Returns:
             Tuple of (schedule_results, standings_results)
         """
         return self.simulator.season_sims(
-            postseason=postseason,
-            payouts=payouts or self.config.default_payouts
+            postseason=postseason, payouts=payouts or self.config.default_payouts
         )
 
     def bestball_sims(self, payouts: List[float] = None) -> pd.DataFrame:
@@ -208,10 +201,10 @@ class League:
         logger.info("Refreshing league data...")
 
         # Clear cached data
-        if hasattr(self, 'players'):
-            delattr(self, 'players')
-        if hasattr(self, 'schedule'):
-            delattr(self, 'schedule')
+        if hasattr(self, "players"):
+            delattr(self, "players")
+        if hasattr(self, "schedule"):
+            delattr(self, "schedule")
 
         # Reset analysis components
         self._player_analyzer = None
@@ -228,4 +221,4 @@ class League:
 
     def get_other_teams(self) -> List[Dict]:
         """Get all other teams in the league."""
-        return [team for team in self.teams if team['name'] != self.team_name]
+        return [team for team in self.teams if team["name"] != self.team_name]

@@ -15,13 +15,13 @@ from unittest.mock import Mock
 def load_real_fixture(name: str) -> Dict[str, Any]:
     """
     Load a real API response fixture from the fixtures directory.
-    
+
     Args:
         name: Name of the fixture file (without _real.json suffix)
-        
+
     Returns:
         Dictionary containing the real API response
-        
+
     Raises:
         FileNotFoundError: If the fixture file doesn't exist
         json.JSONDecodeError: If the fixture file contains invalid JSON
@@ -29,7 +29,9 @@ def load_real_fixture(name: str) -> Dict[str, Any]:
     fixture_path = Path(__file__).parent / "fixtures" / f"{name}_real.json"
 
     if not fixture_path.exists():
-        available_fixtures = list((Path(__file__).parent / "fixtures").glob("*_real.json"))
+        available_fixtures = list(
+            (Path(__file__).parent / "fixtures").glob("*_real.json")
+        )
         available_names = [f.stem.replace("_real", "") for f in available_fixtures]
         raise FileNotFoundError(
             f"Fixture '{name}' not found. Available fixtures: {available_names}\n"
@@ -43,10 +45,10 @@ def load_real_fixture(name: str) -> Dict[str, Any]:
 def get_mock_yahoo_client_with_real_responses() -> Mock:
     """
     Create a mock YahooClient that returns real API responses.
-    
+
     This is useful for integration-style tests that want to use realistic
     data without making actual API calls.
-    
+
     Returns:
         Mock YahooClient configured with real response data
     """
@@ -84,10 +86,10 @@ def get_mock_yahoo_client_with_real_responses() -> Mock:
 def extract_sample_data_from_fixtures() -> Dict[str, Any]:
     """
     Extract useful sample data from real fixtures for test assertions.
-    
+
     This analyzes the real fixture data and extracts commonly needed
     values for use in test assertions.
-    
+
     Returns:
         Dictionary with sample data extracted from real fixtures
     """
@@ -111,7 +113,9 @@ def extract_sample_data_from_fixtures() -> Dict[str, Any]:
         # Extract roster positions
         roster_positions = settings_content["roster_positions"]
         samples["num_roster_positions"] = len(roster_positions)
-        samples["roster_positions"] = [pos["roster_position"]["position"] for pos in roster_positions]
+        samples["roster_positions"] = [
+            pos["roster_position"]["position"] for pos in roster_positions
+        ]
 
         # Extract from standings
         standings = load_real_fixture("league_standings")
@@ -134,10 +138,10 @@ def extract_sample_data_from_fixtures() -> Dict[str, Any]:
 def validate_fixture_structure(fixture_name: str) -> bool:
     """
     Validate that a fixture has the expected Yahoo API structure.
-    
+
     Args:
         fixture_name: Name of the fixture to validate
-        
+
     Returns:
         True if structure is valid, False otherwise
     """
@@ -155,7 +159,9 @@ def validate_fixture_structure(fixture_name: str) -> bool:
 
         league_data = fixture["fantasy_content"]["league"]
         if not isinstance(league_data, list) or len(league_data) < 2:
-            print(f"❌ {fixture_name}: 'league' should be a list with at least 2 elements")
+            print(
+                f"❌ {fixture_name}: 'league' should be a list with at least 2 elements"
+            )
             return False
 
         print(f"✅ {fixture_name}: Structure looks valid")

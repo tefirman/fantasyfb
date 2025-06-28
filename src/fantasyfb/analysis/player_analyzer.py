@@ -28,7 +28,7 @@ class PlayerAnalyzer:
     def __init__(self, league, config: PlayerConfig = None):
         """
         Initialize PlayerAnalyzer.
-        
+
         Args:
             league: Parent League object
             config: Player analysis configuration
@@ -40,10 +40,10 @@ class PlayerAnalyzer:
     def process_players(self, players: pd.DataFrame) -> pd.DataFrame:
         """
         Main method to process player data for advanced analysis.
-        
+
         Args:
             players: DataFrame with basic player data already processed by DataManager
-            
+
         Returns:
             Enhanced player DataFrame with rates, projections, WAR, etc.
         """
@@ -53,20 +53,20 @@ class PlayerAnalyzer:
         # TODO: Implement full statistical analysis
 
         # Add basic statistical columns
-        if 'points_rate' not in players.columns:
-            players['points_rate'] = 10.0  # Default points per game
+        if "points_rate" not in players.columns:
+            players["points_rate"] = 10.0  # Default points per game
 
-        if 'points_stdev' not in players.columns:
-            players['points_stdev'] = 5.0   # Default standard deviation
+        if "points_stdev" not in players.columns:
+            players["points_stdev"] = 5.0  # Default standard deviation
 
-        if 'WAR' not in players.columns:
-            players['WAR'] = 1.0  # Default WAR
+        if "WAR" not in players.columns:
+            players["WAR"] = 1.0  # Default WAR
 
-        if 'game_factor' not in players.columns:
-            players['game_factor'] = 1.0
+        if "game_factor" not in players.columns:
+            players["game_factor"] = 1.0
 
-        if 'points_avg' not in players.columns:
-            players['points_avg'] = players['points_rate'] * players['game_factor']
+        if "points_avg" not in players.columns:
+            players["points_avg"] = players["points_rate"] * players["game_factor"]
 
         logger.info(f"Advanced processing completed for {len(players)} players")
         return players
@@ -84,7 +84,7 @@ class PlayerAnalyzer:
         to_fix = ~players.new_name.isnull()
         players.loc[to_fix, "name"] = players.loc[to_fix, "new_name"]
 
-        return players.drop(columns=['new_name'], errors='ignore')
+        return players.drop(columns=["new_name"], errors="ignore")
 
     def _map_player_ids(self, players: pd.DataFrame) -> pd.DataFrame:
         """Map between Yahoo player IDs and SportsRef player IDs."""
@@ -92,15 +92,15 @@ class PlayerAnalyzer:
 
         # Load NFL rosters for ID mapping
         self.nfl_rosters = sr.get_bulk_rosters(
-            self.league.season - 1,
-            self.league.season,
-            "NFLRosters.csv"
+            self.league.season - 1, self.league.season, "NFLRosters.csv"
         )
-        self.nfl_rosters = self.nfl_rosters.rename(columns={
-            'player': 'name',
-            'player_id': 'player_id_sr',
-            'team': 'current_team'
-        })
+        self.nfl_rosters = self.nfl_rosters.rename(
+            columns={
+                "player": "name",
+                "player_id": "player_id_sr",
+                "team": "current_team",
+            }
+        )
 
         # Merge team abbreviations
         players = pd.merge(
@@ -115,25 +115,27 @@ class PlayerAnalyzer:
         # Map IDs based on name and team
         players = pd.merge(
             left=players,
-            right=self.nfl_rosters[['name', 'current_team', 'player_id_sr']].drop_duplicates(),
-            how='left',
-            on=['name', 'current_team']
+            right=self.nfl_rosters[
+                ["name", "current_team", "player_id_sr"]
+            ].drop_duplicates(),
+            how="left",
+            on=["name", "current_team"],
         )
 
         # Handle special cases (defenses, missing players, etc.)
-        defenses = players.position.isin(['DEF'])
-        players.loc[defenses, 'player_id_sr'] = players.loc[defenses, 'name']
+        defenses = players.position.isin(["DEF"])
+        players.loc[defenses, "player_id_sr"] = players.loc[defenses, "name"]
 
         # Use Yahoo ID as fallback
         missing = players.player_id_sr.isnull()
-        players.loc[missing, 'player_id_sr'] = players.loc[missing, 'player_id']
+        players.loc[missing, "player_id_sr"] = players.loc[missing, "player_id"]
 
         return players
 
     def _add_injury_data(self, players: pd.DataFrame, season: int) -> pd.DataFrame:
         """Add injury projections and status."""
         # Initialize with proper dtype to avoid FutureWarning
-        players["until"] = pd.Series(dtype='float64', index=players.index)
+        players["until"] = pd.Series(dtype="float64", index=players.index)
 
         # Load injury projections for current season
         try:
@@ -146,9 +148,21 @@ class PlayerAnalyzer:
             current_week = 1  # Default fallback
             try:
                 current_year = datetime.datetime.now().year
-                if season == current_year or (season == current_year - 1 and datetime.datetime.now().month < 6):
+                if season == current_year or (
+                    season == current_year - 1 and datetime.datetime.now().month < 6
+                ):
                     # It's the current season, estimate week from date
-                    current_week = min(max(1, (datetime.datetime.now() - datetime.datetime(current_year, 9, 1)).days // 7), 18)
+                    current_week = min(
+                        max(
+                            1,
+                            (
+                                datetime.datetime.now()
+                                - datetime.datetime(current_year, 9, 1)
+                            ).days
+                            // 7,
+                        ),
+                        18,
+                    )
             except:
                 current_week = 1
 
@@ -159,17 +173,19 @@ class PlayerAnalyzer:
                 right=inj_proj,
                 how="left",
                 on=["player_id_sr", "name", "position"],
-                suffixes=('', '_proj')
+                suffixes=("", "_proj"),
             )
 
             # Use projection where available - with proper type handling
             has_proj = ~players.until_proj.isnull()
             if has_proj.any():
                 # Convert to numeric, handling any problematic values
-                proj_values = pd.to_numeric(players.loc[has_proj, 'until_proj'], errors='coerce')
-                players.loc[has_proj, 'until'] = proj_values
+                proj_values = pd.to_numeric(
+                    players.loc[has_proj, "until_proj"], errors="coerce"
+                )
+                players.loc[has_proj, "until"] = proj_values
 
-            players = players.drop(columns=['until_proj'], errors='ignore')
+            players = players.drop(columns=["until_proj"], errors="ignore")
 
         except Exception as e:
             logger.warning(f"Could not load injury projections: {e}")
@@ -191,10 +207,10 @@ class PlayerAnalyzer:
             ).any():
                 bye_week += 1
 
-            byes = pd.concat([
-                byes,
-                pd.DataFrame({"current_team": [team], "bye_week": [bye_week]})
-            ], ignore_index=True)
+            byes = pd.concat(
+                [byes, pd.DataFrame({"current_team": [team], "bye_week": [bye_week]})],
+                ignore_index=True,
+            )
 
         players = pd.merge(left=players, right=byes, how="left", on="current_team")
         return players
@@ -205,7 +221,7 @@ class PlayerAnalyzer:
 
         # This would use your existing roster percentage logic
         # For now, just add a placeholder
-        players['pct_rostered'] = 0.0
+        players["pct_rostered"] = 0.0
 
         # TODO: Implement actual roster percentage fetching
         # This involves paginated API calls to Yahoo with player IDs
@@ -216,39 +232,53 @@ class PlayerAnalyzer:
         """Add depth chart information."""
         logger.debug("Adding depth charts...")
 
-        if (self.league.season == self.league.latest_season and
-            self.league.week == self.league.current_week):
+        if (
+            self.league.season == self.league.latest_season
+            and self.league.week == self.league.current_week
+        ):
             # Use current depth charts from ESPN
             try:
                 depth_charts = sr.get_all_depth_charts()
-                depth_charts = depth_charts.rename(columns={
-                    'player': 'name',
-                    'pos': 'position',
-                    'team': 'current_team'
-                })
+                depth_charts = depth_charts.rename(
+                    columns={
+                        "player": "name",
+                        "pos": "position",
+                        "team": "current_team",
+                    }
+                )
 
                 players = pd.merge(
                     left=players,
                     right=depth_charts,
                     how="left",
-                    on=["current_team", "name", 'position']
+                    on=["current_team", "name", "position"],
                 )
             except Exception as e:
                 logger.warning(f"Could not load depth charts: {e}")
-                players['string'] = 2.0
+                players["string"] = 2.0
         else:
             # Use historical snap counts
-            self._load_stats_if_needed(self.league.season * 100 + 1, self.league.season * 100 + 17)
+            self._load_stats_if_needed(
+                self.league.season * 100 + 1, self.league.season * 100 + 17
+            )
 
-            strings = self.stats.loc[
-                self.stats.season * 100 + self.stats.week >= self.league.season * 100 + self.league.week
-            ].sort_values(by=['season', 'week'], ascending=True)[['player_id_sr', 'string']]\
-            .drop_duplicates(subset=['player_id_sr'], keep='first')
+            strings = (
+                self.stats.loc[
+                    self.stats.season * 100 + self.stats.week
+                    >= self.league.season * 100 + self.league.week
+                ]
+                .sort_values(by=["season", "week"], ascending=True)[
+                    ["player_id_sr", "string"]
+                ]
+                .drop_duplicates(subset=["player_id_sr"], keep="first")
+            )
 
-            players = pd.merge(left=players, right=strings, how='left', on=['player_id_sr'])
+            players = pd.merge(
+                left=players, right=strings, how="left", on=["player_id_sr"]
+            )
 
         # Fill missing depth chart data
-        players.loc[players.position == 'DEF', 'string'] = 1.0
+        players.loc[players.position == "DEF", "string"] = 1.0
         players.string = players.string.fillna(2.0)
 
         return players
@@ -264,33 +294,47 @@ class PlayerAnalyzer:
         rel_stats = self.stats.copy()
         for pos in self.config.earliest:
             rel_stats = rel_stats.loc[
-                (rel_stats["position"] != pos) |
-                ((rel_stats.season * 100 + rel_stats.week <= as_of - 1) &
-                 (rel_stats.season * 100 + rel_stats.week >= self.config.earliest[pos]))
+                (rel_stats["position"] != pos)
+                | (
+                    (rel_stats.season * 100 + rel_stats.week <= as_of - 1)
+                    & (
+                        rel_stats.season * 100 + rel_stats.week
+                        >= self.config.earliest[pos]
+                    )
+                )
             ].reset_index(drop=True)
 
         # Merge weighting factors
-        rel_stats = pd.merge(left=rel_stats, right=self.config.weighting_factors, how='left', on='position')
+        rel_stats = pd.merge(
+            left=rel_stats,
+            right=self.config.weighting_factors,
+            how="left",
+            on="position",
+        )
 
         # Calculate game factors and relative points
         rel_stats["game_factor"] = (
-            rel_stats["basal"] +
-            rel_stats["opp_elo_weight"] * rel_stats["elo_diff"] +
-            rel_stats["string_weight"] * (1 - rel_stats["string"])
+            rel_stats["basal"]
+            + rel_stats["opp_elo_weight"] * rel_stats["elo_diff"]
+            + rel_stats["string_weight"] * (1 - rel_stats["string"])
         )
         rel_stats.loc[rel_stats.game_factor < 0.25, "game_factor"] = 0.25
-        rel_stats['rel_points'] = rel_stats.points / rel_stats.game_factor
+        rel_stats["rel_points"] = rel_stats.points / rel_stats.game_factor
 
         # Calculate positional averages
         by_pos = self._calculate_positional_averages(rel_stats)
 
         # Limit games per position
         for pos in self.config.reference_games:
-            rel_stats = pd.concat([
-                rel_stats.loc[rel_stats.position != pos],
-                rel_stats.loc[rel_stats.position == pos].groupby(["player_id_sr", "position"])\
-                .head(self.config.reference_games[pos])
-            ], ignore_index=True)
+            rel_stats = pd.concat(
+                [
+                    rel_stats.loc[rel_stats.position != pos],
+                    rel_stats.loc[rel_stats.position == pos]
+                    .groupby(["player_id_sr", "position"])
+                    .head(self.config.reference_games[pos]),
+                ],
+                ignore_index=True,
+            )
 
         # Apply time weighting
         rel_stats = self._apply_time_weighting(rel_stats, as_of)
@@ -347,8 +391,8 @@ class PlayerAnalyzer:
         players = pd.merge(
             left=players,
             right=self.league.nfl_schedule.loc[
-                (self.league.nfl_schedule.season == self.league.season) &
-                (self.league.nfl_schedule.week == self.league.week),
+                (self.league.nfl_schedule.season == self.league.season)
+                & (self.league.nfl_schedule.week == self.league.week),
                 ["team", "elo_diff"],
             ],
             how="left",
@@ -363,26 +407,31 @@ class PlayerAnalyzer:
             players = pd.merge(
                 left=players,
                 right=self.config.weighting_factors,
-                how='left',
-                on='position'
+                how="left",
+                on="position",
             )
 
         # Calculate factors
-        players["opp_factor"] = players['opp_elo_weight'] * players["elo_diff"]
-        players["string_factor"] = players['string_weight'] * (1 - players["string"])
-        players["game_factor"] = players['basal'] + players["opp_factor"] + players["string_factor"]
+        players["opp_factor"] = players["opp_elo_weight"] * players["elo_diff"]
+        players["string_factor"] = players["string_weight"] * (1 - players["string"])
+        players["game_factor"] = (
+            players["basal"] + players["opp_factor"] + players["string_factor"]
+        )
         players["points_avg"] = players["points_rate"] * players["game_factor"]
 
-        return players.drop(columns=["team", "elo_diff"], errors='ignore')
+        return players.drop(columns=["team", "elo_diff"], errors="ignore")
 
     def _load_stats_if_needed(self, start: int, finish: int):
         """Load game-by-game stats if not already loaded."""
         if self.stats is None:
             logger.info(f"Loading stats from {start} to {finish}...")
             self.stats = sr.get_bulk_stats(
-                start // 100, start % 100,
-                finish // 100, finish % 100,
-                False, "GameByGameFantasyFootballStats.csv"
+                start // 100,
+                start % 100,
+                finish // 100,
+                finish % 100,
+                False,
+                "GameByGameFantasyFootballStats.csv",
             )
 
             # Add fantasy points based on league scoring
@@ -402,57 +451,86 @@ class PlayerAnalyzer:
         offense = self.stats.loc[self.stats.position != "DEF"].reset_index(drop=True)
 
         offense["points"] = (
-            offense["rush_yds"] * self.league.scoring["Rush Yds"] +
-            offense["rush_att"] * self.league.scoring["Rush Att"] +
-            offense["rush_td"] * self.league.scoring["Rush TD"] +
-            offense["rush_first_down"] * self.league.scoring["Rush 1D"] +
-            offense["rec"] * self.league.scoring["Rec"] +
-            offense["rec_yds"] * self.league.scoring["Rec Yds"] +
-            offense["rec_td"] * self.league.scoring["Rec TD"] +
-            offense["rec_first_down"] * self.league.scoring["Rec 1D"] +
-            offense["pass_yds"] * self.league.scoring["Pass Yds"] +
-            offense["pass_cmp"] * self.league.scoring["Pass Comp"] +
-            offense["pass_td"] * self.league.scoring["Pass TD"] +
-            offense["pass_first_down"] * self.league.scoring["Pass 1D"] +
-            offense["pass_int"] * self.league.scoring["Int Thrown"] +
-            offense["fumbles_lost"] * self.league.scoring["Fum Lost"] +
-            (offense["kick_ret_yds"] + offense["punt_ret_yds"]) * self.league.scoring["Ret Yds"] +
-            (offense["kick_ret_td"] + offense["punt_ret_td"]) * self.league.scoring["Ret TD"] +
-            offense["xpm"] * self.league.scoring["PAT Made"] +
-            offense["fgm"] * self.league.scoring["FG 0-19"]
+            offense["rush_yds"] * self.league.scoring["Rush Yds"]
+            + offense["rush_att"] * self.league.scoring["Rush Att"]
+            + offense["rush_td"] * self.league.scoring["Rush TD"]
+            + offense["rush_first_down"] * self.league.scoring["Rush 1D"]
+            + offense["rec"] * self.league.scoring["Rec"]
+            + offense["rec_yds"] * self.league.scoring["Rec Yds"]
+            + offense["rec_td"] * self.league.scoring["Rec TD"]
+            + offense["rec_first_down"] * self.league.scoring["Rec 1D"]
+            + offense["pass_yds"] * self.league.scoring["Pass Yds"]
+            + offense["pass_cmp"] * self.league.scoring["Pass Comp"]
+            + offense["pass_td"] * self.league.scoring["Pass TD"]
+            + offense["pass_first_down"] * self.league.scoring["Pass 1D"]
+            + offense["pass_int"] * self.league.scoring["Int Thrown"]
+            + offense["fumbles_lost"] * self.league.scoring["Fum Lost"]
+            + (offense["kick_ret_yds"] + offense["punt_ret_yds"])
+            * self.league.scoring["Ret Yds"]
+            + (offense["kick_ret_td"] + offense["punt_ret_td"])
+            * self.league.scoring["Ret TD"]
+            + offense["xpm"] * self.league.scoring["PAT Made"]
+            + offense["fgm"] * self.league.scoring["FG 0-19"]
         )
 
         # Add TE bonuses
-        tes = offense.position == 'TE'
-        offense.loc[tes, 'points'] += (
-            offense.loc[tes, 'rec'] * self.league.scoring['TE Rec Bonus'] +
-            (offense.loc[tes, 'rush_first_down'] + offense.loc[tes, 'rec_first_down'] +
-             offense.loc[tes, 'pass_first_down']) * self.league.scoring['TE 1D Bonus']
+        tes = offense.position == "TE"
+        offense.loc[tes, "points"] += (
+            offense.loc[tes, "rec"] * self.league.scoring["TE Rec Bonus"]
+            + (
+                offense.loc[tes, "rush_first_down"]
+                + offense.loc[tes, "rec_first_down"]
+                + offense.loc[tes, "pass_first_down"]
+            )
+            * self.league.scoring["TE 1D Bonus"]
         )
 
         # Add yardage bonuses
-        offense.loc[offense.pass_yds >= 300, 'points'] += self.league.scoring['Pass 300+']
-        offense.loc[offense.rush_yds >= 100, 'points'] += self.league.scoring['Rush 100+']
-        offense.loc[offense.rec_yds >= 100, 'points'] += self.league.scoring['Rec 100+']
+        offense.loc[offense.pass_yds >= 300, "points"] += self.league.scoring[
+            "Pass 300+"
+        ]
+        offense.loc[offense.rush_yds >= 100, "points"] += self.league.scoring[
+            "Rush 100+"
+        ]
+        offense.loc[offense.rec_yds >= 100, "points"] += self.league.scoring["Rec 100+"]
 
         # Defense scoring
         defense = self.stats.loc[self.stats.position == "DEF"].reset_index(drop=True)
         defense["points"] = (
-            defense["sacks"] * self.league.scoring["Sack"] +
-            defense["def_int"] * self.league.scoring["Int"] +
-            defense["fumbles_rec"] * self.league.scoring["Fum Rec"] +
-            (defense["def_int_td"] + defense['fumbles_rec_td'] +
-             defense["kick_ret_td"] + defense["punt_ret_td"]) * self.league.scoring["Ret TD"]
+            defense["sacks"] * self.league.scoring["Sack"]
+            + defense["def_int"] * self.league.scoring["Int"]
+            + defense["fumbles_rec"] * self.league.scoring["Fum Rec"]
+            + (
+                defense["def_int_td"]
+                + defense["fumbles_rec_td"]
+                + defense["kick_ret_td"]
+                + defense["punt_ret_td"]
+            )
+            * self.league.scoring["Ret TD"]
         )
 
         # Points allowed scoring
-        defense.loc[defense.points_allowed == 0, "points"] += self.league.scoring["Pts Allow 0"]
-        defense.loc[(defense.points_allowed >= 1) & (defense.points_allowed <= 6), "points"] += self.league.scoring["Pts Allow 1-6"]
-        defense.loc[(defense.points_allowed >= 7) & (defense.points_allowed <= 13), "points"] += self.league.scoring["Pts Allow 7-13"]
-        defense.loc[(defense.points_allowed >= 14) & (defense.points_allowed <= 20), "points"] += self.league.scoring["Pts Allow 14-20"]
-        defense.loc[(defense.points_allowed >= 21) & (defense.points_allowed <= 27), "points"] += self.league.scoring["Pts Allow 21-27"]
-        defense.loc[(defense.points_allowed >= 28) & (defense.points_allowed <= 34), "points"] += self.league.scoring["Pts Allow 28-34"]
-        defense.loc[(defense.points_allowed >= 35), "points"] += self.league.scoring["Pts Allow 35+"]
+        defense.loc[defense.points_allowed == 0, "points"] += self.league.scoring[
+            "Pts Allow 0"
+        ]
+        defense.loc[
+            (defense.points_allowed >= 1) & (defense.points_allowed <= 6), "points"
+        ] += self.league.scoring["Pts Allow 1-6"]
+        defense.loc[
+            (defense.points_allowed >= 7) & (defense.points_allowed <= 13), "points"
+        ] += self.league.scoring["Pts Allow 7-13"]
+        defense.loc[
+            (defense.points_allowed >= 14) & (defense.points_allowed <= 20), "points"
+        ] += self.league.scoring["Pts Allow 14-20"]
+        defense.loc[
+            (defense.points_allowed >= 21) & (defense.points_allowed <= 27), "points"
+        ] += self.league.scoring["Pts Allow 21-27"]
+        defense.loc[
+            (defense.points_allowed >= 28) & (defense.points_allowed <= 34), "points"
+        ] += self.league.scoring["Pts Allow 28-34"]
+        defense.loc[(defense.points_allowed >= 35), "points"] += self.league.scoring[
+            "Pts Allow 35+"
+        ]
 
         self.stats = pd.concat([offense, defense], ignore_index=True, sort=False)
 
@@ -462,12 +540,16 @@ class PlayerAnalyzer:
         # Implementation of positional average calculations
         pass
 
-    def _apply_time_weighting(self, rel_stats: pd.DataFrame, as_of: int) -> pd.DataFrame:
+    def _apply_time_weighting(
+        self, rel_stats: pd.DataFrame, as_of: int
+    ) -> pd.DataFrame:
         """Apply time-based weighting to statistics."""
         # Implementation of time weighting
         pass
 
-    def _calculate_player_rates(self, rel_stats: pd.DataFrame, by_pos: pd.DataFrame) -> pd.DataFrame:
+    def _calculate_player_rates(
+        self, rel_stats: pd.DataFrame, by_pos: pd.DataFrame
+    ) -> pd.DataFrame:
         """Calculate player-specific rates with positional priors."""
         # Implementation of player rate calculations
         pass
@@ -477,7 +559,9 @@ class PlayerAnalyzer:
         # Implementation of average team simulation
         pass
 
-    def _calculate_player_war(self, players: pd.DataFrame, pos_hists: Dict, sim_scores: pd.DataFrame) -> pd.DataFrame:
+    def _calculate_player_war(
+        self, players: pd.DataFrame, pos_hists: Dict, sim_scores: pd.DataFrame
+    ) -> pd.DataFrame:
         """Calculate WAR for each player."""
         # Implementation of WAR calculations
         pass

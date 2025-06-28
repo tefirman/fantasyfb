@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class DataManager:
     """
     Manages all data loading and caching for the fantasy league.
-    
+
     Responsibilities:
     - Yahoo API data retrieval
     - Pro Football Reference data
@@ -32,13 +32,15 @@ class DataManager:
         self.yahoo_client = yahoo_client
         self.cache = DataCache()
 
-    def load_league_id(self, season: int, team_name: str = None) -> Tuple[str, List[Dict]]:
+    def load_league_id(
+        self, season: int, team_name: str = None
+    ) -> Tuple[str, List[Dict]]:
         """
         Load basic league information from Yahoo API.
-        
+
         Args:
             team_name: Specific team name if user has multiple leagues
-            
+
         Returns:
             Tuple of (league_id, teams_list)
         """
@@ -65,15 +67,17 @@ class DataManager:
     def load_league_settings(self, lg_id: str) -> Tuple[Dict, Dict, pd.DataFrame]:
         """
         Load league settings including scoring and roster configuration.
-        
+
         Args:
             lg_id: Yahoo league ID
-            
+
         Returns:
             Tuple of (settings_dict, scoring_dict, roster_spots_df)
         """
         cache_key = f"league_settings_{lg_id}"
-        cached = self.cache.get_cached_data(cache_key, max_age_hours=168)  # Week-long cache
+        cached = self.cache.get_cached_data(
+            cache_key, max_age_hours=168
+        )  # Week-long cache
 
         if cached:
             return cached
@@ -104,7 +108,9 @@ class DataManager:
 
         # Use the YahooClient's method to get league standings
         league_info = self.yahoo_client.get_league_standings(lg_id)
-        teams_info = league_info["fantasy_content"]["league"][1]["standings"][0]["teams"]
+        teams_info = league_info["fantasy_content"]["league"][1]["standings"][0][
+            "teams"
+        ]
 
         teams = []
         for ind in range(teams_info["count"]):
@@ -117,7 +123,9 @@ class DataManager:
             # Add manager if available
             try:
                 if len(team_data) > 3 and "managers" in team_data[-1]:
-                    team["manager"] = team_data[-1]["managers"][0]["manager"]["nickname"]
+                    team["manager"] = team_data[-1]["managers"][0]["manager"][
+                        "nickname"
+                    ]
             except:
                 team["manager"] = "Unknown"
 
@@ -126,16 +134,18 @@ class DataManager:
         self.cache.save_data(cache_key, teams)
         return teams
 
-    def load_players(self, lg_id: str, season: int, week: int, force_refresh: bool = False) -> pd.DataFrame:
+    def load_players(
+        self, lg_id: str, season: int, week: int, force_refresh: bool = False
+    ) -> pd.DataFrame:
         """
         Load all NFL players eligible for the league.
-        
+
         Args:
             lg_id: Yahoo league ID
             season: NFL season
             week: Current week
             force_refresh: Force refresh of player data
-            
+
         Returns:
             DataFrame with player information
         """
@@ -198,10 +208,10 @@ class DataManager:
         if os.path.exists(schedule_path):
             nfl_schedule = pd.read_csv(schedule_path)
         else:
-            nfl_schedule = pd.DataFrame(columns=['season','week','score1','score2'])
+            nfl_schedule = pd.DataFrame(columns=["season", "week", "score1", "score2"])
 
         # Check if we need to update
-        before = nfl_schedule.season*100 + nfl_schedule.week < season*100 + 1
+        before = nfl_schedule.season * 100 + nfl_schedule.week < season * 100 + 1
         missing = before & nfl_schedule.score1.isnull() & nfl_schedule.score2.isnull()
 
         if missing.any() or season not in nfl_schedule.season.unique():
@@ -216,7 +226,9 @@ class DataManager:
         self.cache.save_data(cache_key, processed_schedule)
         return processed_schedule
 
-    def load_fantasy_schedule(self, lg_id: str, teams: List[Dict], season: int, week: int) -> pd.DataFrame:
+    def load_fantasy_schedule(
+        self, lg_id: str, teams: List[Dict], season: int, week: int
+    ) -> pd.DataFrame:
         """Load fantasy league schedule."""
         cache_key = f"fantasy_schedule_{lg_id}_{season}_{week}"
         cached = self.cache.get_cached_data(cache_key, max_age_hours=6)
@@ -235,7 +247,9 @@ class DataManager:
         """Get current NFL week from Yahoo API."""
         return self.yahoo_client.get_current_week(lg_id)
 
-    def _select_league(self, leagues_data: Dict, season: int, team_name: str) -> Tuple[str, List[Dict]]:
+    def _select_league(
+        self, leagues_data: Dict, season: int, team_name: str
+    ) -> Tuple[str, List[Dict]]:
         """Select the appropriate league from user's leagues."""
         # Implementation of your existing league selection logic
         # This would extract the right league based on team_name
@@ -243,8 +257,7 @@ class DataManager:
             game = leagues_data[str(ind)]["game"]
             if type(game) == dict:
                 continue
-            if game[0]["code"] == "nfl" \
-            and game[0]["season"] == str(season):
+            if game[0]["code"] == "nfl" and game[0]["season"] == str(season):
                 teams = game[1]["teams"]
                 details = [teams[str(ind)]["team"][0] for ind in range(teams["count"])]
                 names = [
@@ -276,7 +289,9 @@ class DataManager:
         settings = {
             "playoff_start_week": int(settings_content["playoff_start_week"]),
             "num_playoff_teams": int(settings_content["num_playoff_teams"]),
-            "uses_playoff_reseeding": settings_content.get("uses_playoff_reseeding", False),
+            "uses_playoff_reseeding": settings_content.get(
+                "uses_playoff_reseeding", False
+            ),
         }
 
         # Add other relevant settings that might be useful
@@ -296,13 +311,13 @@ class DataManager:
         settings_content = settings_raw["fantasy_content"]["league"][1]["settings"][0]
 
         # Extract scoring categories and modifiers
-        categories = pd.DataFrame([
-            stat["stat"] for stat in settings_content["stat_categories"]["stats"]
-        ])
+        categories = pd.DataFrame(
+            [stat["stat"] for stat in settings_content["stat_categories"]["stats"]]
+        )
 
-        modifiers = pd.DataFrame([
-            stat["stat"] for stat in settings_content["stat_modifiers"]["stats"]
-        ])
+        modifiers = pd.DataFrame(
+            [stat["stat"] for stat in settings_content["stat_modifiers"]["stats"]]
+        )
 
         # Merge categories with their point values
         scoring_df = pd.merge(
@@ -314,8 +329,7 @@ class DataManager:
 
         # Handle the interception naming issue
         scoring_df.loc[
-            (scoring_df.display_name == "Int") & (scoring_df.value <= 0),
-            "display_name"
+            (scoring_df.display_name == "Int") & (scoring_df.value <= 0), "display_name"
         ] = "Int Thrown"
 
         # Convert to dictionary and remove duplicates
@@ -361,15 +375,14 @@ class DataManager:
 
         # Extract roster positions from the API response
         roster_positions = [
-            pos["roster_position"]
-            for pos in settings_content["roster_positions"]
+            pos["roster_position"] for pos in settings_content["roster_positions"]
         ]
 
         # Convert to DataFrame
         roster_spots = pd.DataFrame(roster_positions)
 
         # Ensure count column is integer
-        roster_spots['count'] = roster_spots['count'].astype(int)
+        roster_spots["count"] = roster_spots["count"].astype(int)
 
         # The DataFrame should have columns: ['position', 'count']
         # where position includes things like 'QB', 'RB', 'WR', 'TE', 'W/R/T', 'K', 'DEF', 'BN', 'IR'
@@ -390,7 +403,9 @@ class DataManager:
         players.player_id = players.player_id.astype(int)
 
         # Process fantasy team assignments from rosters
-        selected = pd.DataFrame(columns=["player_id", "selected_position", "fantasy_team"])
+        selected = pd.DataFrame(
+            columns=["player_id", "selected_position", "fantasy_team"]
+        )
 
         for team_name, roster_players in rosters.items():
             if not roster_players:  # Skip empty rosters
@@ -402,14 +417,19 @@ class DataManager:
                 missing_players = ~roster_df.player_id.isin(players.player_id)
                 if missing_players.any():
                     missing_names = roster_df.loc[missing_players, "name"].tolist()
-                    logger.warning(f"Some players missing from main list: {', '.join(missing_names)}")
+                    logger.warning(
+                        f"Some players missing from main list: {', '.join(missing_names)}"
+                    )
 
                 # Add fantasy team assignment
                 roster_df["fantasy_team"] = team_name
-                selected = pd.concat([
-                    selected,
-                    roster_df[["player_id", "selected_position", "fantasy_team"]]
-                ], ignore_index=True)
+                selected = pd.concat(
+                    [
+                        selected,
+                        roster_df[["player_id", "selected_position", "fantasy_team"]],
+                    ],
+                    ignore_index=True,
+                )
 
         # Merge roster assignments with player data
         players = pd.merge(left=players, right=selected, how="left", on="player_id")
@@ -426,25 +446,36 @@ class DataManager:
 
         # Extract primary position from display_position
         players["position"] = players.display_position.apply(
-            lambda x: [pos for pos in x.split(',') if pos in ['QB','WR','TE','K','RB','DEF']][0]
-            if pd.notna(x) else 'UNKNOWN'
+            lambda x: (
+                [
+                    pos
+                    for pos in x.split(",")
+                    if pos in ["QB", "WR", "TE", "K", "RB", "DEF"]
+                ][0]
+                if pd.notna(x)
+                else "UNKNOWN"
+            )
         )
 
         # Select and rename columns for consistency
-        processed_players = players[[
-            "name",
-            "eligible_positions",
-            "selected_position",
-            "status",
-            "player_id",
-            "editorial_team_abbr",
-            "fantasy_team",
-            "position"
-        ]].copy()
+        processed_players = players[
+            [
+                "name",
+                "eligible_positions",
+                "selected_position",
+                "status",
+                "player_id",
+                "editorial_team_abbr",
+                "fantasy_team",
+                "position",
+            ]
+        ].copy()
 
         return processed_players
 
-    def _add_external_player_data(self, players: pd.DataFrame, season: int) -> pd.DataFrame:
+    def _add_external_player_data(
+        self, players: pd.DataFrame, season: int
+    ) -> pd.DataFrame:
         """Add external data like team mappings, injuries, depth charts, etc."""
 
         # Apply name corrections between Yahoo and Pro Football Reference
@@ -481,7 +512,7 @@ class DataManager:
         to_fix = ~players.new_name.isnull()
         players.loc[to_fix, "name"] = players.loc[to_fix, "new_name"]
 
-        return players.drop(columns=['new_name'], errors='ignore')
+        return players.drop(columns=["new_name"], errors="ignore")
 
     def _map_team_abbreviations(self, players: pd.DataFrame) -> pd.DataFrame:
         """Map Yahoo team abbreviations to NFL standard abbreviations."""
@@ -504,53 +535,72 @@ class DataManager:
         """Map between Yahoo player IDs and SportsRef player IDs."""
         # Load NFL rosters for ID mapping
         nfl_rosters = sr.get_bulk_rosters(season - 1, season, "NFLRosters.csv")
-        nfl_rosters = nfl_rosters.rename(columns={
-            'player': 'name',
-            'player_id': 'player_id_sr',
-            'team': 'current_team'
-        })
+        nfl_rosters = nfl_rosters.rename(
+            columns={
+                "player": "name",
+                "player_id": "player_id_sr",
+                "team": "current_team",
+            }
+        )
 
         # Map IDs based on name and team
         players = pd.merge(
             left=players,
-            right=nfl_rosters[['name', 'current_team', 'player_id_sr']].drop_duplicates(),
-            how='left',
-            on=['name', 'current_team']
+            right=nfl_rosters[
+                ["name", "current_team", "player_id_sr"]
+            ].drop_duplicates(),
+            how="left",
+            on=["name", "current_team"],
         )
 
         # Handle special cases
         # Two Michael Carter's on the same team issue
-        players = players.loc[~players.player_id_sr.isin(['CartMi02'])].reset_index(drop=True)
+        players = players.loc[~players.player_id_sr.isin(["CartMi02"])].reset_index(
+            drop=True
+        )
 
         # Check for duplicate IDs
-        id_check = players.groupby('player_id_sr').size()
+        id_check = players.groupby("player_id_sr").size()
         if (id_check > 1).any():
             duplicates = id_check[id_check > 1].index.tolist()
             logger.warning(f'Found duplicate player IDs: {", ".join(duplicates)}')
 
         # Handle defenses
-        defenses = players.position.isin(['DEF'])
-        players.loc[defenses, 'player_id_sr'] = players.loc[defenses, 'name']
+        defenses = players.position.isin(["DEF"])
+        players.loc[defenses, "player_id_sr"] = players.loc[defenses, "name"]
 
         # Handle missing mappings with draft data
-        latest_draft = sr.get_draft(season)[['player', 'player_id', 'team_abbrev']]\
-            .rename(columns={'player': 'name', 'player_id': 'player_id_sr', 'team_abbrev': 'current_team'})
+        latest_draft = sr.get_draft(season)[
+            ["player", "player_id", "team_abbrev"]
+        ].rename(
+            columns={
+                "player": "name",
+                "player_id": "player_id_sr",
+                "team_abbrev": "current_team",
+            }
+        )
 
-        missing = players.player_id_sr.isnull() & players.name.isin(latest_draft.name.unique())
+        missing = players.player_id_sr.isnull() & players.name.isin(
+            latest_draft.name.unique()
+        )
         if missing.any():
             unsigned = players[missing].reset_index(drop=True)
-            del unsigned['player_id_sr']
+            del unsigned["player_id_sr"]
             unsigned = pd.merge(
                 left=unsigned,
-                right=latest_draft[['name', 'current_team', 'player_id_sr']].drop_duplicates(subset=['name'], keep='first'),
-                how='inner',
-                on=['name', 'current_team']
+                right=latest_draft[
+                    ["name", "current_team", "player_id_sr"]
+                ].drop_duplicates(subset=["name"], keep="first"),
+                how="inner",
+                on=["name", "current_team"],
             )
             players = pd.concat([players[~missing], unsigned], ignore_index=True)
 
         # Use Yahoo ID as fallback for still missing
         still_missing = players.player_id_sr.isnull()
-        players.loc[still_missing, 'player_id_sr'] = players.loc[still_missing, 'player_id']
+        players.loc[still_missing, "player_id_sr"] = players.loc[
+            still_missing, "player_id"
+        ]
 
         return players
 
@@ -569,9 +619,21 @@ class DataManager:
             current_week = 1  # Default fallback
             try:
                 current_year = datetime.datetime.now().year
-                if season == current_year or (season == current_year - 1 and datetime.datetime.now().month < 6):
+                if season == current_year or (
+                    season == current_year - 1 and datetime.datetime.now().month < 6
+                ):
                     # It's the current season, estimate week from date
-                    current_week = min(max(1, (datetime.datetime.now() - datetime.datetime(current_year, 9, 1)).days // 7), 18)
+                    current_week = min(
+                        max(
+                            1,
+                            (
+                                datetime.datetime.now()
+                                - datetime.datetime(current_year, 9, 1)
+                            ).days
+                            // 7,
+                        ),
+                        18,
+                    )
             except:
                 current_week = 1
 
@@ -582,19 +644,21 @@ class DataManager:
                 right=inj_proj,
                 how="left",
                 on=["player_id_sr", "name", "position"],
-                suffixes=('', '_proj')
+                suffixes=("", "_proj"),
             )
 
             # Use projection where available
             has_proj = ~players.until_proj.isnull()
             if has_proj.any():
                 # Convert to numeric, handling any problematic values like empty lists
-                proj_values = players.loc[has_proj, 'until_proj'].copy()
+                proj_values = players.loc[has_proj, "until_proj"].copy()
                 # Handle empty lists and other non-numeric values
-                proj_values = proj_values.apply(lambda x: float('nan') if isinstance(x, list) and len(x) == 0 else x)
-                proj_values = pd.to_numeric(proj_values, errors='coerce')
-                players.loc[has_proj, 'until'] = proj_values
-            players = players.drop(columns=['until_proj'], errors='ignore')
+                proj_values = proj_values.apply(
+                    lambda x: float("nan") if isinstance(x, list) and len(x) == 0 else x
+                )
+                proj_values = pd.to_numeric(proj_values, errors="coerce")
+                players.loc[has_proj, "until"] = proj_values
+            players = players.drop(columns=["until_proj"], errors="ignore")
 
         except Exception as e:
             logger.warning(f"Could not load injury projections: {e}")
@@ -610,16 +674,16 @@ class DataManager:
         for team in nfl_schedule.team.unique():
             bye_week = 1
             while (
-                (nfl_schedule.team == team) &
-                (nfl_schedule.season == season) &
-                (nfl_schedule.week == bye_week)
+                (nfl_schedule.team == team)
+                & (nfl_schedule.season == season)
+                & (nfl_schedule.week == bye_week)
             ).any():
                 bye_week += 1
 
-            byes = pd.concat([
-                byes,
-                pd.DataFrame({"current_team": [team], "bye_week": [bye_week]})
-            ], ignore_index=True)
+            byes = pd.concat(
+                [byes, pd.DataFrame({"current_team": [team], "bye_week": [bye_week]})],
+                ignore_index=True,
+            )
 
         players = pd.merge(left=players, right=byes, how="left", on="current_team")
         return players
@@ -628,7 +692,7 @@ class DataManager:
         """Add roster percentage data from Yahoo."""
         # This would use your existing roster percentage logic from the original code
         # For now, just add a placeholder
-        players['pct_rostered'] = 0.0
+        players["pct_rostered"] = 0.0
 
         # TODO: Implement actual roster percentage fetching
         # This involves paginated API calls to Yahoo with player IDs
@@ -642,34 +706,37 @@ class DataManager:
         # For current season, try to use current depth charts; otherwise use defaults
 
         current_year = datetime.datetime.now().year
-        is_current_season = (season == current_year or
-                           (season == current_year - 1 and datetime.datetime.now().month < 6))
+        is_current_season = season == current_year or (
+            season == current_year - 1 and datetime.datetime.now().month < 6
+        )
 
         if is_current_season:
             # Use current depth charts from ESPN
             try:
                 depth_charts = sr.get_all_depth_charts()
-                depth_charts = depth_charts.rename(columns={
-                    'player': 'name',
-                    'pos': 'position',
-                    'team': 'current_team'
-                })
+                depth_charts = depth_charts.rename(
+                    columns={
+                        "player": "name",
+                        "pos": "position",
+                        "team": "current_team",
+                    }
+                )
 
                 players = pd.merge(
                     left=players,
                     right=depth_charts,
                     how="left",
-                    on=["current_team", "name", 'position']
+                    on=["current_team", "name", "position"],
                 )
             except Exception as e:
                 logger.warning(f"Could not load depth charts: {e}")
-                players['string'] = 2.0
+                players["string"] = 2.0
         else:
             # Use historical data - would need to load stats
-            players['string'] = 2.0  # Default value
+            players["string"] = 2.0  # Default value
 
         # Fill missing depth chart data
-        players.loc[players.position == 'DEF', 'string'] = 1.0
+        players.loc[players.position == "DEF", "string"] = 1.0
         players.string = players.string.fillna(2.0)
 
         return players
@@ -678,44 +745,52 @@ class DataManager:
         """Process NFL schedule data into format needed for analysis."""
 
         # Select and rename columns for consistency
-        processed_schedule = schedule[[
-            "season",
-            "game_date",
-            "week",
-            "team1_abbrev",
-            "team2_abbrev",
-            "elo1_pre",
-            "elo2_pre",
-            "elo_diff",
-        ]].rename(columns={
-            "game_date": "date",
-            "team1_abbrev": "home_team",
-            "team2_abbrev": "away_team",
-            "elo1_pre": "home_elo",
-            "elo2_pre": "away_elo",
-            "elo_diff": "home_elo_diff",
-        })
+        processed_schedule = schedule[
+            [
+                "season",
+                "game_date",
+                "week",
+                "team1_abbrev",
+                "team2_abbrev",
+                "elo1_pre",
+                "elo2_pre",
+                "elo_diff",
+            ]
+        ].rename(
+            columns={
+                "game_date": "date",
+                "team1_abbrev": "home_team",
+                "team2_abbrev": "away_team",
+                "elo1_pre": "home_elo",
+                "elo2_pre": "away_elo",
+                "elo_diff": "home_elo_diff",
+            }
+        )
 
         # Calculate away team elo difference (opposite of home)
         processed_schedule["away_elo_diff"] = -1 * processed_schedule["home_elo_diff"]
 
         # Create separate rows for home and away teams
-        home_games = processed_schedule[[
-            "season", "week", "date", "home_team", "home_elo_diff", "away_elo"
-        ]].rename(columns={
-            "home_team": "team",
-            "home_elo_diff": "elo_diff",
-            "away_elo": "opp_elo"
-        })
+        home_games = processed_schedule[
+            ["season", "week", "date", "home_team", "home_elo_diff", "away_elo"]
+        ].rename(
+            columns={
+                "home_team": "team",
+                "home_elo_diff": "elo_diff",
+                "away_elo": "opp_elo",
+            }
+        )
         home_games["home_away"] = "Home"
 
-        away_games = processed_schedule[[
-            "season", "week", "date", "away_team", "away_elo_diff", "home_elo"
-        ]].rename(columns={
-            "away_team": "team",
-            "away_elo_diff": "elo_diff",
-            "home_elo": "opp_elo"
-        })
+        away_games = processed_schedule[
+            ["season", "week", "date", "away_team", "away_elo_diff", "home_elo"]
+        ].rename(
+            columns={
+                "away_team": "team",
+                "away_elo_diff": "elo_diff",
+                "home_elo": "opp_elo",
+            }
+        )
         away_games["home_away"] = "Away"
 
         # Combine home and away games
@@ -731,15 +806,18 @@ class DataManager:
         except:
             try:
                 # Handle manual Excel updates that change date format
-                final_schedule.date = pd.to_datetime(final_schedule.date, format="%m/%d/%y")
+                final_schedule.date = pd.to_datetime(
+                    final_schedule.date, format="%m/%d/%y"
+                )
             except:
                 logger.warning("Could not parse dates in NFL schedule")
-                final_schedule.date = pd.to_datetime(final_schedule.date, errors='coerce')
+                final_schedule.date = pd.to_datetime(
+                    final_schedule.date, errors="coerce"
+                )
 
         # Sort by season and week for consistency
         final_schedule = final_schedule.sort_values(
-            by=["season", "week"],
-            ignore_index=True
+            by=["season", "week"], ignore_index=True
         )
 
         return final_schedule

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class DataCache:
     """
     Simple file-based caching system for fantasy football data.
-    
+
     Supports different cache durations for different types of data:
     - Player data: 6 hours (changes throughout the day)
     - League settings: 1 week (rarely changes during season)
@@ -30,7 +30,7 @@ class DataCache:
     def __init__(self, cache_dir: str = ".cache"):
         """
         Initialize cache system.
-        
+
         Args:
             cache_dir: Directory to store cache files
         """
@@ -46,11 +46,11 @@ class DataCache:
     def get_cached_data(self, key: str, max_age_hours: int = 24) -> Optional[Any]:
         """
         Retrieve cached data if it exists and is fresh enough.
-        
+
         Args:
             key: Cache key
             max_age_hours: Maximum age in hours for cache to be valid
-            
+
         Returns:
             Cached data if available and fresh, None otherwise
         """
@@ -67,13 +67,13 @@ class DataCache:
 
         try:
             # Try to load the data
-            if cache_file.suffix == '.pkl':
-                with open(cache_file, 'rb') as f:
+            if cache_file.suffix == ".pkl":
+                with open(cache_file, "rb") as f:
                     data = pickle.load(f)
-            elif cache_file.suffix == '.json':
+            elif cache_file.suffix == ".json":
                 with open(cache_file) as f:
                     data = json.load(f)
-            elif cache_file.suffix == '.csv':
+            elif cache_file.suffix == ".csv":
                 data = pd.read_csv(cache_file)
             else:
                 logger.warning(f"Unknown cache file format: {cache_file}")
@@ -91,12 +91,12 @@ class DataCache:
     def save_data(self, key: str, data: Any, format: str = "auto") -> bool:
         """
         Save data to cache.
-        
+
         Args:
             key: Cache key
             data: Data to cache
             format: Format to save in (auto, pickle, json, csv)
-            
+
         Returns:
             True if save successful, False otherwise
         """
@@ -110,14 +110,14 @@ class DataCache:
                 format = self._auto_detect_format(data)
 
             if format == "pickle":
-                with open(cache_file.with_suffix('.pkl'), 'wb') as f:
+                with open(cache_file.with_suffix(".pkl"), "wb") as f:
                     pickle.dump(data, f)
             elif format == "json":
-                with open(cache_file.with_suffix('.json'), 'w') as f:
+                with open(cache_file.with_suffix(".json"), "w") as f:
                     json.dump(data, f)
             elif format == "csv":
                 if isinstance(data, pd.DataFrame):
-                    data.to_csv(cache_file.with_suffix('.csv'), index=False)
+                    data.to_csv(cache_file.with_suffix(".csv"), index=False)
                 else:
                     raise ValueError("CSV format requires pandas DataFrame")
             else:
@@ -133,17 +133,17 @@ class DataCache:
     def invalidate(self, key: str) -> bool:
         """
         Remove cached data for a specific key.
-        
+
         Args:
             key: Cache key to invalidate
-            
+
         Returns:
             True if file was removed, False if it didn't exist
         """
         cache_file = self._get_cache_file(key)
 
         # Try different extensions
-        for ext in ['.pkl', '.json', '.csv']:
+        for ext in [".pkl", ".json", ".csv"]:
             file_path = cache_file.with_suffix(ext)
             if file_path.exists():
                 file_path.unlink()
@@ -155,7 +155,7 @@ class DataCache:
     def clear_all(self) -> int:
         """
         Clear all cached data.
-        
+
         Returns:
             Number of files removed
         """
@@ -172,10 +172,10 @@ class DataCache:
     def clear_expired(self, max_age_hours: int = 168) -> int:
         """
         Clear cache files older than specified age.
-        
+
         Args:
             max_age_hours: Maximum age in hours
-            
+
         Returns:
             Number of files removed
         """
@@ -195,7 +195,7 @@ class DataCache:
     def get_cache_info(self) -> dict:
         """
         Get information about the cache.
-        
+
         Returns:
             Dictionary with cache statistics
         """
@@ -220,17 +220,17 @@ class DataCache:
             "total_size_mb": round(total_size / (1024 * 1024), 2),
             "oldest_file": oldest_file,
             "newest_file": newest_file,
-            "cache_dir": str(self.cache_dir)
+            "cache_dir": str(self.cache_dir),
         }
 
     def _get_cache_file(self, key: str, format: str = None) -> Path:
         """
         Get cache file path for a given key.
-        
+
         Args:
             key: Cache key
             format: File format (affects extension)
-            
+
         Returns:
             Path to cache file
         """
@@ -277,11 +277,12 @@ class DataCache:
 def cached_result(cache_key_func, max_age_hours: int = 24):
     """
     Decorator to cache function results.
-    
+
     Args:
         cache_key_func: Function that takes the same arguments and returns a cache key
         max_age_hours: Maximum age for cached results
     """
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             cache = DataCache()
@@ -298,12 +299,14 @@ def cached_result(cache_key_func, max_age_hours: int = 24):
             return result
 
         return wrapper
+
     return decorator
 
 
 # Example usage:
 def player_cache_key(league_id: str, season: int, week: int) -> str:
     return f"players_{league_id}_{season}_{week}"
+
 
 @cached_result(player_cache_key, max_age_hours=6)
 def get_player_data(league_id: str, season: int, week: int):

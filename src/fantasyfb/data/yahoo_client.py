@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class YahooClient:
     """
     Handles Yahoo Fantasy Sports API interactions.
-    
+
     Responsibilities:
     - OAuth authentication and token management
     - API rate limiting and retry logic
@@ -32,7 +32,7 @@ class YahooClient:
     def __init__(self, credentials_file: str = ".env"):
         """
         Initialize Yahoo API client.
-        
+
         Args:
             credentials_file: Path to credentials file
         """
@@ -56,12 +56,15 @@ class YahooClient:
             # Copy from example if needed
             if Path(".env.example").exists():
                 import shutil
+
                 shutil.copyfile(".env.example", ".env")
                 load_dotenv()
 
         # Check if credentials need updating
-        if (os.environ.get("CONSUMER_KEY") == "updatekey" and
-            os.environ.get("CONSUMER_SECRET") == "updatesecret"):
+        if (
+            os.environ.get("CONSUMER_KEY") == "updatekey"
+            and os.environ.get("CONSUMER_SECRET") == "updatesecret"
+        ):
             raise ValueError(
                 "Please update your Yahoo OAuth credentials in .env file. "
                 "Get them from: https://developer.yahoo.com/apps/create/"
@@ -121,12 +124,12 @@ class YahooClient:
     def _safe_api_call(self, func, *args, max_retries: int = 3, **kwargs):
         """
         Make a safe API call with retry logic.
-        
+
         Args:
             func: Function to call
             max_retries: Maximum number of retry attempts
             *args, **kwargs: Arguments for the function
-            
+
         Returns:
             API response
         """
@@ -137,11 +140,13 @@ class YahooClient:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                logger.warning(f"API call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.warning(
+                    f"API call failed (attempt {attempt + 1}/{max_retries}): {e}"
+                )
 
                 if attempt < max_retries - 1:
                     # Exponential backoff
-                    wait_time = (2 ** attempt) * 5
+                    wait_time = (2**attempt) * 5
                     logger.info(f"Waiting {wait_time} seconds before retry...")
                     time.sleep(wait_time)
                 else:
@@ -177,6 +182,7 @@ class YahooClient:
 
     def get_league_standings(self, lg_id: str) -> Dict:
         """Get league standings."""
+
         def _get_standings():
             lg = self.get_league(lg_id)
             return lg.yhandler.get_standings_raw(lg_id)
@@ -186,11 +192,11 @@ class YahooClient:
     def get_all_players(self, lg_id: str, injury_tries: int = 10) -> List[Dict]:
         """
         Get all NFL players eligible for the league.
-        
+
         Args:
             lg_id: Yahoo league ID
             injury_tries: Max attempts to get injury data
-            
+
         Returns:
             List of player dictionaries
         """
@@ -210,7 +216,10 @@ class YahooClient:
 
             # Check if we got injury data
             players_df = pd.DataFrame(players)
-            if not players_df.empty and not players_df.get('status', pd.Series()).isnull().all():
+            if (
+                not players_df.empty
+                and not players_df.get("status", pd.Series()).isnull().all()
+            ):
                 logger.info(f"Got injury data on attempt {attempt + 1}")
                 break
 
@@ -226,6 +235,7 @@ class YahooClient:
         players = []
 
         for page_ind in range(100):  # Pagination
+
             def _get_page():
                 return lg.yhandler.get_players_raw(lg.league_id, page_ind * 25, status)
 
@@ -257,16 +267,16 @@ class YahooClient:
                 vals.update(field)
 
         # Clean up data
-        if 'name' in vals and isinstance(vals['name'], dict):
-            vals['name'] = vals['name']['full']
+        if "name" in vals and isinstance(vals["name"], dict):
+            vals["name"] = vals["name"]["full"]
 
-        if 'eligible_positions' in vals:
-            vals['eligible_positions'] = [
-                pos['position'] for pos in vals['eligible_positions']
+        if "eligible_positions" in vals:
+            vals["eligible_positions"] = [
+                pos["position"] for pos in vals["eligible_positions"]
             ]
 
-        if 'bye_weeks' in vals and isinstance(vals['bye_weeks'], dict):
-            vals['bye_weeks'] = vals['bye_weeks']['week']
+        if "bye_weeks" in vals and isinstance(vals["bye_weeks"], dict):
+            vals["bye_weeks"] = vals["bye_weeks"]["week"]
 
         return vals
 
@@ -278,9 +288,9 @@ class YahooClient:
         rosters = {}
 
         # Get team list first
-        league_info = self._safe_api_call(
-            lg.yhandler.get_standings_raw, lg_id
-        )["fantasy_content"]
+        league_info = self._safe_api_call(lg.yhandler.get_standings_raw, lg_id)[
+            "fantasy_content"
+        ]
         teams_info = league_info["league"][1]["standings"][0]["teams"]
 
         teams = [
@@ -293,20 +303,25 @@ class YahooClient:
 
         # Get roster for each team
         for team in teams:
+
             def _get_roster():
                 tm = lg.to_team(team["team_key"])
                 return pd.DataFrame(tm.roster(week))
 
             try:
                 roster_df = self._safe_api_call(_get_roster)
-                rosters[team["name"]] = roster_df.to_dict('records') if not roster_df.empty else []
+                rosters[team["name"]] = (
+                    roster_df.to_dict("records") if not roster_df.empty else []
+                )
             except Exception as e:
                 logger.warning(f"Failed to get roster for {team['name']}: {e}")
                 rosters[team["name"]] = []
 
         return rosters
 
-    def get_league_schedule(self, lg_id: str, teams: List[Dict], season: int, week: int) -> pd.DataFrame:
+    def get_league_schedule(
+        self, lg_id: str, teams: List[Dict], season: int, week: int
+    ) -> pd.DataFrame:
         """Get fantasy league schedule."""
         logger.info("Fetching league schedule...")
 
@@ -321,6 +336,7 @@ class YahooClient:
             limit = max(playoff_start, week + 1)
 
             for w in range(1, limit):
+
                 def _get_matchup():
                     return tm.yhandler.get_matchup_raw(tm.team_key, w)
 
@@ -332,13 +348,15 @@ class YahooClient:
                         team_1 = matchup_data["0"]["matchup"]["0"]["teams"]["0"]["team"]
                         team_2 = matchup_data["0"]["matchup"]["0"]["teams"]["1"]["team"]
 
-                        schedule.append({
-                            "week": w,
-                            "team_1": team_1[0][2]["name"],
-                            "team_2": team_2[0][2]["name"],
-                            "score_1": float(team_1[1]["team_points"]["total"]),
-                            "score_2": float(team_2[1]["team_points"]["total"]),
-                        })
+                        schedule.append(
+                            {
+                                "week": w,
+                                "team_1": team_1[0][2]["name"],
+                                "team_2": team_2[0][2]["name"],
+                                "score_1": float(team_1[1]["team_points"]["total"]),
+                                "score_2": float(team_2[1]["team_points"]["total"]),
+                            }
+                        )
 
                 except Exception as e:
                     logger.warning(f"Failed to get matchup for week {w}: {e}")

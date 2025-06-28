@@ -23,7 +23,7 @@ class TradeAnalyzer:
     def __init__(self, league, simulator):
         """
         Initialize TradeAnalyzer.
-        
+
         Args:
             league: Parent League object
             simulator: SeasonSimulator instance for running scenarios
@@ -45,7 +45,7 @@ class TradeAnalyzer:
     ) -> pd.DataFrame:
         """
         Analyze potential free agent additions.
-        
+
         Args:
             focus_on: Specific players to analyze
             exclude: Players to exclude from analysis
@@ -56,16 +56,20 @@ class TradeAnalyzer:
             payouts: Prize structure
             bestball: Use best ball scoring
             min_rostership: Minimum roster percentage threshold
-            
+
         Returns:
             DataFrame with analysis results
         """
         logger.info("Analyzing potential free agent additions...")
 
         if bestball:
-            orig_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+            orig_standings = self.simulator.bestball_sims(
+                payouts or self.league.config.default_payouts
+            )
         else:
-            _, orig_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+            _, orig_standings = self.simulator.season_sims(
+                postseason, payouts or self.league.config.default_payouts
+            )
 
         added_value = pd.DataFrame(columns=self._get_result_columns(postseason))
 
@@ -75,9 +79,9 @@ class TradeAnalyzer:
         # Get available players
         players = self.league.load_players()
         available = players.loc[
-            players.fantasy_team.isnull() &
-            (players.until.isnull() | (players.until < 17)) &
-            (players.pct_rostered >= min_rostership)
+            players.fantasy_team.isnull()
+            & (players.until.isnull() | (players.until < 17))
+            & (players.pct_rostered >= min_rostership)
         ].reset_index(drop=True)
 
         # Filter available players
@@ -97,25 +101,33 @@ class TradeAnalyzer:
                 logger.info(f"Analyzing: {player['name']}")
 
             # Temporarily add player to team
-            original_team = players.loc[players.name == player['name'], 'fantasy_team'].iloc[0]
-            players.loc[players.name == player['name'], 'fantasy_team'] = team_name
+            original_team = players.loc[
+                players.name == player["name"], "fantasy_team"
+            ].iloc[0]
+            players.loc[players.name == player["name"], "fantasy_team"] = team_name
 
             # Run simulation with the addition
             if bestball:
-                new_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+                new_standings = self.simulator.bestball_sims(
+                    payouts or self.league.config.default_payouts
+                )
             else:
-                _, new_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+                _, new_standings = self.simulator.season_sims(
+                    postseason, payouts or self.league.config.default_payouts
+                )
 
             # Calculate impact
             impact = self._calculate_impact(orig_standings, new_standings, team_name)
-            impact['player_to_add'] = player['name']
-            impact['position'] = player['position']
-            impact['current_team'] = player['current_team']
+            impact["player_to_add"] = player["name"]
+            impact["position"] = player["position"]
+            impact["current_team"] = player["current_team"]
 
-            added_value = pd.concat([added_value, pd.DataFrame([impact])], ignore_index=True)
+            added_value = pd.concat(
+                [added_value, pd.DataFrame([impact])], ignore_index=True
+            )
 
             # Restore original state
-            players.loc[players.name == player['name'], 'fantasy_team'] = original_team
+            players.loc[players.name == player["name"], "fantasy_team"] = original_team
 
         # Sort by impact
         sort_col = "winner" if postseason else "playoffs"
@@ -139,7 +151,7 @@ class TradeAnalyzer:
     ) -> pd.DataFrame:
         """
         Analyze potential player drops.
-        
+
         Args:
             focus_on: Specific players to analyze
             exclude: Players to exclude
@@ -148,16 +160,20 @@ class TradeAnalyzer:
             verbose: Print progress
             payouts: Prize structure
             bestball: Use best ball scoring
-            
+
         Returns:
             DataFrame with drop analysis results
         """
         logger.info("Analyzing potential drops...")
 
         if bestball:
-            orig_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+            orig_standings = self.simulator.bestball_sims(
+                payouts or self.league.config.default_payouts
+            )
         else:
-            _, orig_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+            _, orig_standings = self.simulator.season_sims(
+                postseason, payouts or self.league.config.default_payouts
+            )
 
         reduced_value = pd.DataFrame(columns=self._get_result_columns(postseason))
 
@@ -180,22 +196,28 @@ class TradeAnalyzer:
                 logger.info(f"Analyzing drop: {player['name']}")
 
             # Temporarily remove player
-            players.loc[players.name == player['name'], 'fantasy_team'] = None
+            players.loc[players.name == player["name"], "fantasy_team"] = None
 
             # Run simulation without the player
             if bestball:
-                new_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+                new_standings = self.simulator.bestball_sims(
+                    payouts or self.league.config.default_payouts
+                )
             else:
-                _, new_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+                _, new_standings = self.simulator.season_sims(
+                    postseason, payouts or self.league.config.default_payouts
+                )
 
             # Calculate impact (negative impact = loss from dropping)
             impact = self._calculate_impact(orig_standings, new_standings, team_name)
-            impact['player_to_drop'] = player['name']
+            impact["player_to_drop"] = player["name"]
 
-            reduced_value = pd.concat([reduced_value, pd.DataFrame([impact])], ignore_index=True)
+            reduced_value = pd.concat(
+                [reduced_value, pd.DataFrame([impact])], ignore_index=True
+            )
 
             # Restore player
-            players.loc[players.name == player['name'], 'fantasy_team'] = team_name
+            players.loc[players.name == player["name"], "fantasy_team"] = team_name
 
         # Sort by impact (ascending since we want to see least impactful drops first)
         sort_col = "winner" if postseason else "playoffs"
@@ -217,7 +239,7 @@ class TradeAnalyzer:
     ) -> pd.DataFrame:
         """
         Analyze potential trades.
-        
+
         Args:
             focus_on: Specific players to include
             exclude: Players to exclude
@@ -228,16 +250,20 @@ class TradeAnalyzer:
             verbose: Print progress
             payouts: Prize structure
             bestball: Use best ball scoring
-            
+
         Returns:
             DataFrame with trade analysis results
         """
         logger.info("Analyzing potential trades...")
 
         if bestball:
-            orig_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+            orig_standings = self.simulator.bestball_sims(
+                payouts or self.league.config.default_payouts
+            )
         else:
-            _, orig_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+            _, orig_standings = self.simulator.season_sims(
+                postseason, payouts or self.league.config.default_payouts
+            )
 
         if not team_name:
             team_name = self.league.get_team_name()
@@ -246,13 +272,11 @@ class TradeAnalyzer:
 
         # Get tradeable players
         my_players = players.loc[
-            (players.fantasy_team == team_name) &
-            ~players.position.isin(["K", "DEF"])
+            (players.fantasy_team == team_name) & ~players.position.isin(["K", "DEF"])
         ]
 
         their_players = players.loc[
-            (players.fantasy_team != team_name) &
-            ~players.position.isin(["K", "DEF"])
+            (players.fantasy_team != team_name) & ~players.position.isin(["K", "DEF"])
         ]
 
         # Apply filters
@@ -271,16 +295,18 @@ class TradeAnalyzer:
 
             if mine_given and theirs_given:
                 # Execute background trade
-                their_team = players.loc[players.name.isin(theirs_given), 'fantasy_team'].iloc[0]
+                their_team = players.loc[
+                    players.name.isin(theirs_given), "fantasy_team"
+                ].iloc[0]
 
-                players.loc[players.name.isin(mine_given), 'fantasy_team'] = their_team
-                players.loc[players.name.isin(theirs_given), 'fantasy_team'] = team_name
+                players.loc[players.name.isin(mine_given), "fantasy_team"] = their_team
+                players.loc[players.name.isin(theirs_given), "fantasy_team"] = team_name
 
                 # Remove given players from analysis
                 my_players = my_players.loc[~my_players.name.isin(given)]
                 their_players = their_players.loc[
-                    (their_players.fantasy_team == their_team) &
-                    ~their_players.name.isin(given)
+                    (their_players.fantasy_team == their_team)
+                    & ~their_players.name.isin(given)
                 ]
 
         trade_results = []
@@ -291,47 +317,65 @@ class TradeAnalyzer:
                 logger.info(f"Analyzing trades for: {my_player['name']}")
 
             # Find comparable players
-            comparable = their_players.loc[
-                abs(their_players.WAR - my_player['WAR']) <= 0.5
-            ].groupby("position").head(limit_per)
+            comparable = (
+                their_players.loc[abs(their_players.WAR - my_player["WAR"]) <= 0.5]
+                .groupby("position")
+                .head(limit_per)
+            )
 
             for _, their_player in comparable.iterrows():
                 # Execute trade
-                their_team = their_player['fantasy_team']
+                their_team = their_player["fantasy_team"]
 
-                players.loc[players.name == my_player['name'], 'fantasy_team'] = their_team
-                players.loc[players.name == their_player['name'], 'fantasy_team'] = team_name
+                players.loc[players.name == my_player["name"], "fantasy_team"] = (
+                    their_team
+                )
+                players.loc[players.name == their_player["name"], "fantasy_team"] = (
+                    team_name
+                )
 
                 # Simulate results
                 if bestball:
-                    new_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+                    new_standings = self.simulator.bestball_sims(
+                        payouts or self.league.config.default_payouts
+                    )
                 else:
-                    _, new_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+                    _, new_standings = self.simulator.season_sims(
+                        postseason, payouts or self.league.config.default_payouts
+                    )
 
                 # Calculate impact for both teams
-                my_impact = self._calculate_impact(orig_standings, new_standings, team_name)
-                their_impact = self._calculate_impact(orig_standings, new_standings, their_team)
+                my_impact = self._calculate_impact(
+                    orig_standings, new_standings, team_name
+                )
+                their_impact = self._calculate_impact(
+                    orig_standings, new_standings, their_team
+                )
 
                 # Combine results
                 trade_result = {
-                    'player_to_trade_away': my_player['name'],
-                    'player_to_trade_for': their_player['name'],
-                    'their_team': their_team,
+                    "player_to_trade_away": my_player["name"],
+                    "player_to_trade_for": their_player["name"],
+                    "their_team": their_team,
                 }
 
                 # Add my impact with prefix
                 for key, value in my_impact.items():
-                    trade_result[f'my_{key}'] = value
+                    trade_result[f"my_{key}"] = value
 
                 # Add their impact with prefix
                 for key, value in their_impact.items():
-                    trade_result[f'their_{key}'] = value
+                    trade_result[f"their_{key}"] = value
 
                 trade_results.append(trade_result)
 
                 # Reverse trade
-                players.loc[players.name == my_player['name'], 'fantasy_team'] = team_name
-                players.loc[players.name == their_player['name'], 'fantasy_team'] = their_team
+                players.loc[players.name == my_player["name"], "fantasy_team"] = (
+                    team_name
+                )
+                players.loc[players.name == their_player["name"], "fantasy_team"] = (
+                    their_team
+                )
 
         trade_df = pd.DataFrame(trade_results)
 
@@ -355,7 +399,7 @@ class TradeAnalyzer:
     ) -> pd.DataFrame:
         """
         Analyze add/drop combinations.
-        
+
         Args:
             focus_on: Specific players to analyze
             exclude: Players to exclude
@@ -366,16 +410,20 @@ class TradeAnalyzer:
             payouts: Prize structure
             bestball: Use best ball scoring
             min_rostership: Minimum roster percentage
-            
+
         Returns:
             DataFrame with pickup analysis results
         """
         logger.info("Analyzing potential pickups (add/drop combinations)...")
 
         if bestball:
-            orig_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+            orig_standings = self.simulator.bestball_sims(
+                payouts or self.league.config.default_payouts
+            )
         else:
-            _, orig_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+            _, orig_standings = self.simulator.season_sims(
+                postseason, payouts or self.league.config.default_payouts
+            )
 
         pickup_results = []
 
@@ -393,9 +441,9 @@ class TradeAnalyzer:
 
         # Get available players
         available = players.loc[
-            players.fantasy_team.isnull() &
-            (players.until.isnull() | (players.until < 17)) &
-            (players.pct_rostered >= min_rostership)
+            players.fantasy_team.isnull()
+            & (players.until.isnull() | (players.until < 17))
+            & (players.pct_rostered >= min_rostership)
         ]
 
         if focus_on:
@@ -411,31 +459,39 @@ class TradeAnalyzer:
                 logger.info(f"Analyzing drops for: {drop_player['name']}")
 
             # Find suitable replacements
-            suitable = available.loc[
-                available.WAR >= drop_player['WAR'] - 0.5
-            ]
+            suitable = available.loc[available.WAR >= drop_player["WAR"] - 0.5]
 
             for _, add_player in suitable.iterrows():
                 # Execute pickup
-                players.loc[players.name == drop_player['name'], 'fantasy_team'] = None
-                players.loc[players.name == add_player['name'], 'fantasy_team'] = team_name
+                players.loc[players.name == drop_player["name"], "fantasy_team"] = None
+                players.loc[players.name == add_player["name"], "fantasy_team"] = (
+                    team_name
+                )
 
                 # Simulate
                 if bestball:
-                    new_standings = self.simulator.bestball_sims(payouts or self.league.config.default_payouts)
+                    new_standings = self.simulator.bestball_sims(
+                        payouts or self.league.config.default_payouts
+                    )
                 else:
-                    _, new_standings = self.simulator.season_sims(postseason, payouts or self.league.config.default_payouts)
+                    _, new_standings = self.simulator.season_sims(
+                        postseason, payouts or self.league.config.default_payouts
+                    )
 
                 # Calculate impact
-                impact = self._calculate_impact(orig_standings, new_standings, team_name)
-                impact['player_to_drop'] = drop_player['name']
-                impact['player_to_add'] = add_player['name']
+                impact = self._calculate_impact(
+                    orig_standings, new_standings, team_name
+                )
+                impact["player_to_drop"] = drop_player["name"]
+                impact["player_to_add"] = add_player["name"]
 
                 pickup_results.append(impact)
 
                 # Reverse pickup
-                players.loc[players.name == drop_player['name'], 'fantasy_team'] = team_name
-                players.loc[players.name == add_player['name'], 'fantasy_team'] = None
+                players.loc[players.name == drop_player["name"], "fantasy_team"] = (
+                    team_name
+                )
+                players.loc[players.name == add_player["name"], "fantasy_team"] = None
 
         pickup_df = pd.DataFrame(pickup_results)
 
@@ -445,18 +501,27 @@ class TradeAnalyzer:
 
         return pickup_df
 
-    def _calculate_impact(self, orig_standings: pd.DataFrame, new_standings: pd.DataFrame, team_name: str) -> Dict:
+    def _calculate_impact(
+        self, orig_standings: pd.DataFrame, new_standings: pd.DataFrame, team_name: str
+    ) -> Dict:
         """Calculate the impact of a roster move."""
         orig_team = orig_standings.loc[orig_standings.team == team_name].iloc[0]
         new_team = new_standings.loc[new_standings.team == team_name].iloc[0]
 
         impact = {}
-        for col in ['wins_avg', 'wins_stdev', 'points_avg', 'points_stdev', 'playoffs', 'playoff_bye']:
+        for col in [
+            "wins_avg",
+            "wins_stdev",
+            "points_avg",
+            "points_stdev",
+            "playoffs",
+            "playoff_bye",
+        ]:
             if col in orig_team.index and col in new_team.index:
                 impact[col] = round(new_team[col] - orig_team[col], 4)
 
         # Handle postseason columns if they exist
-        for col in ['winner', 'runner_up', 'third', 'earnings']:
+        for col in ["winner", "runner_up", "third", "earnings"]:
             if col in orig_team.index and col in new_team.index:
                 impact[col] = round(new_team[col] - orig_team[col], 4)
 
@@ -465,8 +530,12 @@ class TradeAnalyzer:
     def _get_result_columns(self, postseason: bool) -> List[str]:
         """Get the appropriate result columns based on analysis type."""
         base_cols = [
-            "wins_avg", "wins_stdev", "points_avg", "points_stdev",
-            "playoffs", "playoff_bye"
+            "wins_avg",
+            "wins_stdev",
+            "points_avg",
+            "points_stdev",
+            "playoffs",
+            "playoff_bye",
         ]
 
         if postseason:

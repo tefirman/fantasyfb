@@ -47,8 +47,7 @@ class TestRealFixtures:
             game_data = user_leagues[str(i)]["game"]
             if isinstance(game_data, list) and len(game_data) >= 2:
                 game_info = game_data[0]
-                if (game_info.get("code") == "nfl" and
-                    game_info.get("season") == "2024"):
+                if game_info.get("code") == "nfl" and game_info.get("season") == "2024":
                     teams = game_data[1]["teams"]
                     for j in range(teams["count"]):
                         team = teams[str(j)]["team"][0]
@@ -100,9 +99,11 @@ class TestRealFixtures:
         assert lg_id is not None
         assert lg_id.startswith("449.l.")  # Based on your real data
 
-    @patch('src.fantasyfb.data.data_manager.sr.get_bulk_rosters')
-    @patch('src.fantasyfb.data.data_manager.sr.get_draft')
-    def test_data_manager_settings_processing(self, mock_draft, mock_rosters, mock_yahoo_client):
+    @patch("src.fantasyfb.data.data_manager.sr.get_bulk_rosters")
+    @patch("src.fantasyfb.data.data_manager.sr.get_draft")
+    def test_data_manager_settings_processing(
+        self, mock_draft, mock_rosters, mock_yahoo_client
+    ):
         """Test DataManager processes real settings correctly."""
         # Mock the sportsref dependencies
         mock_rosters.return_value = pd.DataFrame()
@@ -111,7 +112,9 @@ class TestRealFixtures:
         data_manager = DataManager(mock_yahoo_client)
 
         # Use real league settings
-        settings, scoring, roster_spots = data_manager.load_league_settings("449.l.49284")
+        settings, scoring, roster_spots = data_manager.load_league_settings(
+            "449.l.49284"
+        )
 
         # Validate settings processing
         assert isinstance(settings, dict)
@@ -141,34 +144,55 @@ class TestRealFixtures:
     def test_scoring_config_completeness(self, mock_yahoo_client):
         """Test that scoring config includes all expected categories."""
         data_manager = DataManager(mock_yahoo_client)
-        settings, scoring, roster_spots = data_manager.load_league_settings("449.l.49284")
+        settings, scoring, roster_spots = data_manager.load_league_settings(
+            "449.l.49284"
+        )
 
         # These should all be present (either from API or defaults)
         expected_categories = [
-            "Pass Yds", "Pass TD", "Int Thrown",
-            "Rush Yds", "Rush TD",
-            "Rec Yds", "Rec TD", "Rec",
-            "Fum Lost", "2-PT",
-            "PAT Made", "Sack", "Int", "Fum Rec", "TD", "Safe", "Blk Kick",
-            "Pts Allow 0", "Pts Allow 1-6", "Pts Allow 7-13",
-            "Pts Allow 14-20", "Pts Allow 21-27", "Pts Allow 28-34", "Pts Allow 35+"
+            "Pass Yds",
+            "Pass TD",
+            "Int Thrown",
+            "Rush Yds",
+            "Rush TD",
+            "Rec Yds",
+            "Rec TD",
+            "Rec",
+            "Fum Lost",
+            "2-PT",
+            "PAT Made",
+            "Sack",
+            "Int",
+            "Fum Rec",
+            "TD",
+            "Safe",
+            "Blk Kick",
+            "Pts Allow 0",
+            "Pts Allow 1-6",
+            "Pts Allow 7-13",
+            "Pts Allow 14-20",
+            "Pts Allow 21-27",
+            "Pts Allow 28-34",
+            "Pts Allow 35+",
         ]
 
         for category in expected_categories:
             assert category in scoring, f"Missing scoring category: {category}"
             assert isinstance(scoring[category], (int, float))
 
-    @patch('src.fantasyfb.data.data_manager.sr')
+    @patch("src.fantasyfb.data.data_manager.sr")
     def test_league_initialization_with_real_data(self, mock_sr, mock_yahoo_client):
         """Test League can initialize with real API responses."""
         # Mock the sportsref dependencies
         mock_sr.get_bulk_rosters.return_value = pd.DataFrame()
         mock_sr.get_draft.return_value = pd.DataFrame()
-        mock_sr.Schedule.return_value.schedule = pd.DataFrame(columns=['season', 'week'])
+        mock_sr.Schedule.return_value.schedule = pd.DataFrame(
+            columns=["season", "week"]
+        )
         mock_sr.get_all_depth_charts.return_value = pd.DataFrame()
 
         # Mock the data manager to use our mocked client
-        with patch('src.fantasyfb.core.league.DataManager') as mock_dm_class:
+        with patch("src.fantasyfb.core.league.DataManager") as mock_dm_class:
             mock_dm = Mock()
             mock_dm_class.return_value = mock_dm
 
@@ -177,7 +201,7 @@ class TestRealFixtures:
             mock_dm.load_league_settings.return_value = (
                 {"playoff_start_week": 15, "num_playoff_teams": 6},
                 {"Pass Yds": 0.04, "Pass TD": 6.0, "Rush Yds": 0.1},
-                pd.DataFrame({"position": ["QB", "RB", "WR"], "count": [1, 2, 2]})
+                pd.DataFrame({"position": ["QB", "RB", "WR"], "count": [1, 2, 2]}),
             )
             mock_dm.load_fantasy_teams.return_value = [{"name": "The Algorithm"}]
             mock_dm.load_nfl_teams.return_value = pd.DataFrame()
@@ -195,7 +219,9 @@ class TestRealFixtures:
     def test_roster_positions_mapping(self, mock_yahoo_client):
         """Test that roster positions are correctly mapped."""
         data_manager = DataManager(mock_yahoo_client)
-        settings, scoring, roster_spots = data_manager.load_league_settings("449.l.49284")
+        settings, scoring, roster_spots = data_manager.load_league_settings(
+            "449.l.49284"
+        )
 
         # Check that all positions from real data are present
         expected_positions = ["QB", "WR", "RB", "W/T", "W/R/T", "K", "DEF", "BN", "IR"]
@@ -270,19 +296,17 @@ class TestFixtureHelpers:
 class TestIntegrationWithRealData:
     """Integration tests using real fixture data."""
 
-    @patch('src.fantasyfb.data.data_manager.sr')
+    @patch("src.fantasyfb.data.data_manager.sr")
     def test_full_data_pipeline(self, mock_sr):
         """Test the full data loading pipeline with real fixtures."""
         # Mock sportsref dependencies
-        mock_sr.get_bulk_rosters.return_value = pd.DataFrame({
-            'player': ['Test Player'],
-            'player_id': ['test123'],
-            'team': ['SEA']
-        })
+        mock_sr.get_bulk_rosters.return_value = pd.DataFrame(
+            {"player": ["Test Player"], "player_id": ["test123"], "team": ["SEA"]}
+        )
         mock_sr.get_draft.return_value = pd.DataFrame()
-        mock_sr.Schedule.return_value.schedule = pd.DataFrame({
-            'season': [2024], 'week': [1], 'team': ['SEA'], 'elo_diff': [0.0]
-        })
+        mock_sr.Schedule.return_value.schedule = pd.DataFrame(
+            {"season": [2024], "week": [1], "team": ["SEA"], "elo_diff": [0.0]}
+        )
 
         # Use real fixtures
         mock_client = get_mock_yahoo_client_with_real_responses()

@@ -13,7 +13,7 @@ import pandas as pd
 class Player:
     """
     Represents an NFL player with fantasy-relevant information.
-    
+
     This is a simple data class that can be used for type safety
     and cleaner code when working with individual players.
     """
@@ -56,7 +56,16 @@ class Player:
     @property
     def is_injured(self) -> bool:
         """Check if player is currently injured."""
-        return self.injury_status in ["O", "D", "SUSP", "IR", "PUP-R", "PUP-P", "NFI-R", "NA"]
+        return self.injury_status in [
+            "O",
+            "D",
+            "SUSP",
+            "IR",
+            "PUP-R",
+            "PUP-P",
+            "NFI-R",
+            "NA",
+        ]
 
     @property
     def projected_points(self) -> float:
@@ -69,81 +78,83 @@ class Player:
 
     def __repr__(self) -> str:
         """Detailed representation of the player."""
-        return (f"Player(name='{self.name}', position='{self.position}', "
-                f"team='{self.team}', war={self.war:.2f})")
+        return (
+            f"Player(name='{self.name}', position='{self.position}', "
+            f"team='{self.team}', war={self.war:.2f})"
+        )
 
     @classmethod
-    def from_dataframe_row(cls, row: pd.Series) -> 'Player':
+    def from_dataframe_row(cls, row: pd.Series) -> "Player":
         """
         Create Player instance from a pandas DataFrame row.
-        
+
         Args:
             row: pandas Series with player data
-            
+
         Returns:
             Player instance
         """
         return cls(
-            name=row.get('name', ''),
-            position=row.get('position', ''),
-            team=row.get('current_team', ''),
-            player_id_yahoo=row.get('player_id'),
-            player_id_sr=row.get('player_id_sr'),
-            fantasy_team=row.get('fantasy_team'),
-            selected_position=row.get('selected_position'),
-            starter=row.get('starter', False),
-            points_avg=row.get('points_avg', 0.0),
-            points_stdev=row.get('points_stdev', 0.0),
-            points_rate=row.get('points_rate', 0.0),
-            war=row.get('WAR', 0.0),
-            bye_week=row.get('bye_week'),
-            injury_status=row.get('status'),
-            until=row.get('until'),
-            depth_chart_position=row.get('string', 1.0),
-            pct_rostered=row.get('pct_rostered', 0.0),
-            game_factor=row.get('game_factor', 1.0),
-            opp_factor=row.get('opp_factor', 0.0),
-            string_factor=row.get('string_factor', 0.0),
+            name=row.get("name", ""),
+            position=row.get("position", ""),
+            team=row.get("current_team", ""),
+            player_id_yahoo=row.get("player_id"),
+            player_id_sr=row.get("player_id_sr"),
+            fantasy_team=row.get("fantasy_team"),
+            selected_position=row.get("selected_position"),
+            starter=row.get("starter", False),
+            points_avg=row.get("points_avg", 0.0),
+            points_stdev=row.get("points_stdev", 0.0),
+            points_rate=row.get("points_rate", 0.0),
+            war=row.get("WAR", 0.0),
+            bye_week=row.get("bye_week"),
+            injury_status=row.get("status"),
+            until=row.get("until"),
+            depth_chart_position=row.get("string", 1.0),
+            pct_rostered=row.get("pct_rostered", 0.0),
+            game_factor=row.get("game_factor", 1.0),
+            opp_factor=row.get("opp_factor", 0.0),
+            string_factor=row.get("string_factor", 0.0),
         )
 
     def to_dict(self) -> dict:
         """
         Convert Player to dictionary format.
-        
+
         Returns:
             Dictionary representation of the player
         """
         return {
-            'name': self.name,
-            'position': self.position,
-            'current_team': self.team,
-            'player_id': self.player_id_yahoo,
-            'player_id_sr': self.player_id_sr,
-            'fantasy_team': self.fantasy_team,
-            'selected_position': self.selected_position,
-            'starter': self.starter,
-            'points_avg': self.points_avg,
-            'points_stdev': self.points_stdev,
-            'points_rate': self.points_rate,
-            'WAR': self.war,
-            'bye_week': self.bye_week,
-            'status': self.injury_status,
-            'until': self.until,
-            'string': self.depth_chart_position,
-            'pct_rostered': self.pct_rostered,
-            'game_factor': self.game_factor,
-            'opp_factor': self.opp_factor,
-            'string_factor': self.string_factor,
+            "name": self.name,
+            "position": self.position,
+            "current_team": self.team,
+            "player_id": self.player_id_yahoo,
+            "player_id_sr": self.player_id_sr,
+            "fantasy_team": self.fantasy_team,
+            "selected_position": self.selected_position,
+            "starter": self.starter,
+            "points_avg": self.points_avg,
+            "points_stdev": self.points_stdev,
+            "points_rate": self.points_rate,
+            "WAR": self.war,
+            "bye_week": self.bye_week,
+            "status": self.injury_status,
+            "until": self.until,
+            "string": self.depth_chart_position,
+            "pct_rostered": self.pct_rostered,
+            "game_factor": self.game_factor,
+            "opp_factor": self.opp_factor,
+            "string_factor": self.string_factor,
         }
 
 
 def dataframe_to_players(df: pd.DataFrame) -> List[Player]:
     """
     Convert a DataFrame of player data to a list of Player objects.
-    
+
     Args:
         df: DataFrame with player data
-        
+
     Returns:
         List of Player instances
     """
@@ -153,10 +164,10 @@ def dataframe_to_players(df: pd.DataFrame) -> List[Player]:
 def players_to_dataframe(players: List[Player]) -> pd.DataFrame:
     """
     Convert a list of Player objects to a DataFrame.
-    
+
     Args:
         players: List of Player instances
-        
+
     Returns:
         DataFrame with player data
     """

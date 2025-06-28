@@ -19,15 +19,11 @@ from tests.fixtures import get_mock_yahoo_client_with_real_responses
 # Pytest configuration
 def pytest_configure(config):
     """Configure pytest with custom markers."""
-    config.addinivalue_line(
-        "markers", "real_api: tests that require real API fixtures"
-    )
+    config.addinivalue_line("markers", "real_api: tests that require real API fixtures")
     config.addinivalue_line(
         "markers", "integration: integration tests that test multiple components"
     )
-    config.addinivalue_line(
-        "markers", "slow: tests that take longer to run"
-    )
+    config.addinivalue_line("markers", "slow: tests that take longer to run")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -42,7 +38,9 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.integration)
 
         # Add slow marker to tests that might be slow
-        if any(keyword in item.name for keyword in ["simulation", "season_sim", "bestball"]):
+        if any(
+            keyword in item.name for keyword in ["simulation", "season_sim", "bestball"]
+        ):
             item.add_marker(pytest.mark.slow)
 
 
@@ -68,7 +66,7 @@ def sample_league_settings():
         "max_teams": 12,
         "trade_end_date": "",
         "waiver_type": "FR",
-        "uses_faab": True
+        "uses_faab": True,
     }
 
 
@@ -117,17 +115,30 @@ def sample_scoring_config():
         "FG 20-29": 3.0,
         "FG 30-39": 3.0,
         "FG 40-49": 4.0,
-        "FG 50+": 5.0
+        "FG 50+": 5.0,
     }
 
 
 @pytest.fixture
 def sample_roster_spots():
     """Sample roster configuration for testing."""
-    return pd.DataFrame({
-        "position": ["QB", "RB", "WR", "TE", "W/T", "W/R/T", "K", "DEF", "BN", "IR"],
-        "count": [1, 2, 2, 1, 1, 1, 1, 1, 5, 1]
-    })
+    return pd.DataFrame(
+        {
+            "position": [
+                "QB",
+                "RB",
+                "WR",
+                "TE",
+                "W/T",
+                "W/R/T",
+                "K",
+                "DEF",
+                "BN",
+                "IR",
+            ],
+            "count": [1, 2, 2, 1, 1, 1, 1, 1, 5, 1],
+        }
+    )
 
 
 @pytest.fixture
@@ -152,61 +163,92 @@ def sample_fantasy_teams():
 @pytest.fixture
 def sample_players_data():
     """Sample player data for testing."""
-    return pd.DataFrame({
-        "name": ["Josh Allen", "Saquon Barkley", "Tyreek Hill", "Travis Kelce", "Justin Tucker", "Buffalo Defense"],
-        "position": ["QB", "RB", "WR", "TE", "K", "DEF"],
-        "current_team": ["BUF", "PHI", "MIA", "KC", "BAL", "BUF"],
-        "player_id": [100001, 100002, 100003, 100004, 100005, 100006],
-        "player_id_sr": ["AlleJo02", "BarkSa00", "HillTy00", "KelcTr01", "TuckJu01", "BUF"],
-        "fantasy_team": ["The Algorithm", "Team 1", "Team 2", "Team 3", "Team 4", "The Algorithm"],
-        "selected_position": ["QB", "RB", "WR", "TE", "K", "DEF"],
-        "starter": [True, True, True, True, True, True],
-        "points_avg": [22.5, 15.3, 14.8, 12.1, 8.5, 9.2],
-        "points_stdev": [6.2, 4.8, 5.1, 3.9, 2.1, 4.3],
-        "WAR": [3.2, 2.1, 1.8, 1.5, 0.8, 1.0],
-        "bye_week": [12, 7, 6, 10, 14, 12],
-        "status": [None, None, None, "Q", None, None],
-        "until": [None, None, None, None, None, None],
-        "string": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        "pct_rostered": [99.8, 98.5, 97.2, 95.1, 78.3, 65.4]
-    })
+    return pd.DataFrame(
+        {
+            "name": [
+                "Josh Allen",
+                "Saquon Barkley",
+                "Tyreek Hill",
+                "Travis Kelce",
+                "Justin Tucker",
+                "Buffalo Defense",
+            ],
+            "position": ["QB", "RB", "WR", "TE", "K", "DEF"],
+            "current_team": ["BUF", "PHI", "MIA", "KC", "BAL", "BUF"],
+            "player_id": [100001, 100002, 100003, 100004, 100005, 100006],
+            "player_id_sr": [
+                "AlleJo02",
+                "BarkSa00",
+                "HillTy00",
+                "KelcTr01",
+                "TuckJu01",
+                "BUF",
+            ],
+            "fantasy_team": [
+                "The Algorithm",
+                "Team 1",
+                "Team 2",
+                "Team 3",
+                "Team 4",
+                "The Algorithm",
+            ],
+            "selected_position": ["QB", "RB", "WR", "TE", "K", "DEF"],
+            "starter": [True, True, True, True, True, True],
+            "points_avg": [22.5, 15.3, 14.8, 12.1, 8.5, 9.2],
+            "points_stdev": [6.2, 4.8, 5.1, 3.9, 2.1, 4.3],
+            "WAR": [3.2, 2.1, 1.8, 1.5, 0.8, 1.0],
+            "bye_week": [12, 7, 6, 10, 14, 12],
+            "status": [None, None, None, "Q", None, None],
+            "until": [None, None, None, None, None, None],
+            "string": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "pct_rostered": [99.8, 98.5, 97.2, 95.1, 78.3, 65.4],
+        }
+    )
 
 
 @pytest.fixture
 def mock_sportsref():
     """Mock sportsref module to avoid external dependencies."""
-    with patch('src.fantasyfb.utils.sportsref_nfl') as mock_sr:
+    with patch("src.fantasyfb.utils.sportsref_nfl") as mock_sr:
         # Mock common sportsref functions
-        mock_sr.get_bulk_rosters.return_value = pd.DataFrame({
-            'player': ['Josh Allen', 'Saquon Barkley'],
-            'player_id': ['AlleJo02', 'BarkSa00'],
-            'team': ['BUF', 'PHI'],
-            'season': [2024, 2024]
-        })
+        mock_sr.get_bulk_rosters.return_value = pd.DataFrame(
+            {
+                "player": ["Josh Allen", "Saquon Barkley"],
+                "player_id": ["AlleJo02", "BarkSa00"],
+                "team": ["BUF", "PHI"],
+                "season": [2024, 2024],
+            }
+        )
 
-        mock_sr.get_draft.return_value = pd.DataFrame({
-            'player': ['Caleb Williams'],
-            'player_id': ['WillCa05'],
-            'team_abbrev': ['CHI'],
-            'draft_pick': [1]
-        })
+        mock_sr.get_draft.return_value = pd.DataFrame(
+            {
+                "player": ["Caleb Williams"],
+                "player_id": ["WillCa05"],
+                "team_abbrev": ["CHI"],
+                "draft_pick": [1],
+            }
+        )
 
-        mock_sr.get_all_depth_charts.return_value = pd.DataFrame({
-            'player': ['Josh Allen', 'Saquon Barkley'],
-            'pos': ['QB', 'RB'],
-            'team': ['BUF', 'PHI'],
-            'string': [1.0, 1.0]
-        })
+        mock_sr.get_all_depth_charts.return_value = pd.DataFrame(
+            {
+                "player": ["Josh Allen", "Saquon Barkley"],
+                "pos": ["QB", "RB"],
+                "team": ["BUF", "PHI"],
+                "string": [1.0, 1.0],
+            }
+        )
 
         # Mock Schedule class
         mock_schedule = Mock()
-        mock_schedule.schedule = pd.DataFrame({
-            'season': [2024, 2024],
-            'week': [1, 2],
-            'team': ['BUF', 'PHI'],
-            'elo_diff': [0.1, -0.05],
-            'opp_elo': [1520, 1480]
-        })
+        mock_schedule.schedule = pd.DataFrame(
+            {
+                "season": [2024, 2024],
+                "week": [1, 2],
+                "team": ["BUF", "PHI"],
+                "elo_diff": [0.1, -0.05],
+                "opp_elo": [1520, 1480],
+            }
+        )
         mock_sr.Schedule.return_value = mock_schedule
 
         yield mock_sr
@@ -215,30 +257,34 @@ def mock_sportsref():
 @pytest.fixture
 def mock_external_data():
     """Mock external data sources (GitHub CSVs, etc.)."""
-    mock_team_abbrevs = pd.DataFrame({
-        'real_abbrev': ['BUF', 'PHI', 'MIA', 'KC', 'BAL'],
-        'yahoo': ['Buf', 'Phi', 'Mia', 'KC', 'Bal'],
-        'fivethirtyeight': ['BUF', 'PHI', 'MIA', 'KC', 'BAL']
-    })
+    mock_team_abbrevs = pd.DataFrame(
+        {
+            "real_abbrev": ["BUF", "PHI", "MIA", "KC", "BAL"],
+            "yahoo": ["Buf", "Phi", "Mia", "KC", "Bal"],
+            "fivethirtyeight": ["BUF", "PHI", "MIA", "KC", "BAL"],
+        }
+    )
 
-    mock_name_corrections = pd.DataFrame({
-        'name': ['Josh Allen'],
-        'new_name': ['Joshua Allen']
-    })
+    mock_name_corrections = pd.DataFrame(
+        {"name": ["Josh Allen"], "new_name": ["Joshua Allen"]}
+    )
 
-    with patch('pandas.read_csv') as mock_read_csv:
+    with patch("pandas.read_csv") as mock_read_csv:
+
         def side_effect(url, **kwargs):
-            if 'team_abbrevs' in url:
+            if "team_abbrevs" in url:
                 return mock_team_abbrevs
-            elif 'name_corrections' in url:
+            elif "name_corrections" in url:
                 return mock_name_corrections
-            elif 'injured_list' in url:
-                return pd.DataFrame({
-                    'player_id_sr': ['KelcTr01'],
-                    'name': ['Travis Kelce'],
-                    'position': ['TE'],
-                    'until': [10]
-                })
+            elif "injured_list" in url:
+                return pd.DataFrame(
+                    {
+                        "player_id_sr": ["KelcTr01"],
+                        "name": ["Travis Kelce"],
+                        "position": ["TE"],
+                        "until": [10],
+                    }
+                )
             else:
                 return pd.DataFrame()
 
@@ -250,15 +296,14 @@ def mock_external_data():
 def fixtures_available():
     """Check if real fixtures are available."""
     fixtures_dir = Path(__file__).parent / "fixtures"
-    required_fixtures = [
-        "user_leagues_real.json",
-        "league_settings_real.json"
-    ]
+    required_fixtures = ["user_leagues_real.json", "league_settings_real.json"]
 
     available = all((fixtures_dir / fixture).exists() for fixture in required_fixtures)
 
     if not available:
-        pytest.skip("Real fixtures not available. Run 'python capture_fixtures.py' first.")
+        pytest.skip(
+            "Real fixtures not available. Run 'python capture_fixtures.py' first."
+        )
 
     return True
 
@@ -276,24 +321,43 @@ def pytest_runtest_setup(item):
 @pytest.fixture
 def assert_dataframe_structure():
     """Helper function to assert DataFrame structure."""
+
     def _assert_structure(df, expected_columns, min_rows=0):
         assert isinstance(df, pd.DataFrame)
         assert len(df) >= min_rows
         for col in expected_columns:
             assert col in df.columns
         return True
+
     return _assert_structure
 
 
 @pytest.fixture
 def assert_scoring_complete():
     """Helper function to assert scoring configuration is complete."""
+
     def _assert_complete(scoring_dict):
         required_categories = [
-            "Pass Yds", "Pass TD", "Int Thrown", "Rush Yds", "Rush TD",
-            "Rec Yds", "Rec TD", "Rec", "Fum Lost", "2-PT", "PAT Made",
-            "Sack", "Int", "Fum Rec", "TD", "Safe", "Blk Kick",
-            "Pts Allow 0", "Pts Allow 1-6", "Pts Allow 35+"
+            "Pass Yds",
+            "Pass TD",
+            "Int Thrown",
+            "Rush Yds",
+            "Rush TD",
+            "Rec Yds",
+            "Rec TD",
+            "Rec",
+            "Fum Lost",
+            "2-PT",
+            "PAT Made",
+            "Sack",
+            "Int",
+            "Fum Rec",
+            "TD",
+            "Safe",
+            "Blk Kick",
+            "Pts Allow 0",
+            "Pts Allow 1-6",
+            "Pts Allow 35+",
         ]
 
         for category in required_categories:
@@ -301,6 +365,7 @@ def assert_scoring_complete():
             assert isinstance(scoring_dict[category], (int, float))
 
         return True
+
     return _assert_complete
 
 

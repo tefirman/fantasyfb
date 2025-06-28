@@ -28,7 +28,9 @@ class TestScoringProcessing:
 
     def test_stat_categories_parsing(self, raw_settings_data):
         """Test that stat categories are correctly identified."""
-        settings_content = raw_settings_data["fantasy_content"]["league"][1]["settings"][0]
+        settings_content = raw_settings_data["fantasy_content"]["league"][1][
+            "settings"
+        ][0]
         stat_categories = settings_content["stat_categories"]["stats"]
 
         # Should have multiple stat categories
@@ -52,14 +54,19 @@ class TestScoringProcessing:
 
     def test_stat_modifiers_parsing(self, raw_settings_data):
         """Test that stat modifiers (point values) are correctly parsed."""
-        settings_content = raw_settings_data["fantasy_content"]["league"][1]["settings"][0]
+        settings_content = raw_settings_data["fantasy_content"]["league"][1][
+            "settings"
+        ][0]
         stat_modifiers = settings_content["stat_modifiers"]["stats"]
 
         # Should have point values for multiple stats
         assert len(stat_modifiers) > 15
 
         # Check specific values from your real data
-        modifier_dict = {mod["stat"]["stat_id"]: float(mod["stat"]["value"]) for mod in stat_modifiers}
+        modifier_dict = {
+            mod["stat"]["stat_id"]: float(mod["stat"]["value"])
+            for mod in stat_modifiers
+        }
 
         # Passing yards (stat_id 4) should be 0.04 points per yard
         assert modifier_dict[4] == 0.04
@@ -75,7 +82,9 @@ class TestScoringProcessing:
 
     def test_processed_scoring_dict(self, data_manager):
         """Test the final processed scoring dictionary."""
-        settings, scoring, roster_spots = data_manager.load_league_settings("449.l.49284")
+        settings, scoring, roster_spots = data_manager.load_league_settings(
+            "449.l.49284"
+        )
 
         # Test key scoring values match your real league
         assert scoring["Pass Yds"] == 0.04
@@ -111,13 +120,24 @@ class TestScoringProcessing:
 
     def test_default_scoring_additions(self, data_manager):
         """Test that missing scoring categories get sensible defaults."""
-        settings, scoring, roster_spots = data_manager.load_league_settings("449.l.49284")
+        settings, scoring, roster_spots = data_manager.load_league_settings(
+            "449.l.49284"
+        )
 
         # These categories might not be in Yahoo API but should have defaults
         default_categories = [
-            "Pass Comp", "Pass 1D", "Rush Att", "Rush 1D", "Rec 1D",
-            "TE Rec Bonus", "TE 1D Bonus", "Pass 300+", "Rush 100+", "Rec 100+",
-            "Ret Yds", "FG Yds"
+            "Pass Comp",
+            "Pass 1D",
+            "Rush Att",
+            "Rush 1D",
+            "Rec 1D",
+            "TE Rec Bonus",
+            "TE 1D Bonus",
+            "Pass 300+",
+            "Rush 100+",
+            "Rec 100+",
+            "Ret Yds",
+            "FG Yds",
         ]
 
         for category in default_categories:
@@ -126,7 +146,9 @@ class TestScoringProcessing:
 
     def test_interception_name_handling(self, data_manager):
         """Test that interception scoring is correctly differentiated."""
-        settings, scoring, roster_spots = data_manager.load_league_settings("449.l.49284")
+        settings, scoring, roster_spots = data_manager.load_league_settings(
+            "449.l.49284"
+        )
 
         # Should have both offensive and defensive interceptions
         assert "Int Thrown" in scoring  # Offensive (negative points)
@@ -137,7 +159,9 @@ class TestScoringProcessing:
 
     def test_field_goal_scoring_logic(self, raw_settings_data):
         """Test field goal distance scoring from real data."""
-        settings_content = raw_settings_data["fantasy_content"]["league"][1]["settings"][0]
+        settings_content = raw_settings_data["fantasy_content"]["league"][1][
+            "settings"
+        ][0]
         stat_modifiers = settings_content["stat_modifiers"]["stats"]
 
         # Your league has FG Yds scoring (stat_id 84) at 0.1 per yard
@@ -151,7 +175,9 @@ class TestScoringProcessing:
 
     def test_return_yardage_scoring(self, raw_settings_data):
         """Test return yardage scoring configuration."""
-        settings_content = raw_settings_data["fantasy_content"]["league"][1]["settings"][0]
+        settings_content = raw_settings_data["fantasy_content"]["league"][1][
+            "settings"
+        ][0]
         stat_modifiers = settings_content["stat_modifiers"]["stats"]
 
         # Return yards (stat_id 14) should be 0.05 per yard in your league
