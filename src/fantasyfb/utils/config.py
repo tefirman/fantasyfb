@@ -4,7 +4,8 @@ Configuration classes for the fantasy football package.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
+
 import pandas as pd
 
 
@@ -51,21 +52,21 @@ class ScoringConfig:
     pass_1d: float = 0.0
     pass_300_bonus: float = 0.0
     int_thrown: float = -1.0
-    
+
     # Rushing
     rush_yds: float = 0.1
     rush_att: float = 0.0
     rush_td: float = 6.0
     rush_1d: float = 0.0
     rush_100_bonus: float = 0.0
-    
+
     # Receiving
     rec_yds: float = 0.1
     rec: float = 1.0  # PPR
     rec_td: float = 6.0
     rec_1d: float = 0.0
     rec_100_bonus: float = 0.0
-    
+
     # Special cases
     te_rec_bonus: float = 0.0
     te_1d_bonus: float = 0.0
@@ -73,7 +74,7 @@ class ScoringConfig:
     fum_lost: float = -2.0
     ret_yds: float = 0.0
     ret_td: float = 6.0
-    
+
     # Kicking
     fg_0_19: float = 3.0
     fg_20_29: float = 3.0
@@ -81,7 +82,7 @@ class ScoringConfig:
     fg_40_49: float = 4.0
     fg_50_plus: float = 5.0
     pat_made: float = 1.0
-    
+
     # Defense
     sack: float = 1.0
     def_int: float = 2.0
@@ -96,7 +97,7 @@ class ScoringConfig:
     pts_allow_21_27: float = 0.0
     pts_allow_28_34: float = -1.0
     pts_allow_35_plus: float = -4.0
-    
+
     def to_dict(self) -> Dict[str, float]:
         """Convert to dictionary format for compatibility."""
         return {
@@ -156,12 +157,12 @@ class RosterConfig:
     def_: int = 1
     bench: int = 6
     ir: int = 1
-    
+
     def to_dataframe(self) -> pd.DataFrame:
         """Convert to DataFrame format for compatibility."""
         return pd.DataFrame({
             'position': ['QB', 'RB', 'WR', 'TE', 'W/R/T', 'K', 'DEF', 'BN', 'IR'],
-            'count': [self.qb, self.rb, self.wr, self.te, self.flex_wr_rb_te, 
+            'count': [self.qb, self.rb, self.wr, self.te, self.flex_wr_rb_te,
                      self.k, self.def_, self.bench, self.ir]
         })
 
@@ -174,27 +175,27 @@ class LeagueConfig:
     player_config: PlayerConfig = field(default_factory=PlayerConfig)
     scoring_config: ScoringConfig = field(default_factory=ScoringConfig)
     roster_config: RosterConfig = field(default_factory=RosterConfig)
-    
+
     # League settings
     num_teams: int = 12
     playoff_start_week: int = 14
     num_playoff_teams: int = 6
     playoff_weeks: int = 3
-    
+
     # Default payouts (60/30/10 split)
     default_payouts: List[float] = field(default_factory=lambda: [600.0, 300.0, 100.0])
-    
+
     # League type
     league_type: str = "redraft"  # redraft, dynasty, bestball
     platform: str = "yahoo"  # yahoo, espn, sleeper
-    
+
     @classmethod
     def for_bestball(cls, platform: str = "draftkings") -> 'LeagueConfig':
         """Create configuration for best ball leagues."""
         config = cls()
         config.league_type = "bestball"
         config.platform = platform
-        
+
         if platform.lower() in ["dk", "draftkings"]:
             config.playoff_start_week = 14
             config.num_playoff_teams = 2
@@ -219,9 +220,9 @@ class LeagueConfig:
             config.roster_config = RosterConfig(
                 qb=1, rb=2, wr=3, te=1, flex_wr_rb_te=1, k=0, def_=0, bench=10
             )
-        
+
         return config
-    
+
     @classmethod
     def for_sfb(cls) -> 'LeagueConfig':
         """Create configuration for Scott Fish Bowl."""
@@ -230,7 +231,7 @@ class LeagueConfig:
         config.num_teams = 12
         config.playoff_start_week = 14
         config.num_playoff_teams = 6
-        
+
         # SFB14 scoring
         config.scoring_config = ScoringConfig(
             pass_yds=0.02, pass_td=6.0,
@@ -242,10 +243,10 @@ class LeagueConfig:
             fg_0_19=2.0, fg_20_29=2.5, fg_30_39=3.5, fg_40_49=4.5, fg_50_plus=5.5,
             pat_made=3.3
         )
-        
+
         # SFB14 roster
         config.roster_config = RosterConfig(
             qb=1, rb=1, wr=1, te=1, flex_wr_rb_te=5, k=1, def_=0, bench=11
         )
-        
+
         return config

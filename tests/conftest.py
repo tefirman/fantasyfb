@@ -6,13 +6,14 @@ This file contains pytest configuration and fixtures that are shared
 across multiple test files.
 """
 
-import pytest
-import pandas as pd
-from unittest.mock import Mock, patch
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from tests.fixtures import get_mock_yahoo_client_with_real_responses
+import pandas as pd
+import pytest
+
 from src.fantasyfb.data.data_manager import DataManager
+from tests.fixtures import get_mock_yahoo_client_with_real_responses
 
 
 # Pytest configuration
@@ -35,11 +36,11 @@ def pytest_collection_modifyitems(config, items):
         # Add real_api marker to tests using real fixtures
         if "real_fixture" in item.name or "test_real" in item.name:
             item.add_marker(pytest.mark.real_api)
-        
+
         # Add integration marker to integration tests
         if "integration" in str(item.fspath) or "test_integration" in item.name:
             item.add_marker(pytest.mark.integration)
-        
+
         # Add slow marker to tests that might be slow
         if any(keyword in item.name for keyword in ["simulation", "season_sim", "bestball"]):
             item.add_marker(pytest.mark.slow)
@@ -177,37 +178,37 @@ def mock_sportsref():
     with patch('src.fantasyfb.utils.sportsref_nfl') as mock_sr:
         # Mock common sportsref functions
         mock_sr.get_bulk_rosters.return_value = pd.DataFrame({
-            'player': ['Josh Allen', 'Saquon Barkley'], 
+            'player': ['Josh Allen', 'Saquon Barkley'],
             'player_id': ['AlleJo02', 'BarkSa00'],
             'team': ['BUF', 'PHI'],
             'season': [2024, 2024]
         })
-        
+
         mock_sr.get_draft.return_value = pd.DataFrame({
             'player': ['Caleb Williams'],
-            'player_id': ['WillCa05'], 
+            'player_id': ['WillCa05'],
             'team_abbrev': ['CHI'],
             'draft_pick': [1]
         })
-        
+
         mock_sr.get_all_depth_charts.return_value = pd.DataFrame({
             'player': ['Josh Allen', 'Saquon Barkley'],
             'pos': ['QB', 'RB'],
-            'team': ['BUF', 'PHI'], 
+            'team': ['BUF', 'PHI'],
             'string': [1.0, 1.0]
         })
-        
+
         # Mock Schedule class
         mock_schedule = Mock()
         mock_schedule.schedule = pd.DataFrame({
             'season': [2024, 2024],
-            'week': [1, 2], 
+            'week': [1, 2],
             'team': ['BUF', 'PHI'],
             'elo_diff': [0.1, -0.05],
             'opp_elo': [1520, 1480]
         })
         mock_sr.Schedule.return_value = mock_schedule
-        
+
         yield mock_sr
 
 
@@ -219,12 +220,12 @@ def mock_external_data():
         'yahoo': ['Buf', 'Phi', 'Mia', 'KC', 'Bal'],
         'fivethirtyeight': ['BUF', 'PHI', 'MIA', 'KC', 'BAL']
     })
-    
+
     mock_name_corrections = pd.DataFrame({
         'name': ['Josh Allen'],
         'new_name': ['Joshua Allen']
     })
-    
+
     with patch('pandas.read_csv') as mock_read_csv:
         def side_effect(url, **kwargs):
             if 'team_abbrevs' in url:
@@ -234,13 +235,13 @@ def mock_external_data():
             elif 'injured_list' in url:
                 return pd.DataFrame({
                     'player_id_sr': ['KelcTr01'],
-                    'name': ['Travis Kelce'], 
+                    'name': ['Travis Kelce'],
                     'position': ['TE'],
                     'until': [10]
                 })
             else:
                 return pd.DataFrame()
-        
+
         mock_read_csv.side_effect = side_effect
         yield mock_read_csv
 
@@ -253,12 +254,12 @@ def fixtures_available():
         "user_leagues_real.json",
         "league_settings_real.json"
     ]
-    
+
     available = all((fixtures_dir / fixture).exists() for fixture in required_fixtures)
-    
+
     if not available:
         pytest.skip("Real fixtures not available. Run 'python capture_fixtures.py' first.")
-    
+
     return True
 
 
@@ -294,11 +295,11 @@ def assert_scoring_complete():
             "Sack", "Int", "Fum Rec", "TD", "Safe", "Blk Kick",
             "Pts Allow 0", "Pts Allow 1-6", "Pts Allow 35+"
         ]
-        
+
         for category in required_categories:
             assert category in scoring_dict
             assert isinstance(scoring_dict[category], (int, float))
-        
+
         return True
     return _assert_complete
 
@@ -310,7 +311,7 @@ def setup_test_environment(monkeypatch):
     # Ensure we don't accidentally make real API calls
     monkeypatch.setenv("CONSUMER_KEY", "test_key")
     monkeypatch.setenv("CONSUMER_SECRET", "test_secret")
-    
+
     # Set test data paths
     test_dir = Path(__file__).parent
     monkeypatch.setenv("TEST_DATA_DIR", str(test_dir / "fixtures"))
@@ -321,12 +322,12 @@ def setup_test_environment(monkeypatch):
 def cleanup_test_files():
     """Cleanup test files after tests."""
     created_files = []
-    
+
     def _add_file(filepath):
         created_files.append(Path(filepath))
-    
+
     yield _add_file
-    
+
     # Cleanup after test
     for filepath in created_files:
         if filepath.exists():
@@ -338,17 +339,17 @@ def cleanup_test_files():
 def performance_timer():
     """Simple performance timer for tests."""
     import time
-    
+
     times = {}
-    
+
     def start_timer(name):
         times[name] = time.time()
-    
+
     def end_timer(name):
         if name in times:
             return time.time() - times[name]
         return None
-    
+
     timer = Mock()
     timer.start = start_timer
     timer.end = end_timer

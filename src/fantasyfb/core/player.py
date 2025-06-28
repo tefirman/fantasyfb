@@ -4,7 +4,8 @@ Player model - represents individual NFL players with their stats and projection
 """
 
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
+
 import pandas as pd
 
 
@@ -16,61 +17,61 @@ class Player:
     This is a simple data class that can be used for type safety
     and cleaner code when working with individual players.
     """
-    
+
     # Basic info
     name: str
     position: str
     team: str
     player_id_yahoo: Optional[int] = None
     player_id_sr: Optional[str] = None
-    
+
     # Fantasy info
     fantasy_team: Optional[str] = None
     selected_position: Optional[str] = None
     starter: bool = False
-    
+
     # Stats and projections
     points_avg: float = 0.0
     points_stdev: float = 0.0
     points_rate: float = 0.0
     war: float = 0.0
-    
+
     # Situational factors
     bye_week: Optional[int] = None
     injury_status: Optional[str] = None
     until: Optional[int] = None  # Week injured until
     depth_chart_position: float = 1.0
     pct_rostered: float = 0.0
-    
+
     # Game factors
     game_factor: float = 1.0
     opp_factor: float = 0.0
     string_factor: float = 0.0
-    
+
     @property
     def is_available(self) -> bool:
         """Check if player is available (not on any fantasy team)."""
         return self.fantasy_team is None
-    
+
     @property
     def is_injured(self) -> bool:
         """Check if player is currently injured."""
         return self.injury_status in ["O", "D", "SUSP", "IR", "PUP-R", "PUP-P", "NFI-R", "NA"]
-    
+
     @property
     def projected_points(self) -> float:
         """Get projected points for current week."""
         return self.points_avg * self.game_factor
-    
+
     def __str__(self) -> str:
         """String representation of the player."""
         return f"{self.name} ({self.position}, {self.team})"
-    
+
     def __repr__(self) -> str:
         """Detailed representation of the player."""
         return (f"Player(name='{self.name}', position='{self.position}', "
                 f"team='{self.team}', war={self.war:.2f})")
-    
+
     @classmethod
     def from_dataframe_row(cls, row: pd.Series) -> 'Player':
         """
@@ -104,7 +105,7 @@ class Player:
             opp_factor=row.get('opp_factor', 0.0),
             string_factor=row.get('string_factor', 0.0),
         )
-    
+
     def to_dict(self) -> dict:
         """
         Convert Player to dictionary format.

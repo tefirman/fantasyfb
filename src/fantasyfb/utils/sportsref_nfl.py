@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*-coding:utf-8 -*-
 """
 @File    :   sportsref_nfl.py  
 @Time    :   2023/04/12 21:49:12  
@@ -9,19 +8,19 @@
 @Desc    :   Collection of functions to easily pull down statistics from pro-football-reference.com
 """
 
-import requests
-from bs4 import BeautifulSoup
+import datetime
+import gzip
+import os
+import shutil
+import sys
 import time
+from io import StringIO
+
 import numpy as np
 import pandas as pd
-import os
-import datetime
+import requests
+from bs4 import BeautifulSoup
 from geopy.distance import geodesic
-from io import StringIO
-import shutil
-import gzip
-import sys
-from concurrent.futures import ThreadPoolExecutor
 
 base_url = "https://www.pro-football-reference.com/"
 """Base URL for Pro Football Reference used in all page requests."""
@@ -33,31 +32,31 @@ def get_page(endpoint: str, cache_dir: str = ".cache"):
     """
     # Create cache directory if it doesn't exist
     os.makedirs(cache_dir, exist_ok=True)
-    
+
     # Create cache filename from endpoint, handling .htm extension
     base_name = endpoint.replace('/', '_').replace('.htm', '')
     cache_file = os.path.join(cache_dir, f"{base_name}.html")
-    
+
     # Check if we have a cached version less than 24 hours old
     if os.path.exists(cache_file):
         file_age = time.time() - os.path.getmtime(cache_file)
         if file_age < 24 * 3600:  # 24 hours
-            with open(cache_file, 'r') as f:
+            with open(cache_file) as f:
                 return BeautifulSoup(f.read(), "html.parser")
-    
+
     # If no cache or cache expired, make the request
     time.sleep(4)  # Keep the rate limiting
     try:
         response = requests.get(base_url + endpoint).text
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         print('GETTING CONNECTION ERROR AGAIN!!!')
         print(endpoint)
         sys.exit(1)
-    
+
     # Save to cache
     with open(cache_file, 'w') as f:
         f.write(response)
-    
+
     uncommented = response.replace("<!--", "").replace("-->", "")
     return BeautifulSoup(uncommented, "html.parser")
 
@@ -136,8 +135,8 @@ def get_depth_chart(team_abbrev: str):
     Returns:
         pd.DataFrame: dataframe containing the depth chart ranking for each player on the team of interest.
     """
-    os.system("wget https://www.espn.com/nfl/team/depth/_/name/{} -q -O {}.html".format(team_abbrev,team_abbrev))
-    tempData = open(team_abbrev + ".html","r")
+    os.system(f"wget https://www.espn.com/nfl/team/depth/_/name/{team_abbrev} -q -O {team_abbrev}.html")
+    tempData = open(team_abbrev + ".html")
     response = tempData.read()
     tempData.close()
     os.remove(team_abbrev + ".html")
@@ -209,16 +208,16 @@ def get_team_stadium(abbrev: str, season: int, cache_dir: str = ".cache/stadiums
     """
     os.makedirs(cache_dir, exist_ok=True)
     cache_file = os.path.join(cache_dir, f"stadium_{abbrev}_{season}.txt")
-    
+
     # Check cache
     if os.path.exists(cache_file):
         file_age = time.time() - os.path.getmtime(cache_file)
         if file_age < 24 * 3600:  # 24 hours
-            with open(cache_file, 'r') as f:
+            with open(cache_file) as f:
                 return f.read().strip()
-    
+
     # If no cache or cache expired, fetch from web
-    raw_text = get_page("teams/{}/{}.htm".format(abbrev.lower(), int(season)))
+    raw_text = get_page(f"teams/{abbrev.lower()}/{int(season)}.htm")
     team_info = raw_text.find(id="meta").find_all("p")
     stadium_info = [val for val in team_info if val.text.startswith("Stadium:")]
     if len(stadium_info) == 0:
@@ -234,16 +233,16 @@ def get_team_stadium(abbrev: str, season: int, cache_dir: str = ".cache/stadiums
         if stadium_id.shape[0] > 0:
             stadium_id = stadium_id.values[0]
         else:
-            print("Can't find home stadium for {} {}...".format(season,abbrev))
+            print(f"Can't find home stadium for {season} {abbrev}...")
             stadium_id = None
     else:
         stadium_info = stadium_info[0]
         stadium_id = stadium_info.find("a").attrs["href"].split("/")[-1].split(".")[0]
-    
+
     # Save to cache
     with open(cache_file, 'w') as f:
         f.write(str(stadium_id))
-    
+
     return stadium_id
 
 
@@ -257,7 +256,7 @@ def get_game_stadium(game_id: str):
     Returns:
         str: stadium identifier according to Pro Football Reference.
     """
-    raw_text = get_page("boxscores/{}.htm".format(game_id))
+    raw_text = get_page(f"boxscores/{game_id}.htm")
     game_info = raw_text.find("div", attrs={"class": "scorebox_meta"})
     stadium_id = game_info.find("a").attrs["href"].split("/")[-1].split(".")[0]
     return stadium_id
@@ -273,7 +272,7 @@ def get_address(stadium_id: str):
     Returns:
         str: address of the specified stadium according to Pro Football Reference.
     """
-    raw_text = get_page("stadiums/{}.htm".format(stadium_id))
+    raw_text = get_page(f"stadiums/{stadium_id}.htm")
     meta_info = raw_text.find(id="meta")
     if meta_info is None:
         print(f"Can't find stadium address for stadium ID: {stadium_id}")
@@ -398,7 +397,7 @@ class Schedule:
         """
         season_schedules = []
         for season in range(int(start), int(finish) + 1):
-            raw_text = get_page("years/{}/games.htm".format(season))
+            raw_text = get_page(f"years/{season}/games.htm")
             season_sched = parse_table(raw_text, "games")
             season_sched.week_num = season_sched.week_num.astype(str).str.split('.').str[0]
             season_sched = season_sched.loc[~season_sched.week_num.astype(str).str.startswith('Pre')].reset_index(drop=True)
@@ -410,10 +409,10 @@ class Schedule:
                 'visitor_team_abbrev':'winner_abbrev','home_team':'loser','home_team_abbrev':'loser_abbrev'})
                 season_sched[['yards_win','to_win','yards_lose','to_lose']] = None
             season_schedules.append(season_sched)
-        
+
         # Filter out empty DataFrames before concatenation
         non_empty_schedules = [df for df in season_schedules if not df.empty]
-        
+
         if non_empty_schedules:
             self.schedule = pd.concat(non_empty_schedules, ignore_index=True)
         else:
@@ -430,7 +429,7 @@ class Schedule:
             self.schedule.game_date - self.schedule.season.map(min_dates)
         ).dt.days
         self.schedule["week"] = self.schedule.days_into_season // 7 + 1
-        
+
         # Handle special cases
         mask = (self.schedule.week_num != self.schedule.week.astype(str)) & self.schedule.week_num.str.isnumeric()
         self.schedule.loc[mask, "week"] = self.schedule.loc[mask, "week_num"].astype(int)
@@ -580,7 +579,7 @@ class Schedule:
             ] = True
         self.schedule.rested1 = self.schedule.rested1.astype(bool).fillna(False)
         self.schedule.rested2 = self.schedule.rested2.astype(bool).fillna(False)
-    
+
     def add_elo_columns(self, qbelo: bool = False):
         """
         Adds the necessary columns for elo projections throughout the schedule.
@@ -595,12 +594,12 @@ class Schedule:
             qb_elos = get_qb_elos(self.schedule.season.min(),self.schedule.season.max())
             for team_num in ['1','2']:
                 self.schedule = pd.merge(left=self.schedule,right=qb_elos\
-                .rename(columns={'game_id':'boxscore_abbrev','team':'team{}_abbrev'.format(team_num),\
-                'player':'qb' + team_num,'team_qbvalue_avg':'team{}_qbvalue_avg'.format(team_num),\
-                'opp_qbvalue_avg':'opp{}_qbvalue_avg'.format(team_num),\
-                'qb_value_pre':'qb{}_value_pre'.format(team_num),'qb_adj':'qb{}_adj'.format(team_num),\
-                'qb_value_post':'qb{}_value_post'.format(team_num),'VALUE':'VALUE{}'.format(team_num)}),\
-                how='inner',on=['boxscore_abbrev','team{}_abbrev'.format(team_num)])
+                .rename(columns={'game_id':'boxscore_abbrev','team':f'team{team_num}_abbrev',\
+                'player':'qb' + team_num,'team_qbvalue_avg':f'team{team_num}_qbvalue_avg',\
+                'opp_qbvalue_avg':f'opp{team_num}_qbvalue_avg',\
+                'qb_value_pre':f'qb{team_num}_value_pre','qb_adj':f'qb{team_num}_adj',\
+                'qb_value_post':f'qb{team_num}_value_post','VALUE':f'VALUE{team_num}'}),\
+                how='inner',on=['boxscore_abbrev',f'team{team_num}_abbrev'])
             # Need to pull depth charts to extrapolate future qbelo values... Ignoring this for now...
 
     def next_init_elo(self, init_elo: float = 1300.0, regress_pct: float = 0.333):
@@ -614,32 +613,32 @@ class Schedule:
         """
         ind = self.schedule.loc[self.schedule.elo1_pre.isnull()].index[0]
         for team_num in ['1','2']:
-            team = self.schedule.loc[ind,'team{}_abbrev'.format(team_num)]
+            team = self.schedule.loc[ind,f'team{team_num}_abbrev']
             prev = self.schedule.iloc[:ind].copy()
             prev = prev.loc[(prev.team1_abbrev == team) | (prev.team2_abbrev == team)]
             if prev.shape[0] > 0:
                 # Team already exists
                 prev = prev.iloc[-1]
                 prev_num = 1 if prev['team1_abbrev'] == team else 2
-                if not pd.isnull(prev['elo{}_post'.format(prev_num)]):
-                    self.schedule.loc[ind,'elo{}_pre'.format(team_num)] = prev['elo{}_post'.format(prev_num)]
+                if not pd.isnull(prev[f'elo{prev_num}_post']):
+                    self.schedule.loc[ind,f'elo{team_num}_pre'] = prev[f'elo{prev_num}_post']
                     if prev['season'] == self.schedule.loc[ind,'season'] - 1:
                         # Start of a new season
-                        self.schedule.loc[ind,'elo{}_pre'.format(team_num)] += (1505 - prev['elo{}_post'.format(prev_num)])*regress_pct
+                        self.schedule.loc[ind,f'elo{team_num}_pre'] += (1505 - prev[f'elo{prev_num}_post'])*regress_pct
                     elif prev['season'] < self.schedule.loc[ind,'season'] - 1:
                         # Resurrected teams (e.g. 1999 Cleveland Browns)
-                        self.schedule.loc[ind,'elo{}_pre'.format(team_num)] = init_elo
+                        self.schedule.loc[ind,f'elo{team_num}_pre'] = init_elo
                 else:
                     # Game hasn't been played yet...
-                    self.schedule.loc[ind,'elo{}_pre'.format(team_num)] = prev['elo{}_pre'.format(prev_num)]
+                    self.schedule.loc[ind,f'elo{team_num}_pre'] = prev[f'elo{prev_num}_pre']
             else:
                 # New Team
-                self.schedule.loc[ind,'elo{}_pre'.format(team_num)] = init_elo
-            if 'qb{}_adj'.format(team_num) in self.schedule.columns:
-                self.schedule.loc[ind,'qbelo{}_pre'.format(team_num)] = \
-                self.schedule.loc[ind,'elo{}_pre'.format(team_num)] + \
-                self.schedule.loc[ind,'qb{}_adj'.format(team_num)]
-    
+                self.schedule.loc[ind,f'elo{team_num}_pre'] = init_elo
+            if f'qb{team_num}_adj' in self.schedule.columns:
+                self.schedule.loc[ind,f'qbelo{team_num}_pre'] = \
+                self.schedule.loc[ind,f'elo{team_num}_pre'] + \
+                self.schedule.loc[ind,f'qb{team_num}_adj']
+
     def next_elo_prob(self, homefield: float = 48.0, travel: float = 0.004, rested: float = 25.0, playoffs: float = 1.2, elo2points: float = 0.04):
         """
         Identifies the next matchup that does not have complete elo projections 
@@ -735,7 +734,7 @@ class Boxscore:
         """
         Pulls down the raw html from Pro Football Reference containing the statistics for the game in question.
         """
-        self.raw_text = get_page("boxscores/{}.htm".format(self.game_id))
+        self.raw_text = get_page(f"boxscores/{self.game_id}.htm")
 
     def get_details(self):
         """
@@ -861,8 +860,8 @@ class Boxscore:
             how="inner",
             on=["player", "player_id", "team"],
         )
-    
-    def add_qb_value(self, pass_att: float = -2.2, pass_cmp: float = 3.7, pass_yds: float = 0.2, 
+
+    def add_qb_value(self, pass_att: float = -2.2, pass_cmp: float = 3.7, pass_yds: float = 0.2,
     pass_td: float = 11.3, pass_int: float = -14.1, pass_sacked: float = -8.0, rush_att: float = -1.1,
     rush_yds: float = 0.6, rush_td: float = 15.9):
         """
@@ -963,7 +962,7 @@ def get_draft(season: int):
     Returns:
         pd.DataFrame: dataframe containing draft results for the season of interest.
     """
-    raw_text = get_page("years/{}/draft.htm".format(season))
+    raw_text = get_page(f"years/{season}/draft.htm")
     draft_order = parse_table(raw_text, "drafts")
     return draft_order
 
@@ -1014,7 +1013,7 @@ def get_roster(team: str, season: int):
     Returns:
         pd.DataFrame: dataframe containing identifying information for each player on the roster of interest.
     """
-    raw_text = get_page("teams/{}/{}_roster.htm".format(team.lower(),season))
+    raw_text = get_page(f"teams/{team.lower()}/{season}_roster.htm")
     roster = parse_table(raw_text, "roster")
     return roster
 
@@ -1051,7 +1050,7 @@ def get_bulk_rosters(start_season: int, finish_season: int, path: str = None):
     return teams
 
 
-def get_qb_elos(start: int, finish: int, regress_pct: float = 0.25, 
+def get_qb_elos(start: int, finish: int, regress_pct: float = 0.25,
 qb_games: int = 10, team_games: int = 20, elo_adj: float = 3.3):
     """
     Pulls QB-related statistics and calculates QB elo ratings as they progress over time.
