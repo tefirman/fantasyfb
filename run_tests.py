@@ -164,20 +164,29 @@ def lint_code():
     """Run code linting."""
     print("🧹 Running code linting...")
     
-    # Check if flake8 is available
+    # Check if ruff is available as a command
     try:
-        import flake8
-        cmd = [sys.executable, "-m", "flake8", "src/", "tests/", "--max-line-length=100"]
-        run_command(cmd, "Flake8 linting")
-    except ImportError:
-        print("⚠️  flake8 not installed, skipping linting")
+        result = subprocess.run([sys.executable, "-m", "ruff", "--version"], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            # Run ruff check
+            cmd = [sys.executable, "-m", "ruff", "check", "src/", "tests/"]
+            run_command(cmd, "Ruff linting")
+        else:
+            print("⚠️  ruff not available, skipping linting")
+    except (subprocess.SubprocessError, FileNotFoundError):
+        print("⚠️  ruff not installed, skipping linting")
     
-    # Check if black is available  
+    # Check if black is available as a command
     try:
-        import black
-        cmd = [sys.executable, "-m", "black", "--check", "src/", "tests/"]
-        run_command(cmd, "Black formatting check")
-    except ImportError:
+        result = subprocess.run([sys.executable, "-m", "black", "--version"], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            cmd = [sys.executable, "-m", "black", "--check", "src/", "tests/"]
+            run_command(cmd, "Black formatting check")
+        else:
+            print("⚠️  black not available, skipping format check")
+    except (subprocess.SubprocessError, FileNotFoundError):
         print("⚠️  black not installed, skipping format check")
 
 
