@@ -163,7 +163,7 @@ class PlayerAnalyzer:
                         ),
                         18,
                     )
-            except:
+            except (ValueError, TypeError, AttributeError):
                 current_week = 1
 
             inj_proj = inj_proj.loc[inj_proj.until >= current_week]

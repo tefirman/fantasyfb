@@ -638,7 +638,10 @@ class Schedule:
                 "coords" + str(team)
             ].str.split(",")
             self.schedule["travel" + str(team)] = self.schedule.apply(
-                lambda x: geodesic(x["coords" + str(team)], x["game_coords"]).mi, axis=1
+                lambda x, team=team: geodesic(
+                    x["coords" + str(team)], x["game_coords"]
+                ).mi,
+                axis=1,
             )
 
     def add_rest(self):
@@ -1209,10 +1212,8 @@ def get_bulk_draft_pos(
     else:
         draft_pos = pd.DataFrame(columns=["year"])
     new_drafts = any(
-        [
-            year not in draft_pos.year.unique()
-            for year in range(start_season, finish_season + 1)
-        ]
+        year not in draft_pos.year.unique()
+        for year in range(start_season, finish_season + 1)
     )
     for year in range(start_season, finish_season + 1):
         if year not in draft_pos.year.unique():
@@ -1265,10 +1266,8 @@ def get_bulk_rosters(start_season: int, finish_season: int, path: str = None):
     else:
         teams = pd.DataFrame(columns=["season"])
     new_games = any(
-        [
-            season not in teams.season.unique()
-            for season in range(start_season, finish_season + 1)
-        ]
+        season not in teams.season.unique()
+        for season in range(start_season, finish_season + 1)
     )
     for season in range(start_season, finish_season + 1):
         if season not in teams.season.unique():

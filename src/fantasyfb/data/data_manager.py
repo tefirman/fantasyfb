@@ -126,7 +126,7 @@ class DataManager:
                     team["manager"] = team_data[-1]["managers"][0]["manager"][
                         "nickname"
                     ]
-            except:
+            except (ValueError, TypeError, AttributeError):
                 team["manager"] = "Unknown"
 
             teams.append(team)
@@ -255,7 +255,7 @@ class DataManager:
         # This would extract the right league based on team_name
         for ind in range(leagues_data["count"]):
             game = leagues_data[str(ind)]["game"]
-            if type(game) == dict:
+            if isinstance(game, dict):
                 continue
             if game[0]["code"] == "nfl" and game[0]["season"] == str(season):
                 teams = game[1]["teams"]
@@ -634,7 +634,7 @@ class DataManager:
                         ),
                         18,
                     )
-            except:
+            except (ValueError, TypeError, AttributeError):
                 current_week = 1
 
             inj_proj = inj_proj.loc[inj_proj.until >= current_week]
@@ -803,13 +803,13 @@ class DataManager:
         # Handle date formatting (Yahoo API sometimes returns different formats)
         try:
             final_schedule.date = pd.to_datetime(final_schedule.date, format="%Y-%m-%d")
-        except:
+        except (ValueError, TypeError, AttributeError):
             try:
                 # Handle manual Excel updates that change date format
                 final_schedule.date = pd.to_datetime(
                     final_schedule.date, format="%m/%d/%y"
                 )
-            except:
+            except (ValueError, TypeError, AttributeError):
                 logger.warning("Could not parse dates in NFL schedule")
                 final_schedule.date = pd.to_datetime(
                     final_schedule.date, errors="coerce"

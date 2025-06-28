@@ -236,7 +236,7 @@ class YahooClient:
 
         for page_ind in range(100):  # Pagination
 
-            def _get_page():
+            def _get_page(page_ind=page_ind):
                 return lg.yhandler.get_players_raw(lg.league_id, page_ind * 25, status)
 
             try:
@@ -304,7 +304,7 @@ class YahooClient:
         # Get roster for each team
         for team in teams:
 
-            def _get_roster():
+            def _get_roster(team=team):
                 tm = lg.to_team(team["team_key"])
                 return pd.DataFrame(tm.roster(week))
 
@@ -337,7 +337,7 @@ class YahooClient:
 
             for w in range(1, limit):
 
-                def _get_matchup():
+                def _get_matchup(tm=tm, w=w):
                     return tm.yhandler.get_matchup_raw(tm.team_key, w)
 
                 try:
