@@ -57,17 +57,20 @@ def get_mock_yahoo_client_with_real_responses() -> Mock:
         user_leagues = load_real_fixture("user_leagues")
         league_settings = load_real_fixture("league_settings") 
         league_standings = load_real_fixture("league_standings")
+        all_players = load_real_fixture("all_players")
+        team_rosters = load_real_fixture("team_rosters")
+        league_schedule = load_real_fixture("league_schedule")
         
         # Configure mock methods
         mock_client.get_user_leagues.return_value = user_leagues
         mock_client.get_league_settings.return_value = league_settings
         mock_client.get_league_standings.return_value = league_standings
+        mock_client.get_all_players.return_value = all_players
+        mock_client.get_league_rosters.return_value = team_rosters
+        mock_client.get_league_schedule.return_value = league_schedule
         
         # Add other commonly mocked methods with sensible defaults
         mock_client.get_current_week.return_value = 10
-        mock_client.get_all_players.return_value = []
-        mock_client.get_league_rosters.return_value = {}
-        mock_client.get_league_schedule.return_value = []
         
     except FileNotFoundError as e:
         raise RuntimeError(

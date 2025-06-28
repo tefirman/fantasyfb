@@ -98,6 +98,102 @@ def capture_league_standings(league: League, fixtures_dir: Path):
         raise
 
 
+def capture_player_data(league: League, fixtures_dir: Path):
+    """Capture all players API response."""
+    print("📥 Capturing player data...")
+    
+    try:
+        # Get the raw response from Yahoo API
+        # This is the expensive call that gets all NFL players
+        players_response = league.yahoo_client.get_all_players(league.lg_id)
+        
+        # Save to file
+        output_file = fixtures_dir / "all_players_real.json"
+        with open(output_file, "w") as f:
+            json.dump(players_response, f, indent=2)
+        
+        print(f"✅ Player data saved to {output_file}")
+        print(f"   - Total players: {len(players_response)}")
+        
+        # Show breakdown by position
+        positions = {}
+        for player in players_response:
+            pos = player.get('display_position', 'Unknown').split(',')[0]
+            positions[pos] = positions.get(pos, 0) + 1
+        
+        print("   - Position breakdown:")
+        for pos, count in sorted(positions.items()):
+            print(f"     {pos}: {count}")
+        
+    except Exception as e:
+        print(f"❌ Failed to capture player data: {e}")
+        raise
+
+
+def capture_roster_data(league: League, fixtures_dir: Path):
+    """Capture team rosters API response."""
+    print("📥 Capturing roster data...")
+    
+    try:
+        # Get rosters for current week
+        rosters_response = league.yahoo_client.get_league_rosters(league.lg_id, league.week)
+        
+        # Save to file
+        output_file = fixtures_dir / "team_rosters_real.json"
+        with open(output_file, "w") as f:
+            json.dump(rosters_response, f, indent=2)
+        
+        print(f"✅ Roster data saved to {output_file}")
+        print(f"   - Teams with rosters: {len(rosters_response)}")
+        
+        # Show roster sizes
+        for team_name, roster in rosters_response.items():
+            print(f"     {team_name}: {len(roster)} players")
+        
+    except Exception as e:
+        print(f"❌ Failed to capture roster data: {e}")
+        raise
+
+
+def capture_schedule_data(league: League, fixtures_dir: Path):
+    """Capture fantasy league schedule."""
+    print("📥 Capturing schedule data...")
+    
+    try:
+        # Get schedule data
+        schedule_response = league.yahoo_client.get_league_schedule(
+            league.lg_id, 
+            league.teams, 
+            league.season, 
+            league.week
+        )
+        
+        # Convert DataFrame to dict for JSON serialization
+        if hasattr(schedule_response, 'to_dict'):
+            schedule_dict = schedule_response.to_dict('records')
+        else:
+            schedule_dict = schedule_response
+        
+        # Save to file
+        output_file = fixtures_dir / "league_schedule_real.json"
+        with open(output_file, "w") as f:
+            json.dump(schedule_dict, f, indent=2)
+        
+        print(f"✅ Schedule data saved to {output_file}")
+        print(f"   - Total matchups: {len(schedule_dict)}")
+        
+        # Show weeks covered
+        weeks = set()
+        for matchup in schedule_dict:
+            if 'week' in matchup:
+                weeks.add(matchup['week'])
+        print(f"   - Weeks covered: {sorted(weeks)}")
+        
+    except Exception as e:
+        print(f"❌ Failed to capture schedule data: {e}")
+        raise
+
+
 def main():
     """Main function to capture API responses."""
     print("🚀 Starting API response capture for test fixtures...")
@@ -121,6 +217,9 @@ def main():
         capture_user_leagues(league, fixtures_dir)
         capture_league_settings(league, fixtures_dir)
         capture_league_standings(league, fixtures_dir)
+        capture_player_data(league, fixtures_dir)
+        capture_roster_data(league, fixtures_dir)
+        capture_schedule_data(league, fixtures_dir)
         
         print("\n🎉 All API responses captured successfully!")
         print("\nNext steps:")
