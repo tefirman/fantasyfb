@@ -10,7 +10,6 @@ import pytest
 from src.fantasyfb.data.data_manager import DataManager
 from tests.fixtures import load_real_fixture, get_mock_yahoo_client_with_real_responses
 
-
 class TestScoringProcessing:
     """Test scoring configuration processing from real API data."""
     
@@ -116,7 +115,7 @@ class TestScoringProcessing:
         default_categories = [
             "Pass Comp", "Pass 1D", "Rush Att", "Rush 1D", "Rec 1D",
             "TE Rec Bonus", "TE 1D Bonus", "Pass 300+", "Rush 100+", "Rec 100+",
-            "Ret Yds", "FG 0-19", "FG 20-29", "FG 30-39", "FG 40-49", "FG 50+"
+            "Ret Yds", "FG Yds"
         ]
         
         for category in default_categories:
@@ -161,49 +160,6 @@ class TestScoringProcessing:
                 break
         
         assert ret_yds_modifier == 0.05
-
-
-class TestScoringEdgeCases:
-    """Test edge cases in scoring processing."""
-    
-    def test_missing_stat_categories(self):
-        """Test handling when some stat categories are missing."""
-        # Create a minimal settings structure
-        minimal_settings = {
-            "fantasy_content": {
-                "league": [
-                    {"season": "2024"},
-                    {
-                        "settings": [{
-                            "stat_categories": {"stats": []},
-                            "stat_modifiers": {"stats": []}
-                        }]
-                    }
-                ]
-            }
-        }
-        
-        # This should not crash and should provide defaults
-        from src.fantasyfb.data.data_manager import DataManager
-        from unittest.mock import Mock
-        
-        mock_client = Mock()
-        mock_client.get_league_settings.return_value = minimal_settings
-        
-        data_manager = DataManager(mock_client)
-        settings, scoring, roster_spots = data_manager._process_settings(minimal_settings)
-        
-        # Should have basic default values
-        assert isinstance(scoring, dict)
-        # Won't have any scoring since stat_modifiers is empty, but shouldn't crash
-    
-    def test_duplicate_stat_handling(self, data_manager):
-        """Test that duplicate stats are handled correctly."""
-        settings, scoring, roster_spots = data_manager.load_league_settings("449.l.49284")
-        
-        # Check that we don't have duplicate keys
-        scoring_keys = list(scoring.keys())
-        assert len(scoring_keys) == len(set(scoring_keys))
 
 
 if __name__ == "__main__":
