@@ -191,30 +191,33 @@ class TestRealFixtures:
         )
         mock_sr.get_all_depth_charts.return_value = pd.DataFrame()
 
-        # Mock the data manager to use our mocked client
-        with patch("src.fantasyfb.core.league.DataManager") as mock_dm_class:
-            mock_dm = Mock()
-            mock_dm_class.return_value = mock_dm
+        # Mock the League to use our mocked client instead of creating a real one
+        with patch("src.fantasyfb.core.league.YahooClient") as mock_yahoo_class:
+            mock_yahoo_class.return_value = mock_yahoo_client
+            
+            with patch("src.fantasyfb.core.league.DataManager") as mock_dm_class:
+                mock_dm = Mock()
+                mock_dm_class.return_value = mock_dm
 
-            # Set up the mock data manager responses
-            mock_dm.load_league_id.return_value = ("449.l.49284", [])
-            mock_dm.load_league_settings.return_value = (
-                {"playoff_start_week": 15, "num_playoff_teams": 6},
-                {"Pass Yds": 0.04, "Pass TD": 6.0, "Rush Yds": 0.1},
-                pd.DataFrame({"position": ["QB", "RB", "WR"], "count": [1, 2, 2]}),
-            )
-            mock_dm.load_fantasy_teams.return_value = [{"name": "The Algorithm"}]
-            mock_dm.load_nfl_teams.return_value = pd.DataFrame()
-            mock_dm.load_nfl_schedule.return_value = pd.DataFrame()
-            mock_dm.get_current_week.return_value = 10
+                # Set up the mock data manager responses
+                mock_dm.load_league_id.return_value = ("449.l.49284", [])
+                mock_dm.load_league_settings.return_value = (
+                    {"playoff_start_week": 15, "num_playoff_teams": 6},
+                    {"Pass Yds": 0.04, "Pass TD": 6.0, "Rush Yds": 0.1},
+                    pd.DataFrame({"position": ["QB", "RB", "WR"], "count": [1, 2, 2]}),
+                )
+                mock_dm.load_fantasy_teams.return_value = [{"name": "The Algorithm"}]
+                mock_dm.load_nfl_teams.return_value = pd.DataFrame()
+                mock_dm.load_nfl_schedule.return_value = pd.DataFrame()
+                mock_dm.get_current_week.return_value = 10
 
-            # This should work without errors
-            league = League(team_name="The Algorithm", season=2024, week=10)
+                # This should work without errors now
+                league = League(team_name="The Algorithm", season=2024, week=10)
 
-            assert league.team_name == "The Algorithm"
-            assert league.season == 2024
-            assert league.week == 10
-            assert league.lg_id == "449.l.49284"
+                assert league.team_name == "The Algorithm"
+                assert league.season == 2024
+                assert league.week == 10
+                assert league.lg_id == "449.l.49284"
 
     def test_roster_positions_mapping(self, mock_yahoo_client):
         """Test that roster positions are correctly mapped."""
