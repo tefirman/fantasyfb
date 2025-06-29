@@ -161,33 +161,39 @@ def run_with_coverage():
 
 
 def lint_code():
-    """Run code linting."""
+    """Run code linting - returns success/failure status."""
     print("🧹 Running code linting...")
     
-    # Check if ruff is available as a command
+    success = True
+    
+    # Check if ruff is available and run it
     try:
         result = subprocess.run([sys.executable, "-m", "ruff", "--version"], 
                               capture_output=True, text=True)
         if result.returncode == 0:
             # Run ruff check
             cmd = [sys.executable, "-m", "ruff", "check", "src/", "tests/"]
-            run_command(cmd, "Ruff linting")
+            if not run_command(cmd, "Ruff linting"):
+                success = False
         else:
             print("⚠️  ruff not available, skipping linting")
     except (subprocess.SubprocessError, FileNotFoundError):
         print("⚠️  ruff not installed, skipping linting")
     
-    # Check if black is available as a command
+    # Check if black is available and run it
     try:
         result = subprocess.run([sys.executable, "-m", "black", "--version"], 
                               capture_output=True, text=True)
         if result.returncode == 0:
             cmd = [sys.executable, "-m", "black", "--check", "src/", "tests/"]
-            run_command(cmd, "Black formatting check")
+            if not run_command(cmd, "Black formatting check"):
+                success = False
         else:
             print("⚠️  black not available, skipping format check")
     except (subprocess.SubprocessError, FileNotFoundError):
         print("⚠️  black not installed, skipping format check")
+    
+    return success
 
 
 def validate_fixtures():
@@ -216,6 +222,11 @@ def main():
         action="store_true",
         help="Only check if fixtures are available"
     )
+    parser.add_argument(
+        "--no-lint", 
+        action="store_true",
+        help="Skip linting checks (for development)"
+    )
     
     args = parser.parse_args()
     
@@ -239,13 +250,13 @@ def main():
     elif args.test_type == "coverage":
         success = run_with_coverage()
     elif args.test_type == "lint":
-        lint_code()
+        success = lint_code()
     elif args.test_type == "validate":
         success = validate_fixtures()
     elif args.test_type == "all":
         success = run_all_tests()
-        if success:
-            lint_code()
+        if success and not args.no_lint:
+            success = lint_code()  # Make linting fatal in "all" mode
     
     if success:
         print("\n✅ Tests completed successfully!")
