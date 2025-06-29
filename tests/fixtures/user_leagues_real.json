@@ -1,0 +1,5126 @@
+{
+  "0": {
+    "game": [
+      {
+        "game_key": "98",
+        "game_id": "98",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2004/b1",
+        "season": "2004",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "98.l.1248.t.4"
+                },
+                {
+                  "team_id": "4"
+                },
+                {
+                  "name": "Filthy Boss Guys"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2004/b1/1248/4"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/mlb/mlb_9.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 11
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "point"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "4",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "1": {
+    "game": [
+      {
+        "game_key": "101",
+        "game_id": "101",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2004/f1",
+        "season": "2004",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "101.l.77574.t.2"
+                },
+                {
+                  "team_id": "2"
+                },
+                {
+                  "name": "Filthy Boss Guys"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2004/f1/77574/2"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_5.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 6
+                },
+                [],
+                {
+                  "number_of_moves": 11
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 3
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "2",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "2": {
+    "game": [
+      {
+        "game_key": "79",
+        "game_id": "79",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2003/f1",
+        "season": "2003",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "79.l.127434.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "Filthy Boss Guys"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2003/f1/127434/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/lq/i/identity2/profile_96a.png",
+                        "missing_logo_size": "1"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 9
+                },
+                [],
+                {
+                  "number_of_moves": 9
+                },
+                {
+                  "number_of_trades": "2"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 4
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "3": {
+    "game": [
+      {
+        "game_key": "113",
+        "game_id": "113",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2005/b1",
+        "season": "2005",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "113.l.245048.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "KL Baseballa's"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2005/b1/245048/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/mlb/mlb_5.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 6
+                },
+                [],
+                {
+                  "number_of_moves": 9
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 10
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "113.l.313807.t.6"
+                },
+                {
+                  "team_id": "6"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2005/b1/313807/6"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/mlb/mlb_1.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 9
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 11
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "6",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 2
+        }
+      }
+    ]
+  },
+  "4": {
+    "game": {
+      "game_key": "120",
+      "game_id": "120",
+      "name": "Auto Racing",
+      "code": "nascar",
+      "type": "pickem-team",
+      "url": "https://racing.fantasysports.yahoo.com/auto",
+      "season": "2005",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "120.t.393820",
+            "team_id": "393820",
+            "name": "Not so Fast but Pissed Off",
+            "url": "https://racing.fantasysports.yahoo.com/auto/393820",
+            "email_address": "tefirman@gmail.com",
+            "is_owned_by_current_login": 1,
+            "user_display_name": "Taylor",
+            "user_profile_image": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+            "team_logo": false
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "5": {
+    "game": [
+      {
+        "game_key": "124",
+        "game_id": "124",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2005/f1",
+        "season": "2005",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "124.l.27721.t.6"
+                },
+                {
+                  "team_id": "6"
+                },
+                {
+                  "name": "Toothless Wonders"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2005/f1/27721/6"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 3
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 3
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "6",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "6": {
+    "game": [
+      {
+        "game_key": "147",
+        "game_id": "147",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2006/b1",
+        "season": "2006",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "147.l.257463.t.5"
+                },
+                {
+                  "team_id": "5"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2006/b1/257463/5"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/mlb/mlb_10.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 3
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 1
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "5",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "7": {
+    "game": [
+      {
+        "game_key": "153",
+        "game_id": "153",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2006/f1",
+        "season": "2006",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "153.l.27263.t.7"
+                },
+                {
+                  "team_id": "7"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2006/f1/27263/7"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 5
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 5
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "7",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "153.l.223876.t.5"
+                },
+                {
+                  "team_id": "5"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2006/f1/223876/5"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 5
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 8
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "5",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 2
+        }
+      }
+    ]
+  },
+  "8": {
+    "game": {
+      "game_key": "158",
+      "game_id": "158",
+      "name": "College Football Pick'em",
+      "code": "ncaaf",
+      "type": "pickem-group",
+      "url": "https://football.fantasysports.yahoo.com/college",
+      "season": "2006",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "current_week": "14",
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "158.g.22162.t.2",
+            "team_id": "2",
+            "name": "The Big Heads",
+            "is_owned_by_current_login": true,
+            "url": "https://football.fantasysports.yahoo.com/college/22162/2",
+            "points": 82,
+            "wins": "",
+            "losses": "",
+            "can_edit_current_week": 0,
+            "rank": "1"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "9": {
+    "game": {
+      "game_key": "157",
+      "game_id": "157",
+      "name": "Survival Football",
+      "code": "nfls",
+      "type": "pickem-group",
+      "url": "https://football.fantasysports.yahoo.com/survival",
+      "season": "2006",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "current_week": "1",
+      "is_contest_reg_active": 0,
+      "is_contest_over": 0,
+      "has_schedule": 0,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "157.g.14300.t.6",
+            "team_id": "6",
+            "name": "The Big Heads",
+            "is_owned_by_current_login": true,
+            "url": "https://football.fantasysports.yahoo.com/survival/14300/6/",
+            "status": "dead",
+            "total_strikes": "",
+            "elimination_week": "4",
+            "done_week": "",
+            "manager": {
+              "manager_id": "6",
+              "guid": "",
+              "nickname": "Taylor",
+              "fantasy_profile_url": "https://profiles.sports.yahoo.com/user/YRCNPZX47QF357IZUAZWXVVQGQ",
+              "profile_image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+              "is_commissioner": false,
+              "email": "tefirman@gmail.com",
+              "emails": [
+                "tefirman@gmail.com"
+              ]
+            },
+            "last_editable_week": false,
+            "can_edit_current_week": 0,
+            "is_in_contest": 0
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "10": {
+    "game": [
+      {
+        "game_key": "171",
+        "game_id": "171",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2007/b1",
+        "season": "2007",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "171.l.29511.t.13"
+                },
+                {
+                  "team_id": "13"
+                },
+                {
+                  "name": "Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2007/b1/29511/13"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/mlb/mlb_5.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 0
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 13
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "13",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "11": {
+    "game": [
+      {
+        "game_key": "175",
+        "game_id": "175",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2007/f1",
+        "season": "2007",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "175.l.111993.t.4"
+                },
+                {
+                  "team_id": "4"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2007/f1/111993/4"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 12
+                },
+                {
+                  "number_of_trades": "2"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 2
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "4",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "12": {
+    "game": [
+      {
+        "game_key": "199",
+        "game_id": "199",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2008/f1",
+        "season": "2008",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "199.l.39983.t.3"
+                },
+                {
+                  "team_id": "3"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2008/f1/39983/3"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 2
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 2
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "3",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "13": {
+    "game": [
+      {
+        "game_key": "242",
+        "game_id": "242",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2010/f1",
+        "season": "2010",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "242.l.53993.t.7"
+                },
+                {
+                  "team_id": "7"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2010/f1/53993/7"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 9
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "2",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "585",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "14": {
+    "game": [
+      {
+        "game_key": "257",
+        "game_id": "257",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2011/f1",
+        "season": "2011",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "257.l.31256.t.8"
+                },
+                {
+                  "team_id": "8"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2011/f1/31256/8"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 5
+                },
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 8
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "8",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "572",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "15": {
+    "game": [
+      {
+        "game_key": "273",
+        "game_id": "273",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2012/f1",
+        "season": "2012",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "273.l.35305.t.8"
+                },
+                {
+                  "team_id": "8"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2012/f1/35305/8"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 9
+                },
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 10
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "8",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "588",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "16": {
+    "game": [
+      {
+        "game_key": "308",
+        "game_id": "308",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2013/b1",
+        "season": "2013",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "308.l.46729.t.11"
+                },
+                {
+                  "team_id": "11"
+                },
+                {
+                  "name": "KnightsOfKingFelix"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2013/b1/46729/11"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/mlb/mlb_5.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 2
+                },
+                [],
+                {
+                  "number_of_moves": 9
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "roto"
+                },
+                [],
+                {
+                  "draft_position": 6
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "11",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "17": {
+    "game": [
+      {
+        "game_key": "314",
+        "game_id": "314",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2013/f1",
+        "season": "2013",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "314.l.47454.t.2"
+                },
+                {
+                  "team_id": "2"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2013/f1/47454/2"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 1
+                },
+                [],
+                [],
+                [],
+                {
+                  "number_of_moves": 9
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "B",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2013/f1/47454/2/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "2",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "728",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "18": {
+    "game": [
+      {
+        "game_key": "331",
+        "game_id": "331",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2014/f1",
+        "season": "2014",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "331.l.214284.t.4"
+                },
+                {
+                  "team_id": "4"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2014/f1/214284/4"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 1
+                },
+                [],
+                {
+                  "waiver_priority": 8
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 12
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "C+",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2014/f1/214284/4/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "4",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "749",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "19": {
+    "game": [
+      {
+        "game_key": "348",
+        "game_id": "348",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2015/f1",
+        "season": "2015",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "348.l.199047.t.3"
+                },
+                {
+                  "team_id": "3"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2015/f1/199047/3"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 3
+                },
+                [],
+                {
+                  "waiver_priority": 11
+                },
+                [],
+                {
+                  "number_of_moves": 16
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "B",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2015/f1/199047/3/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "3",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "684",
+                        "felo_tier": "silver"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "20": {
+    "game": [
+      {
+        "game_key": "359",
+        "game_id": "359",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2016/f1",
+        "season": "2016",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "359.l.127924.t.9"
+                },
+                {
+                  "team_id": "9"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2016/f1/127924/9"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 8
+                },
+                [],
+                {
+                  "waiver_priority": 2
+                },
+                {
+                  "faab_balance": "50"
+                },
+                {
+                  "number_of_moves": 10
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "A",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2016/f1/127924/9/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "9",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "599",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "21": {
+    "game": [
+      {
+        "game_key": "371",
+        "game_id": "371",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2017/f1",
+        "season": "2017",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "371.l.132322.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2017/f1/132322/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 9
+                },
+                [],
+                {
+                  "waiver_priority": 1
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 14
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "C",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2017/f1/132322/10/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "598",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "22": {
+    "game": [
+      {
+        "game_key": "380",
+        "game_id": "380",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2018/f1",
+        "season": "2018",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "380.l.90429.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2018/f1/90429/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 4
+                },
+                [],
+                {
+                  "waiver_priority": 3
+                },
+                {
+                  "faab_balance": "80"
+                },
+                {
+                  "number_of_moves": 12
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "B",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2018/f1/90429/10/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "563",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "23": {
+    "game": [
+      {
+        "game_key": "390",
+        "game_id": "390",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2019/f1",
+        "season": "2019",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "390.l.57622.t.8"
+                },
+                {
+                  "team_id": "8"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2019/f1/57622/8"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_6.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 12
+                },
+                [],
+                {
+                  "waiver_priority": 4
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 18
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "B-",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2019/f1/57622/8/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "8",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "566",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "24": {
+    "game": [
+      {
+        "game_key": "395",
+        "game_id": "395",
+        "name": "Basketball",
+        "code": "nba",
+        "type": "full",
+        "url": "https://basketball.fantasysports.yahoo.com/2019/nba",
+        "season": "2019",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "395.l.149987.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "Trust the Process"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://basketball.fantasysports.yahoo.com/2019/nba/149987/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nba/nba_9_t.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 6
+                },
+                {
+                  "faab_balance": "48"
+                },
+                {
+                  "number_of_moves": 34
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 19,
+                    "value": "3"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 5
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "email": "tefirman@gmail.com",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "610",
+                        "felo_tier": "silver"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "25": {
+    "game": [
+      {
+        "game_key": "399",
+        "game_id": "399",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2020/f1",
+        "season": "2020",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "399.l.57631.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "The Big Heads"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2020/f1/57631/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_9_f.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 6
+                },
+                [],
+                {
+                  "waiver_priority": 2
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 24
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "B",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2020/f1/57631/10/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "583",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "399.l.857649.t.3"
+                },
+                {
+                  "team_id": "3"
+                },
+                {
+                  "name": "Toothless Wonders"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2020/f1/857649/3"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_4_t.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 4
+                },
+                [],
+                {
+                  "number_of_moves": 17
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 17,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                {
+                  "auction_budget_total": "200"
+                },
+                {
+                  "auction_budget_spent": 200
+                },
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "3",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "583",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 2
+        }
+      }
+    ]
+  },
+  "26": {
+    "game": [
+      {
+        "game_key": "402",
+        "game_id": "402",
+        "name": "Basketball",
+        "code": "nba",
+        "type": "full",
+        "url": "https://basketball.fantasysports.yahoo.com/2020/nba",
+        "season": "2020",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "402.l.19230.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "Trust the Process"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://basketball.fantasysports.yahoo.com/2020/nba/19230/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nba/nba_9_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 5
+                },
+                [],
+                {
+                  "waiver_priority": 3
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 29
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 20,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 8
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "email": "tefirman@gmail.com",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "612",
+                        "felo_tier": "silver"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "27": {
+    "game": [
+      {
+        "game_key": "406",
+        "game_id": "406",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2021/f1",
+        "season": "2021",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "406.l.90838.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "The Algorithm"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2021/f1/90838/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_9_a.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 5
+                },
+                [],
+                {
+                  "waiver_priority": 8
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 24
+                },
+                {
+                  "number_of_trades": "4"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "C",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2021/f1/90838/10/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "639",
+                        "felo_tier": "silver"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "406.l.832265.t.3"
+                },
+                {
+                  "team_id": "3"
+                },
+                {
+                  "name": "Toothless Wonders"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2021/f1/832265/3"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_4_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 5
+                },
+                [],
+                {
+                  "waiver_priority": 7
+                },
+                [],
+                {
+                  "number_of_moves": 34
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                {
+                  "auction_budget_total": "200"
+                },
+                {
+                  "auction_budget_spent": 200
+                },
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "3",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "639",
+                        "felo_tier": "silver"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "2": {
+            "team": [
+              [
+                {
+                  "team_key": "406.l.1110838.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "The GENIEs"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2021/f1/1110838/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_2_g.png"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 10
+                },
+                [],
+                {
+                  "number_of_moves": 33
+                },
+                {
+                  "number_of_trades": "1"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 4
+                },
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "B",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2021/f1/1110838/1/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "639",
+                        "felo_tier": "silver"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 3
+        }
+      }
+    ]
+  },
+  "28": {
+    "game": [
+      {
+        "game_key": "410",
+        "game_id": "410",
+        "name": "Basketball",
+        "code": "nba",
+        "type": "full",
+        "url": "https://basketball.fantasysports.yahoo.com/2021/nba",
+        "season": "2021",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "410.l.91911.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "Trust the Process"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://basketball.fantasysports.yahoo.com/2021/nba/91911/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nba/nba_9_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 4
+                },
+                [],
+                {
+                  "waiver_priority": 10
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 32
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 24,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 1
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "email": "tefirman@gmail.com",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "718",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "29": {
+    "game": {
+      "game_key": "413",
+      "game_id": "413",
+      "name": "Tourney Pick'em",
+      "code": "yahoops",
+      "type": "pickem-team-list",
+      "url": "https://tournament.fantasysports.yahoo.com/mens-basketball-bracket",
+      "season": "2022",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "editorial_season": "2021",
+      "picks_status": "postedit",
+      "contest_group_id": "1",
+      "scenario_generator": 1,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "413.t.19223",
+            "team_id": "19223",
+            "name": "Taylor's Fine Bracket",
+            "url": "https://tournament.fantasysports.yahoo.com/t1/19223",
+            "email_address": "tefirman@gmail.com",
+            "is_owned_by_current_login": 1,
+            "user_display_name": "Taylor",
+            "user_profile_image": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+            "team_logo": "https://s.yimg.com/cv/apiv2/fantasy/tourney/bracket-circle.png",
+            "is_in_contest": 1,
+            "logo_type": "avatar",
+            "champion_pick": "Gonzaga",
+            "champion_status": "incorrect_pick"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "30": {
+    "game": [
+      {
+        "game_key": "412",
+        "game_id": "412",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2022/b1",
+        "season": "2022",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "412.l.28448.t.12"
+                },
+                {
+                  "team_id": "12"
+                },
+                {
+                  "name": "This Year\u2019s The Year"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2022/b1/28448/12"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/26e8ccc5be65ab81299afb0f0f301dbe96f30e23a55988b2bf67e4c07a3ef648.jpg"
+                      }
+                    }
+                  ]
+                },
+                [],
+                [],
+                {
+                  "waiver_priority": 10
+                },
+                [],
+                {
+                  "number_of_moves": 61
+                },
+                {
+                  "number_of_trades": "2"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 24,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "roto"
+                },
+                [],
+                {
+                  "draft_position": 8
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "12",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "594",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "31": {
+    "game": [
+      {
+        "game_key": "414",
+        "game_id": "414",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2022/f1",
+        "season": "2022",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "414.l.39828.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "Toothless Wonders"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2022/f1/39828/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_4_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 8
+                },
+                [],
+                {
+                  "waiver_priority": 2
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 21
+                },
+                {
+                  "number_of_trades": "2"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                {
+                  "auction_budget_total": "200"
+                },
+                {
+                  "auction_budget_spent": 198
+                },
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "793",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "414.l.49869.t.9"
+                },
+                {
+                  "team_id": "9"
+                },
+                {
+                  "name": "The Algorithm"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2022/f1/49869/9"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_9_a.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 9
+                },
+                [],
+                {
+                  "waiver_priority": 2
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 35
+                },
+                {
+                  "number_of_trades": "2"
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "C+",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2022/f1/49869/9/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "9",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "793",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "2": {
+            "team": [
+              [
+                {
+                  "team_key": "414.l.910239.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "The GENIEs"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2022/f1/910239/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_2_g.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 1
+                },
+                [],
+                {
+                  "waiver_priority": 8
+                },
+                [],
+                {
+                  "number_of_moves": 24
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 4
+                },
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "B",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2022/f1/910239/1/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "793",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 3
+        }
+      }
+    ]
+  },
+  "32": {
+    "game": {
+      "game_key": "415",
+      "game_id": "415",
+      "name": "Pro Football Pick'em",
+      "code": "nflp",
+      "type": "pickem-group",
+      "url": "https://football.fantasysports.yahoo.com/pickem",
+      "season": "2022",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "current_week": "22",
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "415.g.9987.t.16",
+            "team_id": "16",
+            "name": "Firman's Educated Guesses",
+            "is_owned_by_current_login": true,
+            "url": "https://football.fantasysports.yahoo.com/pickem/9987/16",
+            "points": 1272,
+            "wins": "145",
+            "losses": "124",
+            "can_edit_current_week": 0,
+            "rank": "48"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "33": {
+    "game": [
+      {
+        "game_key": "418",
+        "game_id": "418",
+        "name": "Basketball",
+        "code": "nba",
+        "type": "full",
+        "url": "https://basketball.fantasysports.yahoo.com/2022/nba",
+        "season": "2022",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "418.l.71196.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "Trust the Process"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://basketball.fantasysports.yahoo.com/2022/nba/71196/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nba/nba_9_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 3
+                },
+                [],
+                {
+                  "waiver_priority": ""
+                },
+                {
+                  "faab_balance": "100"
+                },
+                {
+                  "number_of_moves": 0
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 24,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "email": "tefirman@gmail.com",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "718",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "34": {
+    "game": [
+      {
+        "game_key": "422",
+        "game_id": "422",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2023/b1",
+        "season": "2023",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "422.l.45886.t.12"
+                },
+                {
+                  "team_id": "12"
+                },
+                {
+                  "name": "This Year's The Year"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2023/b1/45886/12"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/26e8ccc5be65ab81299afb0f0f301dbe96f30e23a55988b2bf67e4c07a3ef648.jpg"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 10
+                },
+                [],
+                {
+                  "waiver_priority": 12
+                },
+                [],
+                {
+                  "number_of_moves": 51
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "roto"
+                },
+                [],
+                {
+                  "draft_position": 1
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "12",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "594",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "35": {
+    "game": {
+      "game_key": "420",
+      "game_id": "420",
+      "name": "Men's Tourney Pick'em",
+      "code": "yahoops",
+      "type": "pickem-team-list",
+      "url": "https://tournament.fantasysports.yahoo.com/mens-basketball-bracket",
+      "season": "2023",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "editorial_season": "2022",
+      "picks_status": "postedit",
+      "contest_group_id": "1",
+      "scenario_generator": 1,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "420.t.1733694",
+            "team_id": "1733694",
+            "name": "The Algorithm",
+            "url": "https://tournament.fantasysports.yahoo.com/mens-basketball-bracket/1733694",
+            "email_address": "tefirman@gmail.com",
+            "is_owned_by_current_login": 1,
+            "user_display_name": "Taylor",
+            "user_profile_image": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+            "team_logo": "https://s.yimg.com/cv/apiv2/fantasy/tourney/bracket-circle.png",
+            "is_in_contest": 1,
+            "logo_type": "avatar",
+            "champion_pick": "Gonzaga",
+            "champion_status": "incorrect_pick"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "36": {
+    "game": [
+      {
+        "game_key": "423",
+        "game_id": "423",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2023/f1",
+        "season": "2023",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "423.l.53063.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "Toothless Wonders"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2023/f1/53063/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_4_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 4
+                },
+                [],
+                {
+                  "waiver_priority": 9
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 26
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                {
+                  "auction_budget_total": "200"
+                },
+                {
+                  "auction_budget_spent": 199
+                },
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "795",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "423.l.73382.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "The Algorithm"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2023/f1/73382/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_9_a.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 2
+                },
+                [],
+                {
+                  "waiver_priority": 3
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 23
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "C+",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2023/f1/73382/10/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "795",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "2": {
+            "team": [
+              [
+                {
+                  "team_key": "423.l.529510.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "The GENIEs"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2023/f1/529510/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_2_g.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 5
+                },
+                [],
+                {
+                  "waiver_priority": 10
+                },
+                [],
+                {
+                  "number_of_moves": 19
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                {
+                  "clinched_playoffs": 1
+                },
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                {
+                  "draft_position": 1
+                },
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "A",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2023/f1/529510/1/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "795",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 3
+        }
+      }
+    ]
+  },
+  "37": {
+    "game": {
+      "game_key": "424",
+      "game_id": "424",
+      "name": "Pro Football Pick'em",
+      "code": "nflp",
+      "type": "pickem-group",
+      "url": "https://football.fantasysports.yahoo.com/pickem",
+      "season": "2023",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "current_week": "22",
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "424.g.11428.t.5",
+            "team_id": "5",
+            "name": "Firman's Educated Guesses",
+            "is_owned_by_current_login": true,
+            "url": "https://football.fantasysports.yahoo.com/pickem/11428/5",
+            "points": 1386,
+            "wins": "158",
+            "losses": "114",
+            "can_edit_current_week": 0,
+            "rank": "42"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "38": {
+    "game": [
+      {
+        "game_key": "431",
+        "game_id": "431",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/2024/b1",
+        "season": "2024",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1,
+        "alternate_start_deadline": "2024-03-27"
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "431.l.53079.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "This Year's The Year"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/2024/b1/53079/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/26e8ccc5be65ab81299afb0f0f301dbe96f30e23a55988b2bf67e4c07a3ef648.jpg"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 5
+                },
+                [],
+                {
+                  "waiver_priority": 8
+                },
+                [],
+                {
+                  "number_of_moves": 12
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 25,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "roto"
+                },
+                [],
+                {
+                  "draft_position": 6
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "594",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "39": {
+    "game": {
+      "game_key": "429",
+      "game_id": "429",
+      "name": "Men's Bracket Mayhem",
+      "code": "yahoops",
+      "type": "pickem-team-list",
+      "url": "https://tournament.fantasysports.yahoo.com/mens-basketball-bracket",
+      "season": "2024",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "editorial_season": "2023",
+      "picks_status": "postedit",
+      "contest_group_id": "1",
+      "scenario_generator": 1,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "429.t.1753836",
+            "team_id": "1753836",
+            "name": "Taylor's Terrific Bracket",
+            "url": "https://tournament.fantasysports.yahoo.com/mens-basketball-bracket/1753836",
+            "email_address": "tefirman@gmail.com",
+            "is_owned_by_current_login": 1,
+            "user_display_name": "Taylor",
+            "user_profile_image": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+            "team_logo": "https://s.yimg.com/cv/apiv2/fantasy/tourney/bracket-circle.png",
+            "is_in_contest": 1,
+            "logo_type": "avatar",
+            "champion_pick": "Connecticut",
+            "champion_status": "correct_pick"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "40": {
+    "game": {
+      "game_key": "430",
+      "game_id": "430",
+      "name": "Women's Bracket Mayhem",
+      "code": "whoops",
+      "type": "pickem-team-list",
+      "url": "https://tournament.fantasysports.yahoo.com/womens-basketball-bracket",
+      "season": "2024",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "editorial_season": "2023",
+      "picks_status": "postedit",
+      "contest_group_id": "1",
+      "scenario_generator": 1,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "430.t.158827",
+            "team_id": "158827",
+            "name": "Taylor's Groovy Bracket",
+            "url": "https://tournament.fantasysports.yahoo.com/womens-basketball-bracket/158827",
+            "email_address": "tefirman@gmail.com",
+            "is_owned_by_current_login": 1,
+            "user_display_name": "Taylor",
+            "user_profile_image": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+            "team_logo": "https://s.yimg.com/cv/apiv2/fantasy/tourney/bracket-circle.png",
+            "is_in_contest": 1,
+            "logo_type": "avatar",
+            "champion_pick": "South Carolina",
+            "champion_status": "correct_pick"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "41": {
+    "game": [
+      {
+        "game_key": "449",
+        "game_id": "449",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/2024/f1",
+        "season": "2024",
+        "is_registration_over": 1,
+        "is_game_over": 1,
+        "is_offseason": 1
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "449.l.49041.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "Toothless Wonders"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2024/f1/49041/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_4_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 8
+                },
+                [],
+                {
+                  "waiver_priority": 5
+                },
+                {
+                  "faab_balance": "38"
+                },
+                {
+                  "number_of_moves": 19
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                {
+                  "auction_budget_total": "200"
+                },
+                {
+                  "auction_budget_spent": 197
+                },
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "725",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "449.l.49284.t.9"
+                },
+                {
+                  "team_id": "9"
+                },
+                {
+                  "name": "The Algorithm"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2024/f1/49284/9"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_9_a.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 7
+                },
+                [],
+                {
+                  "waiver_priority": 10
+                },
+                {
+                  "faab_balance": "0"
+                },
+                {
+                  "number_of_moves": 24
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 1,
+                  "draft_grade": "D",
+                  "draft_recap_url": "https://football.fantasysports.yahoo.com/2024/f1/49284/9/draftrecap"
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "9",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "725",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "2": {
+            "team": [
+              [
+                {
+                  "team_key": "449.l.262296.t.1"
+                },
+                {
+                  "team_id": "1"
+                },
+                {
+                  "name": "The GENIEs"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/2024/f1/262296/1"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_2_g.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 2
+                },
+                [],
+                {
+                  "waiver_priority": ""
+                },
+                [],
+                {
+                  "number_of_moves": 0
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 18,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "1",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_commissioner": "1",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "725",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 3
+        }
+      }
+    ]
+  },
+  "42": {
+    "game": {
+      "game_key": "450",
+      "game_id": "450",
+      "name": "Pro Football Pick'em",
+      "code": "nflp",
+      "type": "pickem-group",
+      "url": "https://football.fantasysports.yahoo.com/pickem",
+      "season": "2024",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "current_week": "22",
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "450.g.6207.t.13",
+            "team_id": "13",
+            "name": "Firman's Educated Guesses",
+            "is_owned_by_current_login": true,
+            "url": "https://football.fantasysports.yahoo.com/pickem/6207/13",
+            "points": 1185,
+            "wins": "140",
+            "losses": "132",
+            "can_edit_current_week": 0,
+            "rank": "51"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "43": {
+    "game": [
+      {
+        "game_key": "458",
+        "game_id": "458",
+        "name": "Baseball",
+        "code": "mlb",
+        "type": "full",
+        "url": "https://baseball.fantasysports.yahoo.com/b1",
+        "season": "2025",
+        "is_registration_over": 0,
+        "is_game_over": 0,
+        "is_offseason": 0,
+        "alternate_start_deadline": "2025-03-26"
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "458.l.51582.t.13"
+                },
+                {
+                  "team_id": "13"
+                },
+                {
+                  "name": "This Year's The Year"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://baseball.fantasysports.yahoo.com/b1/51582/13"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/26e8ccc5be65ab81299afb0f0f301dbe96f30e23a55988b2bf67e4c07a3ef648.jpg"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 9
+                },
+                [],
+                {
+                  "waiver_priority": 14
+                },
+                [],
+                {
+                  "number_of_moves": 15
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 13,
+                    "value": "1"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "roto"
+                },
+                [],
+                {
+                  "draft_position": 2
+                },
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "13",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "594",
+                        "felo_tier": "bronze"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 1
+        }
+      }
+    ]
+  },
+  "44": {
+    "game": {
+      "game_key": "459",
+      "game_id": "459",
+      "name": "Men's Bracket Mayhem",
+      "code": "yahoops",
+      "type": "pickem-team-list",
+      "url": "https://tournament.fantasysports.yahoo.com/mens-basketball-bracket",
+      "season": "2025",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "editorial_season": "2024",
+      "picks_status": "postedit",
+      "contest_group_id": "1",
+      "scenario_generator": 1,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "459.t.1920618",
+            "team_id": "1920618",
+            "name": "Taylor's Perfect Bracket",
+            "url": "https://tournament.fantasysports.yahoo.com/mens-basketball-bracket/1920618",
+            "email_address": "tefirman@gmail.com",
+            "is_owned_by_current_login": 1,
+            "user_display_name": "Taylor",
+            "user_profile_image": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+            "team_logo": "https://s.yimg.com/cv/apiv2/fantasy/tourney/bracket-circle.png",
+            "is_in_contest": 1,
+            "logo_type": "avatar",
+            "champion_pick": "Houston",
+            "champion_status": "incorrect_pick"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "45": {
+    "game": {
+      "game_key": "460",
+      "game_id": "460",
+      "name": "Women's Bracket Mayhem",
+      "code": "whoops",
+      "type": "pickem-team-list",
+      "url": "https://tournament.fantasysports.yahoo.com/womens-basketball-bracket",
+      "season": "2025",
+      "is_registration_over": 1,
+      "is_game_over": 1,
+      "is_offseason": 1,
+      "editorial_season": "2024",
+      "picks_status": "postedit",
+      "contest_group_id": "1",
+      "scenario_generator": 1,
+      "teams": {
+        "0": {
+          "team": {
+            "team_key": "460.t.246581",
+            "team_id": "246581",
+            "name": "Taylor's Excellent Bracket",
+            "url": "https://tournament.fantasysports.yahoo.com/womens-basketball-bracket/246581",
+            "email_address": "tefirman@gmail.com",
+            "is_owned_by_current_login": 1,
+            "user_display_name": "Taylor",
+            "user_profile_image": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+            "team_logo": "https://s.yimg.com/cv/apiv2/fantasy/tourney/bracket-circle.png",
+            "is_in_contest": 1,
+            "logo_type": "avatar",
+            "champion_pick": "LSU",
+            "champion_status": "incorrect_pick"
+          }
+        },
+        "count": 1
+      }
+    }
+  },
+  "46": {
+    "game": [
+      {
+        "game_key": "461",
+        "game_id": "461",
+        "name": "Football",
+        "code": "nfl",
+        "type": "full",
+        "url": "https://football.fantasysports.yahoo.com/f1",
+        "season": "2025",
+        "is_registration_over": 0,
+        "is_game_over": 0,
+        "is_offseason": 0
+      },
+      {
+        "teams": {
+          "0": {
+            "team": [
+              [
+                {
+                  "team_key": "461.l.1468.t.11"
+                },
+                {
+                  "team_id": "11"
+                },
+                {
+                  "name": "The Algorithm"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/f1/1468/11"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_9_a.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 10
+                },
+                [],
+                {
+                  "waiver_priority": ""
+                },
+                {
+                  "faab_balance": "100"
+                },
+                {
+                  "number_of_moves": 0
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 1,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "11",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "725",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "1": {
+            "team": [
+              [
+                {
+                  "team_key": "461.l.5183.t.10"
+                },
+                {
+                  "team_id": "10"
+                },
+                {
+                  "name": "Toothless Wonders"
+                },
+                {
+                  "is_owned_by_current_login": 1
+                },
+                {
+                  "url": "https://football.fantasysports.yahoo.com/f1/5183/10"
+                },
+                {
+                  "team_logos": [
+                    {
+                      "team_logo": {
+                        "size": "large",
+                        "url": "https://s.yimg.com/cv/apiv2/default/nfl/nfl_4_t.png"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "previous_season_team_rank": 5
+                },
+                [],
+                {
+                  "waiver_priority": ""
+                },
+                {
+                  "faab_balance": "100"
+                },
+                {
+                  "number_of_moves": 0
+                },
+                {
+                  "number_of_trades": 0
+                },
+                {
+                  "roster_adds": {
+                    "coverage_type": "week",
+                    "coverage_value": 1,
+                    "value": "0"
+                  }
+                },
+                [],
+                {
+                  "league_scoring_type": "head"
+                },
+                [],
+                [],
+                {
+                  "has_draft_grade": 0
+                },
+                [],
+                [],
+                [],
+                [],
+                [],
+                {
+                  "managers": [
+                    {
+                      "manager": {
+                        "manager_id": "10",
+                        "nickname": "Taylor",
+                        "guid": "YRCNPZX47QF357IZUAZWXVVQGQ",
+                        "is_current_login": "1",
+                        "image_url": "https://s.yimg.com/ag/images/4635/38127857910_af5d85_64sq.jpg",
+                        "felo_score": "725",
+                        "felo_tier": "gold"
+                      }
+                    }
+                  ]
+                }
+              ],
+              null
+            ]
+          },
+          "count": 2
+        }
+      }
+    ]
+  },
+  "count": 47
+}

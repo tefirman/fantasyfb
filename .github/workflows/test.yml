@@ -29,20 +29,8 @@ jobs:
     - name: Run linting
       run: python run_tests.py lint
     
-    - name: Setup Yahoo API credentials
-      env:
-        CONSUMER_KEY: ${{ secrets.CONSUMER_KEY }}
-        CONSUMER_SECRET: ${{ secrets.CONSUMER_SECRET }}
-      run: |
-        echo "CONSUMER_KEY=$CONSUMER_KEY" > .env
-        echo "CONSUMER_SECRET=$CONSUMER_SECRET" >> .env
-    
-    - name: Generate test fixtures
-      run: python capture_fixtures.py
-    
     - name: Run fixture-based tests
       run: python run_tests.py fixtures
     
-    # Only run full tests on Python 3.10 to save CI time
     - name: Run all tests
       run: python run_tests.py all
