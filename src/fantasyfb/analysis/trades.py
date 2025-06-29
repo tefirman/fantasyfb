@@ -4,7 +4,6 @@ Trade Analyzer - handles analysis of potential roster moves.
 """
 
 import logging
-from typing import Dict, List
 
 import pandas as pd
 
@@ -33,13 +32,13 @@ class TradeAnalyzer:
 
     def possible_adds(
         self,
-        focus_on: List[str] = None,
-        exclude: List[str] = None,
+        focus_on: list[str] = None,
+        exclude: list[str] = None,
         limit_per: int = 10,
         team_name: str = None,
         postseason: bool = True,
         verbose: bool = True,
-        payouts: List[float] = None,
+        payouts: list[float] = None,
         bestball: bool = False,
         min_rostership: float = 0.05,
     ) -> pd.DataFrame:
@@ -141,12 +140,12 @@ class TradeAnalyzer:
 
     def possible_drops(
         self,
-        focus_on: List[str] = None,
-        exclude: List[str] = None,
+        focus_on: list[str] = None,
+        exclude: list[str] = None,
         team_name: str = None,
         postseason: bool = True,
         verbose: bool = True,
-        payouts: List[float] = None,
+        payouts: list[float] = None,
         bestball: bool = False,
     ) -> pd.DataFrame:
         """
@@ -227,14 +226,14 @@ class TradeAnalyzer:
 
     def possible_trades(
         self,
-        focus_on: List[str] = None,
-        exclude: List[str] = None,
-        given: List[str] = None,
+        focus_on: list[str] = None,
+        exclude: list[str] = None,
+        given: list[str] = None,
         limit_per: int = 10,
         team_name: str = None,
         postseason: bool = True,
         verbose: bool = True,
-        payouts: List[float] = None,
+        payouts: list[float] = None,
         bestball: bool = False,
     ) -> pd.DataFrame:
         """
@@ -387,13 +386,13 @@ class TradeAnalyzer:
 
     def possible_pickups(
         self,
-        focus_on: List[str] = None,
-        exclude: List[str] = None,
+        focus_on: list[str] = None,
+        exclude: list[str] = None,
         limit_per: int = 10,
         team_name: str = None,
         postseason: bool = True,
         verbose: bool = True,
-        payouts: List[float] = None,
+        payouts: list[float] = None,
         bestball: bool = False,
         min_rostership: float = 0.05,
     ) -> pd.DataFrame:
@@ -503,7 +502,7 @@ class TradeAnalyzer:
 
     def _calculate_impact(
         self, orig_standings: pd.DataFrame, new_standings: pd.DataFrame, team_name: str
-    ) -> Dict:
+    ) -> dict:
         """Calculate the impact of a roster move."""
         orig_team = orig_standings.loc[orig_standings.team == team_name].iloc[0]
         new_team = new_standings.loc[new_standings.team == team_name].iloc[0]
@@ -527,7 +526,7 @@ class TradeAnalyzer:
 
         return impact
 
-    def _get_result_columns(self, postseason: bool) -> List[str]:
+    def _get_result_columns(self, postseason: bool) -> list[str]:
         """Get the appropriate result columns based on analysis type."""
         base_cols = [
             "wins_avg",

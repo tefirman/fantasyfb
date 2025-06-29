@@ -8,11 +8,11 @@ for use in test mocks, ensuring tests use realistic data structures.
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import Mock
 
 
-def load_real_fixture(name: str) -> Dict[str, Any]:
+def load_real_fixture(name: str) -> dict[str, Any]:
     """
     Load a real API response fixture from the fixtures directory.
 
@@ -83,7 +83,7 @@ def get_mock_yahoo_client_with_real_responses() -> Mock:
     return mock_client
 
 
-def extract_sample_data_from_fixtures() -> Dict[str, Any]:
+def extract_sample_data_from_fixtures() -> dict[str, Any]:
     """
     Extract useful sample data from real fixtures for test assertions.
 

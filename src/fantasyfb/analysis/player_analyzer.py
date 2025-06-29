@@ -5,7 +5,6 @@ Player Analyzer - handles player statistics, projections, and WAR calculations.
 
 import datetime
 import logging
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -551,33 +550,35 @@ class PlayerAnalyzer:
         by_pos["player_id_sr"] = "avg_" + by_pos["position"]
         return by_pos
 
-    def _apply_time_weighting(self, rel_stats: pd.DataFrame, as_of: int) -> pd.DataFrame:
+    def _apply_time_weighting(
+        self, rel_stats: pd.DataFrame, as_of: int
+    ) -> pd.DataFrame:
         """Apply time-based weighting to statistics."""
         rel_stats["weeks_ago"] = (
             17 * (as_of // 100 - rel_stats.season) + as_of % 100 - rel_stats.week
         )
         rel_stats["time_factor"] = 1 - rel_stats.weeks_ago * rel_stats.time_scale
         rel_stats = rel_stats.loc[rel_stats.time_factor > 0].reset_index(drop=True)
-        
+
         rel_stats = pd.merge(
             left=rel_stats,
             right=rel_stats.groupby(["player_id_sr", "position"])
             .agg({"time_factor": "sum", "name": "count"})
-            .rename(
-                columns={"name": "num_games", "time_factor": "time_factor_sum"}
-            )
+            .rename(columns={"name": "num_games", "time_factor": "time_factor_sum"})
             .reset_index(),
             how="inner",
             on=["player_id_sr", "position"],
         )
-        
+
         rel_stats.time_factor = (
             rel_stats.time_factor * rel_stats.num_games / rel_stats.time_factor_sum
         )
         rel_stats["weighted_points"] = rel_stats.rel_points * rel_stats.time_factor
         return rel_stats
 
-    def _calculate_player_rates(self, rel_stats: pd.DataFrame, by_pos: pd.DataFrame) -> pd.DataFrame:
+    def _calculate_player_rates(
+        self, rel_stats: pd.DataFrame, by_pos: pd.DataFrame
+    ) -> pd.DataFrame:
         """Calculate player-specific rates with positional priors."""
         by_player = pd.merge(
             left=rel_stats.groupby(["player_id_sr", "position"])
@@ -591,7 +592,7 @@ class PlayerAnalyzer:
             how="inner",
             on=["player_id_sr", "position"],
         )
-        
+
         by_player = pd.merge(
             left=by_player,
             right=rel_stats.groupby(["player_id_sr", "position"])
@@ -601,14 +602,18 @@ class PlayerAnalyzer:
             how="inner",
             on=["player_id_sr", "position"],
         )
-        
-        by_player = pd.concat([
-            by_player,
-            by_pos[["player_id_sr", "position", "points_rate", "points_stdev"]]
-        ], ignore_index=True, sort=False)
-        
+
+        by_player = pd.concat(
+            [
+                by_player,
+                by_pos[["player_id_sr", "position", "points_rate", "points_stdev"]],
+            ],
+            ignore_index=True,
+            sort=False,
+        )
+
         by_player.points_stdev = by_player.points_stdev.fillna(0.0)
-        
+
         by_player = pd.merge(
             left=by_player,
             right=by_pos[["position", "points_rate", "points_stdev"]].rename(
@@ -617,11 +622,13 @@ class PlayerAnalyzer:
             how="inner",
             on="position",
         )
-        
+
         # Apply reference games adjustment
         for pos in self.config.reference_games:
-            by_player.loc[by_player.position == pos, 'ref_games'] = self.config.reference_games[pos]
-        
+            by_player.loc[by_player.position == pos, "ref_games"] = (
+                self.config.reference_games[pos]
+            )
+
         inds = by_player.num_games < by_player.ref_games
         by_player.loc[inds, "points_squared"] = (
             by_player.loc[inds, "num_games"]
@@ -635,21 +642,24 @@ class PlayerAnalyzer:
                 + by_player.loc[inds, "pos_avg"] ** 2
             )
         ) / by_player.loc[inds, "ref_games"]
-        
+
         by_player.loc[inds, "points_rate"] = (
             by_player.loc[inds, "num_games"] * by_player.loc[inds, "points_rate"]
             + (by_player.loc[inds, "ref_games"] - by_player.loc[inds, "num_games"])
             * by_player.loc[inds, "pos_avg"]
         ) / by_player.loc[inds, "ref_games"]
-        
-        by_player.loc[inds, "points_stdev"] = ((
-            by_player.loc[inds, "points_squared"]
-            - by_player.loc[inds, "points_rate"] ** 2
-        ) ** 0.5).astype(float)
-        
+
+        by_player.loc[inds, "points_stdev"] = (
+            (
+                by_player.loc[inds, "points_squared"]
+                - by_player.loc[inds, "points_rate"] ** 2
+            )
+            ** 0.5
+        ).astype(float)
+
         return by_player
 
-    def _simulate_average_team(self, pos_hists: Dict, num_sims: int) -> pd.DataFrame:
+    def _simulate_average_team(self, pos_hists: dict, num_sims: int) -> pd.DataFrame:
         """Simulate performance of average replacement-level team."""
         sim_scores = pd.DataFrame(
             {
@@ -695,7 +705,9 @@ class PlayerAnalyzer:
         )
         return sim_scores
 
-    def _calculate_player_war(self, players: pd.DataFrame, pos_hists: Dict, sim_scores: pd.DataFrame) -> pd.DataFrame:
+    def _calculate_player_war(
+        self, players: pd.DataFrame, pos_hists: dict, sim_scores: pd.DataFrame
+    ) -> pd.DataFrame:
         """Calculate WAR for each player."""
         player_sims = pd.DataFrame(
             {
@@ -709,16 +721,16 @@ class PlayerAnalyzer:
                 for ind in range(players.shape[0])
             }
         )
-        
+
         sim_scores = pd.merge(
             left=sim_scores, right=player_sims, left_index=True, right_index=True
         )
-        
+
         # Calculate WAR for each player
         for player in sim_scores.columns[10:]:
             if pd.isnull(player):
                 continue
-            
+
             cols = sim_scores.columns[:9].tolist()
             pos = players.loc[players.name == player, "position"].values[0]
             if pos in ["RB", "WR"]:
@@ -726,7 +738,7 @@ class PlayerAnalyzer:
             cols.pop(cols.index(pos))
             cols.append(player)
             sim_scores["Alt_Total"] = sim_scores[cols].sum(axis=1)
-            
+
             war_value = (
                 sum(
                     sim_scores.loc[: sim_scores.shape[0] // 2 - 1, "Alt_Total"].values
@@ -735,8 +747,8 @@ class PlayerAnalyzer:
                 / (sim_scores.shape[0] // 2)
                 - 0.5
             ) * 14
-            
+
             players.loc[players.name == player, "WAR"] = war_value
             del sim_scores["Alt_Total"]
-        
+
         return players

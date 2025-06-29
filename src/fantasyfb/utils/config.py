@@ -4,7 +4,6 @@ Configuration classes for the fantasy football package.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 import pandas as pd
 
@@ -27,7 +26,7 @@ class PlayerConfig:
     """Configuration for player analysis."""
 
     war_simulations: int = 10000
-    earliest: Dict[str, int] = field(
+    earliest: dict[str, int] = field(
         default_factory=lambda: {
             "QB": 202201,
             "RB": 202201,
@@ -37,7 +36,7 @@ class PlayerConfig:
             "DEF": 202201,
         }
     )
-    reference_games: Dict[str, int] = field(
+    reference_games: dict[str, int] = field(
         default_factory=lambda: {
             "QB": 15,
             "RB": 12,
@@ -117,7 +116,7 @@ class ScoringConfig:
     pts_allow_28_34: float = -1.0
     pts_allow_35_plus: float = -4.0
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert to dictionary format for compatibility."""
         return {
             "Pass Yds": self.pass_yds,
@@ -215,7 +214,7 @@ class LeagueConfig:
     playoff_weeks: int = 3
 
     # Default payouts (60/30/10 split)
-    default_payouts: List[float] = field(default_factory=lambda: [600.0, 300.0, 100.0])
+    default_payouts: list[float] = field(default_factory=lambda: [600.0, 300.0, 100.0])
 
     # League type
     league_type: str = "redraft"  # redraft, dynasty, bestball
