@@ -4,7 +4,7 @@ Player model - represents individual NFL players with their stats and projection
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 import pandas as pd
 
@@ -148,7 +148,7 @@ class Player:
         }
 
 
-def dataframe_to_players(df: pd.DataFrame) -> List[Player]:
+def dataframe_to_players(df: pd.DataFrame) -> list[Player]:
     """
     Convert a DataFrame of player data to a list of Player objects.
 
@@ -161,7 +161,7 @@ def dataframe_to_players(df: pd.DataFrame) -> List[Player]:
     return [Player.from_dataframe_row(row) for _, row in df.iterrows()]
 
 
-def players_to_dataframe(players: List[Player]) -> pd.DataFrame:
+def players_to_dataframe(players: list[Player]) -> pd.DataFrame:
     """
     Convert a list of Player objects to a DataFrame.
 

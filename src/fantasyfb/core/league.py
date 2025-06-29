@@ -5,7 +5,6 @@ Core League class - handles league settings, teams, and basic data loading.
 
 import datetime
 import logging
-from typing import Dict, List
 
 import pandas as pd
 
@@ -158,7 +157,7 @@ class League:
         return self.schedule
 
     def season_sims(
-        self, postseason: bool = True, payouts: List[float] = None
+        self, postseason: bool = True, payouts: list[float] = None
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Run season simulations.
@@ -174,7 +173,7 @@ class League:
             postseason=postseason, payouts=payouts or self.config.default_payouts
         )
 
-    def bestball_sims(self, payouts: List[float] = None) -> pd.DataFrame:
+    def bestball_sims(self, payouts: list[float] = None) -> pd.DataFrame:
         """Run best ball simulations."""
         return self.simulator.bestball_sims(
             payouts=payouts or self.config.default_payouts
@@ -219,6 +218,6 @@ class League:
         """Get the user's team name."""
         return self.team_name
 
-    def get_other_teams(self) -> List[Dict]:
+    def get_other_teams(self) -> list[dict]:
         """Get all other teams in the league."""
         return [team for team in self.teams if team["name"] != self.team_name]

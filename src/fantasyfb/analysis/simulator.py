@@ -4,7 +4,7 @@ Season Simulator - handles Monte Carlo simulations for fantasy seasons.
 """
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -39,9 +39,9 @@ class SeasonSimulator:
     def season_sims(
         self,
         postseason: bool = True,
-        payouts: List[float] = None,
-        fixed_winner: Optional[List] = None,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        payouts: list[float] = None,
+        fixed_winner: Optional[list] = None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Run full season Monte Carlo simulations.
 
@@ -82,7 +82,7 @@ class SeasonSimulator:
         logger.info("Season simulations completed")
         return schedule_results, standings_results
 
-    def bestball_sims(self, payouts: List[float] = None) -> pd.DataFrame:
+    def bestball_sims(self, payouts: list[float] = None) -> pd.DataFrame:
         """
         Run best ball simulations where optimal lineups are set automatically.
 
@@ -289,7 +289,7 @@ class SeasonSimulator:
         return schedule
 
     def _simulate_games(
-        self, schedule: pd.DataFrame, fixed_winner: Optional[List] = None
+        self, schedule: pd.DataFrame, fixed_winner: Optional[list] = None
     ) -> pd.DataFrame:
         """Run Monte Carlo simulation of all games."""
         # Replicate schedule for all simulations
@@ -328,7 +328,7 @@ class SeasonSimulator:
         return schedule_sims
 
     def _calculate_standings(
-        self, schedule_sims: pd.DataFrame, postseason: bool, payouts: List[float]
+        self, schedule_sims: pd.DataFrame, postseason: bool, payouts: list[float]
     ) -> pd.DataFrame:
         """Calculate season standings from game simulations."""
         # Convert to team-centric view
@@ -377,7 +377,7 @@ class SeasonSimulator:
         return standings
 
     def _simulate_playoffs(
-        self, standings: pd.DataFrame, schedule_sims: pd.DataFrame, payouts: List[float]
+        self, standings: pd.DataFrame, schedule_sims: pd.DataFrame, payouts: list[float]
     ) -> pd.DataFrame:
         """Simulate playoff outcomes."""
         # This would implement your existing playoff simulation logic
@@ -390,7 +390,7 @@ class SeasonSimulator:
         return standings
 
     def _simulate_bestball_season(
-        self, projections: pd.DataFrame, payouts: List[float]
+        self, projections: pd.DataFrame, payouts: list[float]
     ) -> pd.DataFrame:
         """Simulate best ball season with optimal lineup setting."""
         # Replicate projections for all simulations

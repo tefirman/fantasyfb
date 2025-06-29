@@ -6,7 +6,6 @@ Data Manager - handles all data loading, caching, and API interactions.
 import datetime
 import logging
 import os
-from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -34,7 +33,7 @@ class DataManager:
 
     def load_league_id(
         self, season: int, team_name: str = None
-    ) -> Tuple[str, List[Dict]]:
+    ) -> tuple[str, list[dict]]:
         """
         Load basic league information from Yahoo API.
 
@@ -64,7 +63,7 @@ class DataManager:
 
         return result
 
-    def load_league_settings(self, lg_id: str) -> Tuple[Dict, Dict, pd.DataFrame]:
+    def load_league_settings(self, lg_id: str) -> tuple[dict, dict, pd.DataFrame]:
         """
         Load league settings including scoring and roster configuration.
 
@@ -96,7 +95,7 @@ class DataManager:
 
         return result
 
-    def load_fantasy_teams(self, lg_id: str) -> List[Dict]:
+    def load_fantasy_teams(self, lg_id: str) -> list[dict]:
         """Load all fantasy teams in the league."""
         cache_key = f"fantasy_teams_{lg_id}"
         cached = self.cache.get_cached_data(cache_key, max_age_hours=24)
@@ -227,7 +226,7 @@ class DataManager:
         return processed_schedule
 
     def load_fantasy_schedule(
-        self, lg_id: str, teams: List[Dict], season: int, week: int
+        self, lg_id: str, teams: list[dict], season: int, week: int
     ) -> pd.DataFrame:
         """Load fantasy league schedule."""
         cache_key = f"fantasy_schedule_{lg_id}_{season}_{week}"
@@ -248,8 +247,8 @@ class DataManager:
         return self.yahoo_client.get_current_week(lg_id)
 
     def _select_league(
-        self, leagues_data: Dict, season: int, team_name: str
-    ) -> Tuple[str, List[Dict]]:
+        self, leagues_data: dict, season: int, team_name: str
+    ) -> tuple[str, list[dict]]:
         """Select the appropriate league from user's leagues."""
         # Implementation of your existing league selection logic
         # This would extract the right league based on team_name
@@ -281,7 +280,7 @@ class DataManager:
             f"Can't find a team by the name of {team_name} for the {season} season"
         )
 
-    def _process_settings(self, settings_raw: Dict) -> Dict:
+    def _process_settings(self, settings_raw: dict) -> dict:
         """Process raw Yahoo settings into clean format."""
         settings_content = settings_raw["fantasy_content"]["league"][1]["settings"][0]
 
@@ -306,7 +305,7 @@ class DataManager:
 
         return settings
 
-    def _process_scoring(self, settings_raw: Dict) -> Dict:
+    def _process_scoring(self, settings_raw: dict) -> dict:
         """Process scoring settings from raw Yahoo API response."""
         settings_content = settings_raw["fantasy_content"]["league"][1]["settings"][0]
 
@@ -369,7 +368,7 @@ class DataManager:
 
         return scoring
 
-    def _process_roster_spots(self, settings_raw: Dict) -> pd.DataFrame:
+    def _process_roster_spots(self, settings_raw: dict) -> pd.DataFrame:
         """Process roster spot configuration from raw Yahoo API response."""
         settings_content = settings_raw["fantasy_content"]["league"][1]["settings"][0]
 
@@ -390,7 +389,7 @@ class DataManager:
 
         return roster_spots
 
-    def _process_players(self, players_raw: List[Dict], rosters: Dict) -> pd.DataFrame:
+    def _process_players(self, players_raw: list[dict], rosters: dict) -> pd.DataFrame:
         """Process raw player data from Yahoo API into clean DataFrame format."""
 
         # Convert raw player data to DataFrame

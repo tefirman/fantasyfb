@@ -194,7 +194,7 @@ class TestRealFixtures:
         # Mock the League to use our mocked client instead of creating a real one
         with patch("src.fantasyfb.core.league.YahooClient") as mock_yahoo_class:
             mock_yahoo_class.return_value = mock_yahoo_client
-            
+
             with patch("src.fantasyfb.core.league.DataManager") as mock_dm_class:
                 mock_dm = Mock()
                 mock_dm_class.return_value = mock_dm

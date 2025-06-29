@@ -9,7 +9,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Dict, List
 
 import pandas as pd
 import yahoo_fantasy_api as yfa
@@ -153,7 +152,7 @@ class YahooClient:
                     logger.error(f"API call failed after {max_retries} attempts")
                     raise
 
-    def get_user_leagues(self) -> Dict:
+    def get_user_leagues(self) -> dict:
         """Get all NFL leagues for the authenticated user."""
         logger.info("Fetching user leagues...")
 
@@ -170,7 +169,7 @@ class YahooClient:
             self._current_lg_id = lg_id
         return self._lg
 
-    def get_league_settings(self, lg_id: str) -> Dict:
+    def get_league_settings(self, lg_id: str) -> dict:
         """Get league settings and scoring configuration."""
         logger.info(f"Fetching league settings for {lg_id}...")
 
@@ -180,7 +179,7 @@ class YahooClient:
 
         return self._safe_api_call(_get_settings)
 
-    def get_league_standings(self, lg_id: str) -> Dict:
+    def get_league_standings(self, lg_id: str) -> dict:
         """Get league standings."""
 
         def _get_standings():
@@ -189,7 +188,7 @@ class YahooClient:
 
         return self._safe_api_call(_get_standings)
 
-    def get_all_players(self, lg_id: str, injury_tries: int = 10) -> List[Dict]:
+    def get_all_players(self, lg_id: str, injury_tries: int = 10) -> list[dict]:
         """
         Get all NFL players eligible for the league.
 
@@ -230,7 +229,7 @@ class YahooClient:
         logger.info(f"Fetched {len(players)} players")
         return players
 
-    def _get_players_by_status(self, lg, status: str) -> List[Dict]:
+    def _get_players_by_status(self, lg, status: str) -> list[dict]:
         """Get players by availability status (T=Taken, A=Available)."""
         players = []
 
@@ -258,7 +257,7 @@ class YahooClient:
 
         return players
 
-    def _process_player_data(self, player_data: List[Dict]) -> Dict:
+    def _process_player_data(self, player_data: list[dict]) -> dict:
         """Process raw Yahoo player data into clean format."""
         vals = {}
 
@@ -280,7 +279,7 @@ class YahooClient:
 
         return vals
 
-    def get_league_rosters(self, lg_id: str, week: int) -> Dict[str, List[Dict]]:
+    def get_league_rosters(self, lg_id: str, week: int) -> dict[str, list[dict]]:
         """Get current rosters for all teams."""
         logger.info(f"Fetching all rosters for week {week}...")
 
@@ -320,7 +319,7 @@ class YahooClient:
         return rosters
 
     def get_league_schedule(
-        self, lg_id: str, teams: List[Dict], season: int, week: int
+        self, lg_id: str, teams: list[dict], season: int, week: int
     ) -> pd.DataFrame:
         """Get fantasy league schedule."""
         logger.info("Fetching league schedule...")
