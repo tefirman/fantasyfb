@@ -196,3 +196,6 @@ cython_debug/
 # Yahoo specific files
 oauth2.json
 cache/
+
+# Local data storage
+*.csv
