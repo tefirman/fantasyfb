@@ -28,6 +28,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import traceback
+from fantasy_scoring import FantasyScorer
+from projection_engine import ProjectionEngine
+from season_simulator import SeasonSimulator
 
 # Probably not smart long term, but doing it for now...
 import warnings
@@ -609,60 +612,8 @@ class League:
         """
         Calculates per-game fantasy points based on per-game statistics and provided scoring settings.
         """
-        offense = self.stats.loc[self.stats.position != "DEF"].reset_index(drop=True)
-        offense["points"] = (
-            offense["rush_yds"] * self.scoring["Rush Yds"]
-            + offense["rush_att"] * self.scoring["Rush Att"]
-            + offense["rush_td"] * self.scoring["Rush TD"]
-            + offense["rush_first_down"] * self.scoring["Rush 1D"]
-            + offense["rec"] * self.scoring["Rec"]
-            + offense["rec_yds"] * self.scoring["Rec Yds"]
-            + offense["rec_td"] * self.scoring["Rec TD"]
-            + offense["rec_first_down"] * self.scoring["Rec 1D"]
-            + offense["pass_yds"] * self.scoring["Pass Yds"]
-            + offense["pass_cmp"] * self.scoring["Pass Comp"]
-            + offense["pass_td"] * self.scoring["Pass TD"]
-            + offense["pass_first_down"] * self.scoring["Pass 1D"]
-            + offense["pass_int"] * self.scoring["Int Thrown"]
-            + offense["fumbles_lost"] * self.scoring["Fum Lost"]
-            + (offense["kick_ret_yds"] + offense["punt_ret_yds"]) * self.scoring["Ret Yds"]
-            + (offense["kick_ret_td"] + offense["punt_ret_td"]) * self.scoring["Ret TD"]
-            + offense["xpm"] * self.scoring["PAT Made"]
-            + offense["fgm"] * self.scoring["FG 0-19"]
-        )
-        tes = offense.position == 'TE'
-        offense.loc[tes,'points'] += offense.loc[tes,'rec'] * self.scoring['TE Rec Bonus'] + \
-        (offense.loc[tes,'rush_first_down'] + offense.loc[tes,'rec_first_down'] + \
-        offense.loc[tes,'pass_first_down']) * self.scoring['TE 1D Bonus']
-        offense.loc[offense.pass_yds >= 300,'points'] += self.scoring['Pass 300+']
-        offense.loc[offense.rush_yds >= 100,'points'] += self.scoring['Rush 100+']
-        offense.loc[offense.rec_yds >= 100,'points'] += self.scoring['Rec 100+']
-        defense = self.stats.loc[self.stats.position == "DEF"].reset_index(drop=True)
-        defense["points"] = (
-            defense["sacks"] * self.scoring["Sack"]
-            + defense["def_int"] * self.scoring["Int"]
-            + defense["fumbles_rec"] * self.scoring["Fum Rec"]
-            + (defense["def_int_td"] + defense['fumbles_rec_td'] 
-            + defense["kick_ret_td"] + defense["punt_ret_td"]) * self.scoring["Ret TD"]
-        )
-        defense.loc[defense.points_allowed == 0, "points"] += self.scoring["Pts Allow 0"]
-        defense.loc[
-            (defense.points_allowed >= 1) & (defense.points_allowed <= 6), "points"
-        ] += self.scoring["Pts Allow 1-6"]
-        defense.loc[
-            (defense.points_allowed >= 7) & (defense.points_allowed <= 13), "points"
-        ] += self.scoring["Pts Allow 7-13"]
-        defense.loc[
-            (defense.points_allowed >= 14) & (defense.points_allowed <= 20), "points"
-        ] += self.scoring["Pts Allow 14-20"]
-        defense.loc[
-            (defense.points_allowed >= 21) & (defense.points_allowed <= 27), "points"
-        ] += self.scoring["Pts Allow 21-27"]
-        defense.loc[
-            (defense.points_allowed >= 28) & (defense.points_allowed <= 34), "points"
-        ] += self.scoring["Pts Allow 28-34"]
-        defense.loc[(defense.points_allowed >= 35), "points"] += self.scoring["Pts Allow 35+"]
-        self.stats = pd.concat([offense,defense], ignore_index=True, sort=False)
+        scorer = FantasyScorer(self.scoring)
+        self.stats = scorer.calculate_points(self.stats)
     
     def load_stats(self, start: int, finish: int):
         """
@@ -1003,193 +954,85 @@ class League:
             reload (bool, optional): whether to reload the statistics dataframe, defaults to True.
         """
         as_of = self.season * 100 + self.week
-        if not hasattr(self,"stats") or reload:
+        if not hasattr(self, "stats") or reload:
             self.load_stats(min(self.earliest.values()), as_of - 1)
-        rel_stats = self.stats.copy()
-        for pos in self.earliest:
-            rel_stats = rel_stats.loc[(rel_stats["position"] != pos) | \
-            ((rel_stats.season*100 + rel_stats.week <= as_of - 1) & \
-            (rel_stats.season*100 + rel_stats.week >= self.earliest[pos]))].reset_index(drop=True)
-        rel_stats = pd.merge(left=rel_stats,right=self.basaloppstringtime,how='left',on='position')
-        rel_stats["game_factor"] = rel_stats["basal"] + rel_stats["opp_elo_weight"]*rel_stats["elo_diff"] \
-            + rel_stats["string_weight"]*(1 - rel_stats["string"])
-        rel_stats.loc[rel_stats.game_factor < 0.25,"game_factor"] = 0.25 # Setting lower limit for outliers
-        rel_stats['rel_points'] = rel_stats.points/rel_stats.game_factor
-        by_pos = pd.merge(
-            left=rel_stats.groupby("position")
-            .rel_points.mean()
-            .reset_index()
-            .rename(index=str, columns={"rel_points": "points_rate"}),
-            right=rel_stats.groupby("position")
-            .rel_points.std()
-            .reset_index()
-            .rename(index=str, columns={"rel_points": "points_stdev"}),
-            how="inner",
-            on="position",
+        
+        # Use the new ProjectionEngine
+        engine = ProjectionEngine(self.basaloppstringtime, self.reference_games)
+        projections = engine.calculate_projections(
+            self.stats, 
+            self.earliest, 
+            as_of,
+            self.nfl_schedule
         )
-        by_pos["player_id_sr"] = "avg_" + by_pos["position"]
-        for pos in self.reference_games:
-            rel_stats = pd.concat([rel_stats.loc[rel_stats.position != pos],\
-            rel_stats.loc[rel_stats.position == pos].groupby(["player_id_sr","position"])\
-            .head(self.reference_games[pos])],ignore_index=True)
-        rel_stats["weeks_ago"] = (
-            17 * (as_of // 100 - rel_stats.season) + as_of % 100 - rel_stats.week
-        )
-        rel_stats["time_factor"] = 1 - rel_stats.weeks_ago*rel_stats.time_scale
-        rel_stats = rel_stats.loc[rel_stats.time_factor > 0].reset_index(drop=True)
-        rel_stats = pd.merge(
-            left=rel_stats,
-            right=rel_stats.groupby(["player_id_sr","position"])
-            .agg({"time_factor": "sum", "name": "count"})
-            .rename(
-                columns={"name": "num_games", "time_factor": "time_factor_sum"}
-            )
-            .reset_index(),
-            how="inner",
-            on=["player_id_sr","position"],
-        )
-        rel_stats.time_factor = (
-            rel_stats.time_factor * rel_stats.num_games / rel_stats.time_factor_sum
-        )
-        rel_stats["weighted_points"] = rel_stats.rel_points * rel_stats.time_factor
-        by_player = pd.merge(
-            left=rel_stats.groupby(["player_id_sr","position"])
-            .weighted_points.mean()
-            .reset_index()
-            .rename(columns={"weighted_points": "points_rate"}),
-            right=rel_stats.groupby(["player_id_sr","position"])
-            .weighted_points.std()
-            .reset_index()
-            .rename(columns={"weighted_points": "points_stdev"}),
-            how="inner",
-            on=["player_id_sr","position"],
-        )
-        by_player = pd.merge(
-            left=by_player,
-            right=rel_stats.groupby(["player_id_sr","position"])
-            .size()
-            .to_frame("num_games")
-            .reset_index(),
-            how="inner",
-            on=["player_id_sr","position"],
-        )
-        by_player = pd.concat([by_player,
-            by_pos[["player_id_sr","position", "points_rate", "points_stdev"]]],
-            ignore_index=True,
-            sort=False,
-        )
-        by_player.points_stdev = by_player.points_stdev.fillna(0.0)
-        by_player = pd.merge(
-            left=by_player,
-            right=by_pos[["position", "points_rate", "points_stdev"]].rename(
-                columns={"points_rate": "pos_avg", "points_stdev": "pos_stdev"}
-            ),
-            how="inner",
-            on="position",
-        )
-        for pos in self.reference_games:
-            by_player.loc[by_player.position == pos,'ref_games'] = self.reference_games[pos]
-        inds = by_player.num_games < by_player.ref_games
-        by_player.loc[inds, "points_squared"] = (
-            by_player.loc[inds, "num_games"]
-            * (
-                by_player.loc[inds, "points_stdev"] ** 2
-                + by_player.loc[inds, "points_rate"] ** 2
-            )
-            + (by_player.loc[inds, "ref_games"] - by_player.loc[inds, "num_games"])
-            * (
-                by_player.loc[inds, "pos_stdev"] ** 2
-                + by_player.loc[inds, "pos_avg"] ** 2
-            )
-        ) / by_player.loc[inds, "ref_games"]
-        by_player.loc[inds, "points_rate"] = (
-            by_player.loc[inds, "num_games"] * by_player.loc[inds, "points_rate"]
-            + (by_player.loc[inds, "ref_games"] - by_player.loc[inds, "num_games"])
-            * by_player.loc[inds, "pos_avg"]
-        ) / by_player.loc[inds, "ref_games"]
-        by_player.loc[inds, "points_stdev"] = ((
-            by_player.loc[inds, "points_squared"]
-            - by_player.loc[inds, "points_rate"] ** 2
-        ) ** 0.5).astype(float)
-        by_player.player_id_sr = by_player.player_id_sr.fillna("")
-        league_avg = by_player.loc[by_player.player_id_sr.str.startswith("avg_")].reset_index(drop=True)
+        
+        # Separate average players and real players
+        league_avg = projections[projections['player_id_sr'].str.startswith('avg_')].copy()
         league_avg['string'] = 2.0
+        
+        # Merge projections with existing player metadata
         by_player = pd.merge(
-            left=by_player.sort_values(by='num_games',ascending=False)\
-            .drop_duplicates(subset=['player_id_sr'],keep='first',ignore_index=True),
-            right=self.players[
-                [
-                    "player_id_sr",
-                    "player_id",
-                    "status",
-                    "fantasy_team",
-                    "current_team",
-                    "position",
-                    "string",
-                    "until",
-                    "bye_week",
-                    "pct_rostered",
-                    "selected_position",
-                ]
-            ].drop_duplicates(),
+            projections[~projections['player_id_sr'].str.startswith('avg_')],
+            self.players[[
+                "player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
+                "position", "string", "until", "bye_week", "pct_rostered", "selected_position"
+            ]].drop_duplicates(),
             how="right",
-            on=["player_id_sr","position"],
+            on=["player_id_sr", "position"],
         )
+        
+        # Handle rookies (players not in projections) - merge with position averages
         rookies = pd.merge(
             left=by_player.loc[
                 by_player.num_games.isnull(),
-                [
-                    "player_id_sr",
-                    "player_id",
-                    "status",
-                    "fantasy_team",
-                    "current_team",
-                    "position",
-                    "string",
-                    "until",
-                    "bye_week",
-                    "pct_rostered",
-                    "selected_position",
-                ],
+                ["player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
+                "position", "string", "until", "bye_week", "pct_rostered", "selected_position"],
             ],
             right=league_avg[["position", "points_rate", "points_stdev"]],
             how="inner",
             on="position",
         )
+        
+        # Combine players with data and rookies
         by_player = by_player.loc[~by_player.num_games.isnull()]
-        by_player = pd.concat([by_player,
-            rookies[
-                [
-                    "player_id_sr",
-                    "player_id",
-                    "status",
-                    "fantasy_team",
-                    "current_team",
-                    "position",
-                    "points_rate",
-                    "points_stdev",
-                    "string",
-                    "until",
-                    "bye_week",
-                    "pct_rostered",
-                    "selected_position",
-                ]
-            ],
-            league_avg],
-            ignore_index=True,
-            sort=False,
+        by_player = pd.concat([
+            by_player[["player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
+                    "position", "points_rate", "points_stdev", "string", "until", 
+                    "bye_week", "pct_rostered", "selected_position"]],
+            rookies[["player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
+                    "position", "points_rate", "points_stdev", "string", "until", 
+                    "bye_week", "pct_rostered", "selected_position"]],
+            league_avg
+        ], ignore_index=True, sort=False)
+        
+        # Add back player names from NFL rosters
+        by_player = pd.merge(
+            left=by_player,
+            right=self.nfl_rosters[['player_id_sr','name']].drop_duplicates(subset=['player_id_sr'], keep='last'),
+            how='left',
+            on='player_id_sr'
         )
-        by_player = pd.merge(left=by_player,right=self.nfl_rosters[['player_id_sr','name']]\
-        .drop_duplicates(subset=['player_id_sr'],keep='last'),how='left',on='player_id_sr')
-        by_player = pd.merge(left=by_player,right=self.players[['player_id','name']]\
-        .rename(columns={'name':'yahoo_name'}).drop_duplicates(),how="left",on='player_id')
+        
+        # Add Yahoo names for players not found in NFL rosters
+        by_player = pd.merge(
+            left=by_player,
+            right=self.players[['player_id','name']].rename(columns={'name':'yahoo_name'}).drop_duplicates(),
+            how="left",
+            on='player_id'
+        )
         missing = by_player.name.isnull() & ~by_player.yahoo_name.isnull()
         by_player.loc[missing,'name'] = by_player.loc[missing,'yahoo_name']
         del by_player['yahoo_name']
+        
+        # Handle defense naming
         defenses = by_player.player_id_sr.isin(self.nfl_teams.real_abbrev.tolist())
         by_player.loc[defenses,'name'] = by_player.loc[defenses,'player_id_sr']
+        
+        # Handle average player naming
         avgs = by_player.player_id_sr.astype(str).str.startswith("avg_")
         by_player.loc[avgs,"name"] = "Average_" + by_player.loc[avgs,"position"]
+        
+        # Update current teams for players who changed teams mid-season
         teams_as_of = (
             self.stats.loc[self.stats.season * 100 + self.stats.week >= as_of]
             .sort_values(by=["season","week"],ascending=True)
@@ -1207,6 +1050,7 @@ class League:
         not_yet = ~by_player.actual_team.isnull()
         by_player.loc[not_yet,'current_team'] = by_player.loc[not_yet,'actual_team']
         del by_player['actual_team']
+        
         self.players = by_player
 
     def get_schedule(self):
@@ -1539,6 +1383,8 @@ class League:
             standings (pd.DataFrame): simulated results for the final season standings and playoff projections
         """
         self.refresh_oauth()
+        
+        # Calculate team projections for each week (your existing logic)
         self.players["points_var"] = self.players.points_stdev**2
         projections = pd.DataFrame(
             columns=["fantasy_team", "week", "points_avg", "points_var"]
@@ -1556,547 +1402,54 @@ class League:
             projections.loc[projections.week.isnull(), "week"] = week + 1
         projections["points_stdev"] = projections["points_var"] ** 0.5
         del self.players["points_var"]
-        schedule = pd.merge(
-            left=self.schedule.copy(),
-            right=projections.rename(
-                index=str,
-                columns={
-                    "fantasy_team": "team_1",
-                    "points_avg": "points_avg_1",
-                    "points_stdev": "points_stdev_1",
-                },
-            ),
-            how="left",
-            on=["week", "team_1"],
+        
+        # Prepare league settings for simulator
+        league_settings = {
+            'playoff_start_week': self.settings['playoff_start_week'],
+            'num_playoff_teams': self.settings['num_playoff_teams'],
+            'uses_playoff_reseeding': self.settings.get('uses_playoff_reseeding', False),
+            'num_teams': len(self.teams)
+        }
+        
+        # Use the new SeasonSimulator for regular season AND playoffs
+        simulator = SeasonSimulator(league_settings)
+        
+        schedule, standings = simulator.simulate_season(
+            player_projections=projections,
+            schedule_df=self.schedule,
+            num_sims=self.num_sims,
+            include_playoffs=postseason,  # Re-enable playoff simulation
+            payouts=payouts,
+            fixed_winner=fixed_winner
         )
-        schedule = pd.merge(
-            left=schedule,
-            right=projections.rename(
-                index=str,
-                columns={
-                    "fantasy_team": "team_2",
-                    "points_avg": "points_avg_2",
-                    "points_stdev": "points_stdev_2",
-                },
-            ),
-            how="left",
-            on=["week", "team_2"],
-        )
-        schedule["points_avg_1"] = schedule["points_avg_1"].fillna(0.0).astype(float)
-        schedule["points_avg_2"] = schedule["points_avg_2"].fillna(0.0).astype(float)
-        schedule["points_stdev_1"] = (
-            schedule["points_stdev_1"].fillna(0.0).astype(float)
-        )
-        schedule["points_stdev_2"] = (
-            schedule["points_stdev_2"].fillna(0.0).astype(float)
-        )
-        schedule["points_avg_1"] += schedule["score_1"].astype(float)
-        schedule["points_avg_2"] += schedule["score_2"].astype(float)
-        if fixed_winner:
-            if (
-                (schedule.week == fixed_winner[0])
-                & (schedule.team_1 == fixed_winner[1])
-            ).any():
-                winner, loser = "1", "2"
-            else:
-                winner, loser = "2", "1"
-            schedule.loc[
-                (schedule.week == fixed_winner[0])
-                & (schedule["team_" + winner] == fixed_winner[1]),
-                "points_avg_" + winner,
-            ] = 100.1
-            schedule.loc[
-                (schedule.week == fixed_winner[0])
-                & (schedule["team_" + winner] == fixed_winner[1]),
-                "points_avg_" + loser,
-            ] = 100.0
-            schedule.loc[
-                (schedule.week == fixed_winner[0])
-                & (schedule["team_" + winner] == fixed_winner[1]),
-                "points_stdev_" + winner,
-            ] = 0.0
-            schedule.loc[
-                (schedule.week == fixed_winner[0])
-                & (schedule["team_" + winner] == fixed_winner[1]),
-                "points_stdev_" + loser,
-            ] = 0.0
-        schedule_sims = pd.concat(
-            [schedule] * self.num_sims, ignore_index=True
-        )
-        schedule_sims["num_sim"] = schedule_sims.index // schedule.shape[0]
-        schedule_sims["sim_1"] = (
-            np.random.normal(loc=0, scale=1, size=schedule_sims.shape[0])
-            * schedule_sims["points_stdev_1"]
-            + schedule_sims["points_avg_1"]
-        ).astype(float)
-        schedule_sims["sim_2"] = (
-            np.random.normal(loc=0, scale=1, size=schedule_sims.shape[0])
-            * schedule_sims["points_stdev_2"]
-            + schedule_sims["points_avg_2"]
-        ).astype(float)
-        schedule_sims["win_1"] = (schedule_sims.sim_1 > schedule_sims.sim_2).astype(int)
-        schedule_sims["win_2"] = 1 - schedule_sims["win_1"]
-        standings = pd.concat([
-            schedule_sims[["num_sim", "week", "team_1", "sim_1", "win_1"]]
-            .rename(
-                columns={"team_1": "team", "win_1": "wins", "sim_1": "points"},
-            ),
-            schedule_sims[["num_sim", "week", "team_2", "sim_2", "win_2"]]
-            .rename(
-                columns={"team_2": "team", "win_2": "wins", "sim_2": "points"},
-            )],
-            ignore_index=True,
-        )
-        standings = (
-            standings.loc[standings.week < self.settings["playoff_start_week"]]
-            .groupby(["num_sim", "team"])
-            .sum(numeric_only=True)
-            .sort_values(by=["num_sim", "wins", "points"], ascending=False)
-            .reset_index()
-        )
-        standings.loc[
-            standings.index % len(self.teams) < self.settings["num_playoff_teams"],
-            "playoffs",
-        ] = 1
-        standings.loc[
-            standings.index % len(self.teams) >= self.settings["num_playoff_teams"],
-            "playoffs",
-        ] = 0
-        standings["playoff_bye"] = 0
-        if self.settings["num_playoff_teams"] == 6:
-            standings.loc[standings.index % len(self.teams) < 2, "playoff_bye"] = 1
-        algorithm = (
-            schedule.team_1.isin(["The Algorithm"]).any()
-            or schedule.team_2.isin(["The Algorithm"]).any()
-        )
-        if postseason:
-            standings["seed"] = standings.index % len(self.teams)
-            scores = pd.concat([schedule.loc[
-                    schedule.week >= self.settings["playoff_start_week"],
-                    ["week", "team_1", "score_1"],
-                ]
-                .rename(columns={"team_1": "team", "score_1": "score"}),
-                schedule.loc[
-                    schedule.week >= self.settings["playoff_start_week"],
-                    ["week", "team_2", "score_2"],
-                ].rename(columns={"team_2": "team", "score_2": "score"})],
-                ignore_index=True,
-                sort=False,
-            ).groupby(["week", "team"]).score.sum().reset_index()
-            playoffs = (
-                standings.loc[standings.seed < self.settings["num_playoff_teams"]]
-                .copy()
-                .reset_index()
+        
+        # Add back the 'me' column from original schedule
+        if 'me' in self.schedule.columns:
+            schedule = pd.merge(
+                schedule, 
+                self.schedule[['week', 'team_1', 'team_2', 'me']], 
+                on=['week', 'team_1', 'team_2'], 
+                how='left'
             )
-            if algorithm:
-                many_mile = (
-                    standings.loc[standings.seed >= self.settings["num_playoff_teams"]]
-                    .copy()
-                    .reset_index()
-                )
-            if self.settings["num_playoff_teams"] == 6:
-                playoffs = pd.merge(
-                    left=playoffs,
-                    right=scores.loc[
-                        scores.week == self.settings["playoff_start_week"],
-                        ["team", "score"],
-                    ],
-                    how="left",
-                    on="team",
-                )
-                playoffs.score = playoffs.score.fillna(0.0)
-                playoffs = pd.merge(
-                    left=playoffs,
-                    right=projections.loc[
-                        projections.week == self.settings["playoff_start_week"],
-                        ["fantasy_team", "points_avg", "points_stdev"],
-                    ].rename(columns={"fantasy_team": "team"}),
-                    how="left",
-                    on="team",
-                )
-                playoffs.points_avg = playoffs.points_avg.fillna(0.0)
-                playoffs.points_stdev = playoffs.points_stdev.fillna(0.0)
-                playoffs.loc[playoffs.seed == 0, "matchup"] = 0
-                playoffs.loc[playoffs.seed == 1, "matchup"] = 1
-                playoffs.loc[playoffs.seed.isin([2, 5]), "matchup"] = 2
-                playoffs.loc[playoffs.seed.isin([3, 4]), "matchup"] = 3
-                playoffs["sim"] = (
-                    np.random.normal(loc=0, scale=1, size=playoffs.shape[0])
-                    * playoffs.points_stdev
-                    + playoffs.points_avg
-                    + playoffs.score
-                )
-                playoffs = (
-                    playoffs.sort_values(
-                        by=["num_sim", "matchup", "sim"], ascending=[True, True, False]
-                    )
-                    .drop_duplicates(subset=["num_sim", "matchup"], keep="first")
-                    .reset_index(drop=True)
-                )
-                del (
-                    playoffs["matchup"],
-                    playoffs["sim"],
-                    playoffs["score"],
-                    playoffs["points_avg"],
-                    playoffs["points_stdev"],
-                )
-                if self.settings["uses_playoff_reseeding"]:
-                    playoffs = playoffs.sort_values(
-                        by=["num_sim", "seed"], ascending=True
-                    ).reset_index(drop=True)
-                if algorithm:
-                    many_mile = pd.merge(
-                        left=many_mile,
-                        right=scores.loc[
-                            scores.week == self.settings["playoff_start_week"],
-                            ["team", "score"],
-                        ],
-                        how="left",
-                        on="team",
-                    )
-                    many_mile.score = many_mile.score.fillna(0.0)
-                    many_mile = pd.merge(
-                        left=many_mile,
-                        right=projections.loc[
-                            projections.week == self.settings["playoff_start_week"],
-                            ["fantasy_team", "points_avg", "points_stdev"],
-                        ].rename(columns={"fantasy_team": "team"}),
-                        how="left",
-                        on="team",
-                    )
-                    many_mile.points_avg = many_mile.points_avg.fillna(0.0)
-                    many_mile.points_stdev = many_mile.points_stdev.fillna(0.0)
-                    many_mile.loc[many_mile.seed == 11, "matchup"] = 0
-                    many_mile.loc[many_mile.seed == 10, "matchup"] = 1
-                    many_mile.loc[many_mile.seed.isin([6, 9]), "matchup"] = 2
-                    many_mile.loc[many_mile.seed.isin([7, 8]), "matchup"] = 3
-                    many_mile["sim"] = (
-                        np.random.normal(loc=0, scale=1, size=many_mile.shape[0])
-                        * many_mile.points_stdev
-                        + many_mile.points_avg
-                        + many_mile.score
-                    )
-                    many_mile = many_mile.sort_values(
-                        by=["num_sim", "matchup", "sim"], ascending=True
-                    ).drop_duplicates(subset=["num_sim", "matchup"], keep="first")
-                    del (
-                        many_mile["matchup"],
-                        many_mile["sim"],
-                        many_mile["score"],
-                        many_mile["points_avg"],
-                        many_mile["points_stdev"],
-                    )
-            playoffs = pd.merge(
-                left=playoffs,
-                right=scores.loc[
-                    scores.week
-                    == self.settings["playoff_start_week"]
-                    + int(self.settings["num_playoff_teams"] == 6),
-                    ["team", "score"],
-                ],
-                how="left",
-                on="team",
-            )
-            playoffs.score = playoffs.score.fillna(0.0)
-            playoffs = pd.merge(
-                left=playoffs,
-                right=projections.loc[
-                    projections.week
-                    == self.settings["playoff_start_week"]
-                    + int(self.settings["num_playoff_teams"] == 6),
-                    ["fantasy_team", "points_avg", "points_stdev"],
-                ].rename(columns={"fantasy_team": "team"}),
-                how="left",
-                on="team",
-            )
-            playoffs.points_avg = playoffs.points_avg.fillna(0.0)
-            playoffs.points_stdev = playoffs.points_stdev.fillna(0.0)
-            playoffs["seed"] = playoffs.index % 4
-            playoffs.loc[playoffs.seed.isin([0, 3]), "matchup"] = 0
-            playoffs.loc[playoffs.seed.isin([1, 2]), "matchup"] = 1
-            playoffs["sim"] = (
-                np.random.normal(loc=0, scale=1, size=playoffs.shape[0])
-                * playoffs.points_stdev
-                + playoffs.points_avg
-                + playoffs.score
-            )
-            consolation = (
-                playoffs.sort_values(by=["num_sim", "matchup", "sim"], ascending=True)
-                .drop_duplicates(subset=["num_sim", "matchup"], keep="first")
-                .reset_index(drop=True)
-            )
-            playoffs = (
-                playoffs.sort_values(
-                    by=["num_sim", "matchup", "sim"], ascending=[True, True, False]
-                )
-                .drop_duplicates(subset=["num_sim", "matchup"], keep="first")
-                .reset_index(drop=True)
-            )
-            del (
-                playoffs["matchup"],
-                playoffs["sim"],
-                playoffs["score"],
-                playoffs["points_avg"],
-                playoffs["points_stdev"],
-                consolation["matchup"],
-                consolation["sim"],
-                consolation["score"],
-                consolation["points_avg"],
-                consolation["points_stdev"],
-            )
-            if algorithm:
-                many_mile = pd.merge(
-                    left=many_mile,
-                    right=scores.loc[
-                        scores.week
-                        == self.settings["playoff_start_week"]
-                        + int(self.settings["num_playoff_teams"] == 6),
-                        ["team", "score"],
-                    ],
-                    how="left",
-                    on="team",
-                )
-                many_mile.score = many_mile.score.fillna(0.0)
-                many_mile = pd.merge(
-                    left=many_mile,
-                    right=projections.loc[
-                        projections.week
-                        == self.settings["playoff_start_week"]
-                        + int(self.settings["num_playoff_teams"] == 6),
-                        ["fantasy_team", "points_avg", "points_stdev"],
-                    ].rename(columns={"fantasy_team": "team"}),
-                    how="left",
-                    on="team",
-                )
-                many_mile.points_avg = many_mile.points_avg.fillna(0.0)
-                many_mile.points_stdev = many_mile.points_stdev.fillna(0.0)
-                many_mile["seed"] = many_mile.index % 4
-                many_mile.loc[many_mile.seed.isin([0, 3]), "matchup"] = 0
-                many_mile.loc[many_mile.seed.isin([1, 2]), "matchup"] = 1
-                many_mile["sim"] = (
-                    np.random.normal(loc=0, scale=1, size=many_mile.shape[0])
-                    * many_mile.points_stdev
-                    + many_mile.points_avg
-                    + many_mile.score
-                )
-                many_mile = many_mile.sort_values(
-                    by=["num_sim", "matchup", "sim"], ascending=True
-                ).drop_duplicates(subset=["num_sim", "matchup"], keep="first")
-                del (
-                    many_mile["matchup"],
-                    many_mile["sim"],
-                    many_mile["score"],
-                    many_mile["points_avg"],
-                    many_mile["points_stdev"],
-                )
-            playoffs = pd.merge(
-                left=playoffs,
-                right=scores.loc[
-                    scores.week
-                    == self.settings["playoff_start_week"]
-                    + 1
-                    + int(self.settings["num_playoff_teams"] == 6),
-                    ["team", "score"],
-                ],
-                how="left",
-                on="team",
-            )
-            playoffs.score = playoffs.score.fillna(0.0)
-            playoffs = pd.merge(
-                left=playoffs,
-                right=projections.loc[
-                    projections.week
-                    == self.settings["playoff_start_week"]
-                    + 1
-                    + int(self.settings["num_playoff_teams"] == 6),
-                    ["fantasy_team", "points_avg", "points_stdev"],
-                ].rename(columns={"fantasy_team": "team"}),
-                how="left",
-                on="team",
-            )
-            playoffs.points_avg = playoffs.points_avg.fillna(0.0)
-            playoffs.points_stdev = playoffs.points_stdev.fillna(0.0)
-            playoffs["sim"] = (
-                np.random.normal(loc=0, scale=1, size=playoffs.shape[0])
-                * playoffs.points_stdev
-                + playoffs.points_avg
-                + playoffs.score
-            )
-            runner_up = playoffs.sort_values(
-                by=["num_sim", "sim"], ascending=True
-            ).drop_duplicates(subset=["num_sim"], keep="first")
-            winner = playoffs.sort_values(
-                by=["num_sim", "sim"], ascending=[True, False]
-            ).drop_duplicates(subset=["num_sim"], keep="first")
-            consolation = pd.merge(
-                left=consolation,
-                right=scores.loc[
-                    scores.week
-                    == self.settings["playoff_start_week"]
-                    + 1
-                    + int(self.settings["num_playoff_teams"] == 6),
-                    ["team", "score"],
-                ],
-                how="left",
-                on="team",
-            )
-            consolation.score = consolation.score.fillna(0.0)
-            consolation = pd.merge(
-                left=consolation,
-                right=projections.loc[
-                    projections.week
-                    == self.settings["playoff_start_week"]
-                    + 1
-                    + int(self.settings["num_playoff_teams"] == 6),
-                    ["fantasy_team", "points_avg", "points_stdev"],
-                ].rename(columns={"fantasy_team": "team"}),
-                how="inner",
-                on="team",
-            )
-            consolation["sim"] = (
-                np.random.normal(loc=0, scale=1, size=consolation.shape[0])
-                * consolation.points_stdev
-                + consolation.points_avg
-                + consolation.score
-            )
-            third = consolation.sort_values(
-                by=["num_sim", "sim"], ascending=[True, False]
-            ).drop_duplicates(subset=["num_sim"], keep="first")
-            if algorithm:
-                many_mile = pd.merge(
-                    left=many_mile,
-                    right=scores.loc[
-                        scores.week
-                        == self.settings["playoff_start_week"]
-                        + 1
-                        + int(self.settings["num_playoff_teams"] == 6),
-                        ["team", "score"],
-                    ],
-                    how="left",
-                    on="team",
-                )
-                many_mile.score = many_mile.score.fillna(0.0)
-                many_mile = pd.merge(
-                    left=many_mile,
-                    right=projections.loc[
-                        projections.week
-                        == self.settings["playoff_start_week"]
-                        + 1
-                        + int(self.settings["num_playoff_teams"] == 6),
-                        ["fantasy_team", "points_avg", "points_stdev"],
-                    ].rename(columns={"fantasy_team": "team"}),
-                    how="left",
-                    on="team",
-                )
-                many_mile.points_avg = many_mile.points_avg.fillna(0.0)
-                many_mile.points_stdev = many_mile.points_stdev.fillna(0.0)
-                many_mile["sim"] = (
-                    np.random.normal(loc=0, scale=1, size=many_mile.shape[0])
-                    * many_mile.points_stdev
-                    + many_mile.points_avg
-                    + many_mile.score
-                )
-                many_mile = many_mile.sort_values(
-                    by=["num_sim", "sim"], ascending=True
-                ).drop_duplicates(subset=["num_sim"], keep="first")
-            final_probs = pd.merge(
-                left=pd.merge(
-                    left=winner.groupby("team").size().to_frame("winner").reset_index(),
-                    right=runner_up.groupby("team")
-                    .size()
-                    .to_frame("runner_up")
-                    .reset_index(),
-                    how="outer",
-                    on="team",
-                ),
-                right=third.groupby("team").size().to_frame("third").reset_index(),
-                how="outer",
-                on="team",
-            )
-            if algorithm:
-                final_probs = pd.merge(
-                    left=final_probs,
-                    right=many_mile.groupby("team")
-                    .size()
-                    .to_frame("many_mile")
-                    .reset_index(),
-                    how="outer",
-                    on="team",
-                )
-                final_probs["many_mile"] /= many_mile.shape[0]
-                final_probs["many_mile"] = final_probs["many_mile"].fillna(0.0)
-            final_probs["winner"] /= winner.shape[0]
-            final_probs["runner_up"] /= runner_up.shape[0]
-            final_probs["third"] /= third.shape[0]
-            final_probs["winner"] = final_probs["winner"].fillna(0.0)
-            final_probs["runner_up"] = final_probs["runner_up"].fillna(0.0)
-            final_probs["third"] = final_probs["third"].fillna(0.0)
-        else:
-            final_probs = pd.DataFrame(
-                columns=["team", "winner", "runner_up", "third", "many_mile"]
-            )
-        schedule = (
-            schedule_sims.groupby(["week", "team_1", "team_2"]).mean(numeric_only=True).reset_index()
-        )
-        schedule["points_avg_1"] = round(schedule["points_avg_1"], 1)
-        schedule["points_stdev_1"] = round(schedule["points_stdev_1"], 1)
-        schedule["points_avg_2"] = round(schedule["points_avg_2"], 1)
-        schedule["points_stdev_2"] = round(schedule["points_stdev_2"], 1)
-        standings = pd.merge(
-            left=standings.groupby("team")
-            .mean()
-            .reset_index()
-            .rename(index=str, columns={"wins": "wins_avg", "points": "points_avg"}),
-            right=standings[["team", "wins", "points"]]
-            .groupby("team")
-            .std()
-            .reset_index()
-            .rename(
-                index=str, columns={"wins": "wins_stdev", "points": "points_stdev"}
-            ),
-            how="inner",
-            on="team",
-        )
-        standings = pd.merge(left=standings, right=final_probs, how="left", on="team")
-        standings["winner"] = standings["winner"].fillna(0.0)
-        standings["runner_up"] = standings["runner_up"].fillna(0.0)
-        standings["third"] = standings["third"].fillna(0.0)
-        if algorithm:
-            standings["many_mile"] = standings["many_mile"].fillna(0.0)
-        scores = pd.concat([schedule_sims[["team_1", "sim_1"]].rename(columns={"team_1": "team", "sim_1": "sim"}),
-        schedule_sims[["team_2", "sim_2"]].rename(columns={"team_2": "team", "sim_2": "sim"})],ignore_index=True).groupby("team")
-        standings = pd.merge(
-            left=standings,
-            right=scores.sim.mean()
-            .reset_index()
-            .rename(columns={"sim": "per_game_avg"}),
-            how="inner",
-            on="team",
-        )
-        standings = pd.merge(
-            left=standings,
-            right=scores.sim.std()
-            .reset_index()
-            .rename(columns={"sim": "per_game_stdev"}),
-            how="inner",
-            on="team",
-        )
-        standings["per_game_fano"] = (
-            standings["per_game_stdev"] / standings["per_game_avg"]
-        )
-        standings = standings.sort_values(
-            by=["winner" if postseason else "playoffs"]
-            + (["many_mile"] if "many_mile" in standings.columns.tolist() else []),
-            ascending=[False]
-            + ([True] if "many_mile" in standings.columns.tolist() else []),
-        )
-        if postseason:
-            standings["earnings"] = round(
-                standings["winner"] * payouts[0]
-                + standings["runner_up"] * payouts[1]
-                + standings["third"] * payouts[2],
-                2,
-            )
+            schedule['me'] = schedule['me'].fillna(False)
+        
+        # Add per-game statistics (your existing logic)
+        scores = pd.concat([
+            schedule[["team_1", "sim_1"]].rename(columns={"team_1": "team", "sim_1": "sim"}),
+            schedule[["team_2", "sim_2"]].rename(columns={"team_2": "team", "sim_2": "sim"})
+        ], ignore_index=True).groupby("team")
+        
+        per_game_stats = pd.DataFrame({
+            'team': scores.groups.keys(),
+            'per_game_avg': [scores.get_group(team)['sim'].mean() for team in scores.groups.keys()],
+            'per_game_stdev': [scores.get_group(team)['sim'].std() for team in scores.groups.keys()]
+        })
+        per_game_stats["per_game_fano"] = per_game_stats["per_game_stdev"] / per_game_stats["per_game_avg"]
+        
+        # Merge per-game stats into standings
+        standings = pd.merge(standings, per_game_stats, on='team', how='left')
+        
+        # Round values to match your existing format
         standings["wins_avg"] = round(standings["wins_avg"], 3)
         standings["wins_stdev"] = round(standings["wins_stdev"], 3)
         standings["points_avg"] = round(standings["points_avg"], 1)
@@ -2104,6 +1457,13 @@ class League:
         standings["per_game_avg"] = round(standings["per_game_avg"], 1)
         standings["per_game_stdev"] = round(standings["per_game_stdev"], 1)
         standings["per_game_fano"] = round(standings["per_game_fano"], 3)
+        
+        # Round schedule values
+        schedule["points_avg_1"] = round(schedule["points_avg_1"], 1)
+        schedule["points_stdev_1"] = round(schedule["points_stdev_1"], 1)
+        schedule["points_avg_2"] = round(schedule["points_avg_2"], 1)
+        schedule["points_stdev_2"] = round(schedule["points_stdev_2"], 1)
+        
         return schedule, standings
 
     def war_sim(self):
