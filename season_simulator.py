@@ -112,26 +112,36 @@ class SeasonSimulator:
             
             # Semifinals (week 2) 
             semifinal_week = self.settings['playoff_start_week'] + 1
-            finalists = self._simulate_6_team_semifinals(
+            finalists, semifinal_losers = self._simulate_6_team_semifinals(
                 semifinalists, projections_df, semifinal_week
             )
-            
+
             # Championship (week 3)
             championship_week = self.settings['playoff_start_week'] + 2
             winners = self._simulate_championship(finalists, projections_df, championship_week)
-            
+
+            # Third place game (same week as championship)
+            third_place_winners = self._simulate_third_place_game(
+                semifinal_losers, projections_df, championship_week
+            )
+
             # Get runners-up (finalists who didn't win)
             runners_up = finalists[~finalists.index.isin(winners.index)]
             
         else:
             # 4-team playoff: Semifinals -> Championship
             semifinal_week = self.settings['playoff_start_week']
-            finalists = self._simulate_4_team_semifinals(
+            finalists, semifinal_losers = self._simulate_4_team_semifinals(
                 playoff_teams, projections_df, semifinal_week
             )
             
             championship_week = self.settings['playoff_start_week'] + 1
             winners = self._simulate_championship(finalists, projections_df, championship_week)
+            
+            # Third place game
+            third_place_winners = self._simulate_third_place_game(
+                semifinal_losers, projections_df, championship_week
+            )
             
             runners_up = finalists[~finalists.index.isin(winners.index)]
         
@@ -149,6 +159,7 @@ class SeasonSimulator:
         results = {
             'winners': winners.groupby('team').size() / total_sims,
             'runners_up': runners_up.groupby('team').size() / total_sims,
+            'third_place': third_place_winners.groupby('team').size() / total_sims,
             'many_mile_losers': many_mile_probs
         }
         
@@ -406,9 +417,10 @@ class SeasonSimulator:
         return pd.DataFrame(winners)
     
     def _simulate_6_team_semifinals(self, teams_df: pd.DataFrame,
-                                   projections_df: pd.DataFrame, week: int) -> pd.DataFrame:
+                                   projections_df: pd.DataFrame, week: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Simulate 6-team playoff semifinals."""
         winners = []
+        losers = []
         
         for sim_num in teams_df['num_sim'].unique():
             sim_teams = teams_df[teams_df['num_sim'] == sim_num].copy()
@@ -428,14 +440,20 @@ class SeasonSimulator:
                 winner1 = self._simulate_matchup_with_projections(matchup1, week_projections)
                 winner2 = self._simulate_matchup_with_projections(matchup2, week_projections)
                 
+                # Track losers for third place game
+                loser1 = matchup1[~matchup1.index.isin([matchup1[matchup1['team'] == winner1['team']].index[0]])].iloc[0].to_dict()
+                loser2 = matchup2[~matchup2.index.isin([matchup2[matchup2['team'] == winner2['team']].index[0]])].iloc[0].to_dict()
+                
                 winners.extend([winner1, winner2])
+                losers.extend([loser1, loser2])
         
-        return pd.DataFrame(winners)
+        return pd.DataFrame(winners), pd.DataFrame(losers)
     
     def _simulate_4_team_semifinals(self, playoff_teams: pd.DataFrame,
-                                   projections_df: pd.DataFrame, week: int) -> pd.DataFrame:
+                                   projections_df: pd.DataFrame, week: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Simulate 4-team playoff semifinals."""
         winners = []
+        losers = []
         
         for sim_num in playoff_teams['num_sim'].unique():
             sim_teams = playoff_teams[playoff_teams['num_sim'] == sim_num].copy()
@@ -451,9 +469,14 @@ class SeasonSimulator:
                 winner1 = self._simulate_matchup_with_projections(matchup1, week_projections)
                 winner2 = self._simulate_matchup_with_projections(matchup2, week_projections)
                 
+                # Track losers for third place game
+                loser1 = matchup1[~matchup1.index.isin([matchup1[matchup1['team'] == winner1['team']].index[0]])].iloc[0].to_dict()
+                loser2 = matchup2[~matchup2.index.isin([matchup2[matchup2['team'] == winner2['team']].index[0]])].iloc[0].to_dict()
+                
                 winners.extend([winner1, winner2])
+                losers.extend([loser1, loser2])
         
-        return pd.DataFrame(winners)
+        return pd.DataFrame(winners), pd.DataFrame(losers)
     
     def _simulate_championship(self, finalists: pd.DataFrame,
                               projections_df: pd.DataFrame, week: int) -> pd.DataFrame:
@@ -469,6 +492,21 @@ class SeasonSimulator:
                 winners.append(winner)
         
         return pd.DataFrame(winners)
+    
+    def _simulate_third_place_game(self, semifinal_losers: pd.DataFrame,
+                                   projections_df: pd.DataFrame, week: int) -> pd.DataFrame:
+        """Simulate third place game between semifinal losers."""
+        third_place_winners = []
+        
+        for sim_num in semifinal_losers['num_sim'].unique():
+            sim_teams = semifinal_losers[semifinal_losers['num_sim'] == sim_num]
+            
+            if len(sim_teams) >= 2:
+                week_projections = projections_df[projections_df['week'] == week]
+                winner = self._simulate_matchup_with_projections(sim_teams, week_projections)
+                third_place_winners.append(winner)
+        
+        return pd.DataFrame(third_place_winners)
     
     def _simulate_matchup_with_projections(self, teams_df: pd.DataFrame, 
                                          week_projections: pd.DataFrame) -> Dict:
@@ -533,7 +571,7 @@ class SeasonSimulator:
         if playoff_results:
             standings['winner'] = standings['team'].map(playoff_results.get('winners', {})).fillna(0.0)
             standings['runner_up'] = standings['team'].map(playoff_results.get('runners_up', {})).fillna(0.0)
-            standings['third'] = 0.0  # Would need third place game simulation
+            standings['third'] = standings['team'].map(playoff_results.get('third_place', {})).fillna(0.0)
             
             # Convert many_mile_losers to dict if it's a pandas Series
             many_mile_dict = playoff_results.get('many_mile_losers', {})
