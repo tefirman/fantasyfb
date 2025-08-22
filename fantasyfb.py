@@ -11,27 +11,22 @@
 
 import pandas as pd
 import os
-import shutil
 import numpy as np
 import sportsref_nfl as sr
 import time
 import datetime
-from pytz import timezone
 import optparse
-from yahoo_oauth import OAuth2
-import yahoo_fantasy_api as yfa
-import json
 import smtplib, ssl
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from dotenv import load_dotenv
 import traceback
 from fantasy_scoring import FantasyScorer
 from projection_engine import ProjectionEngine
 from season_simulator import SeasonSimulator
 from yahoo_client import YahooFantasyClient
+from excel_exporter import FantasyExcelExporter
 
 # Probably not smart long term, but doing it for now...
 import warnings
@@ -2143,63 +2138,6 @@ class League:
         )
 
 
-def excelAutofit(df: pd.DataFrame, name: str, writer: pd.ExcelWriter, freeze_cols: int = 1):
-    """
-    Writes the provided dataframe to a new tab in an excel spreadsheet 
-    with the columns autofitted and autoformatted.
-
-    Args:
-        df (pd.DataFrame): dataframe to print to the excel spreadsheet.  
-        name (str): name of the new tab to be added.  
-        writer (pd.ExcelWriter): ExcelWriter object representing the excel spreadsheet.
-
-    Returns:
-        pd.ExcelWriter: same excel spreadsheet provided originally with the new tab added.
-    """
-    f = writer.book.add_format()
-    f.set_align("center")
-    f.set_align("vcenter")
-    m = writer.book.add_format({"num_format": "$0.00"})
-    m.set_align("center")
-    m.set_align("vcenter")
-    p = writer.book.add_format({"num_format": "0.0%"})
-    p.set_align("center")
-    p.set_align("vcenter")
-    df.to_excel(writer, sheet_name=name, index=False)
-    for idx, col in enumerate(df):
-        series = df[col]
-        max_len = min(
-            max((series.astype(str).map(len).max(), len(str(series.name)))) + 1, 50
-        )
-        if "earnings" in col or (name == "Deltas" and col != "team"):
-            writer.sheets[name].set_column(idx, idx, max_len, m)
-        elif "per_game_" in col or col.endswith("_factor"):
-            writer.sheets[name].set_column(idx, idx, max_len, f, {"hidden": True})
-        elif col.replace("my_", "").replace("their_", "").replace("_delta", "").replace(
-            "_1", ""
-        ).replace("_2", "") in [
-            "playoffs",
-            "playoff_bye",
-            "winner",
-            "runner_up",
-            "third",
-            "many_mile",
-            "pct_rostered",
-        ]:
-            writer.sheets[name].set_column(idx, idx, max_len, p)
-        else:
-            writer.sheets[name].set_column(idx, idx, max_len, f)
-    writer.sheets[name].autofilter(
-        "A1:"
-        + (
-            chr(64 + (df.shape[1] - 1) // 26) + chr(65 + (df.shape[1] - 1) % 26)
-        ).replace("@", "")
-        + str(df.shape[0] + 1)
-    )
-    writer.sheets[name].freeze_panes(1, freeze_cols)
-    return writer
-
-
 def sendEmail(subject: str, body: str, address: str, filename: str = None):
     """
     Sends an email to the address provided with whichever subject, body, and attachements desired.
@@ -2412,131 +2350,25 @@ def main():
         reference_games=options.games,
         basaloppstringtime=options.basaloppstringtime,
     )
-    # # Assessing more complex trades...
-    # league.players.loc[league.players.name.isin(['Travis Kelce']),'fantasy_team'] = "The Algorithm"
-    # league.players.loc[league.players.name.isin(['Mike Evans','AJ Dillon']),'fantasy_team'] = "Football Cream"
-    writer = pd.ExcelWriter(
-        options.output
-        + "FantasyFootballProjections_{}Week{}{}.xlsx".format(
-            datetime.datetime.now().strftime("%A"), league.week, "_BestBall" if options.bestball else ""
-        ),
-        engine="xlsxwriter",
+    # Create Excel exporter
+    excel_file = options.output + "FantasyFootballProjections_{}Week{}{}.xlsx".format(
+        datetime.datetime.now().strftime("%A"), league.week, "_BestBall" if options.bestball else ""
     )
-    writer.book.add_format({"align": "vcenter"})
+    exporter = FantasyExcelExporter(excel_file)
 
     rosters = (
         league.players.loc[~league.players.fantasy_team.isnull()]
         .sort_values(by=["fantasy_team", "WAR"], ascending=[True, False])
         .copy()
     )
-    for col in [
-        "points_avg",
-        "points_stdev",
-        "WAR",
-        "game_factor",
-        "opp_factor",
-        "string_factor",
-    ]:
-        rosters[col] = round(rosters[col].astype(float), 3)
-    writer = excelAutofit(
-        rosters[
-            [
-                "name",
-                "position",
-                "current_team",
-                "points_avg",
-                "points_stdev",
-                "WAR",
-                "fantasy_team",
-                "num_games",
-                "game_factor",
-                "opp_factor",
-                "string_factor",
-                "status",
-                "bye_week",
-                "until",
-                "starter",
-                "injured",
-                "pct_rostered",
-            ]
-        ],
-        "Rosters",
-        writer,
-    )
-    writer.sheets["Rosters"].conditional_format(
-        "F2:F" + str(rosters.shape[0] + 1),
-        {
-            "type": "3_color_scale",
-            "min_color": "#FF6347",
-            "mid_color": "#FFD700",
-            "max_color": "#3CB371",
-        },
-    )
+    exporter.export_rosters(rosters)
+
     available = league.players.loc[
         league.players.fantasy_team.isnull()
         & (league.players.until.isnull() | (league.players.until < 17))
     ].sort_values(by="WAR", ascending=False)
     del available["fantasy_team"]
-    for col in [
-        "points_avg",
-        "points_stdev",
-        "WAR",
-        "game_factor",
-        "opp_factor",
-        "string_factor",
-    ]:
-        available[col] = round(available[col].astype(float), 3)
-    writer = excelAutofit(
-        available[
-            [
-                "name",
-                "position",
-                "current_team",
-                "points_avg",
-                "points_stdev",
-                "WAR",
-                "num_games",
-                "game_factor",
-                "opp_factor",
-                "string_factor",
-                "status",
-                "bye_week",
-                "until",
-                "pct_rostered",
-            ]
-        ],
-        "Available",
-        writer,
-    )
-    writer.sheets["Available"].conditional_format(
-        "F2:F" + str(available.shape[0] + 1),
-        {
-            "type": "3_color_scale",
-            "min_color": "#FF6347",
-            "mid_color": "#FFD700",
-            "max_color": "#3CB371",
-        },
-    )
-
-    # # ASSESS WAR VALUES FOR EACH TEAM'S STARTERS!!!
-    # war_inds = rosters.starter & ~rosters.position.isin(["DEF","K"])
-    # war_vals = pd.merge(left=rosters.loc[war_inds].groupby(["fantasy_team","position"]).WAR.mean().unstack().reset_index(),\
-    # right=rosters.loc[war_inds].groupby("fantasy_team").WAR.mean().reset_index().rename(columns={"WAR":"Overall"}),how='inner',on='fantasy_team')
-    # print(war_vals[["fantasy_team","QB","WR","RB"]].set_index('fantasy_team').T.corr())
-    # for col in war_vals.columns:
-    #     if col != "fantasy_team":
-    #         war_vals[col] = round(war_vals[col],3)
-    # writer = excelAutofit(war_vals,"Team WAR",writer)
-    # writer.sheets["Team WAR"].conditional_format(
-    #     "B2:F" + str(rosters.shape[0] + 1),
-    #     {
-    #         "type": "3_color_scale",
-    #         "min_color": "#FF6347",
-    #         "mid_color": "#FFD700",
-    #         "max_color": "#3CB371",
-    #     },
-    # )
-    # # ASSESS WAR VALUES FOR EACH TEAM'S STARTERS!!!
+    exporter.export_available(available)
 
     if options.bestball:
         standings_sim = league.bestball_sims(payouts=options.payouts)
@@ -2570,89 +2402,9 @@ def main():
                 + (["many_mile"] if league.name == "The Algorithm" else [])
             ].to_string(index=False)
         )
-        writer = excelAutofit(
-            schedule_sim[
-                [
-                    "week",
-                    "team_1",
-                    "team_2",
-                    "win_1",
-                    "win_2",
-                    "points_avg_1",
-                    "points_stdev_1",
-                    "points_avg_2",
-                    "points_stdev_2",
-                    "me",
-                ]
-            ],
-            "Schedule",
-            writer,
-            3,
-        )
-        writer.sheets["Schedule"].conditional_format(
-            "D2:E" + str(schedule_sim.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-    writer = excelAutofit(
-        standings_sim[
-            [
-                "team",
-                "wins_avg",
-                "wins_stdev",
-                "points_avg",
-                "points_stdev",
-            ]
-            + ([
-                "per_game_avg",
-                "per_game_stdev",
-                "per_game_fano",
-            ] if not options.bestball else []) 
-            + [
-                "playoffs",
-                "playoff_bye",
-                "winner",
-                "runner_up",
-                "third",
-                "earnings",
-            ]
-            + (["many_mile"] if league.name == "The Algorithm" and not options.bestball else [])
-        ],
-        "Standings",
-        writer,
-    )
-    writer.sheets["Standings"].conditional_format(
-        "I2:M" + str(standings_sim.shape[0] + 1),
-        {
-            "type": "3_color_scale",
-            "min_color": "#FF6347",
-            "mid_color": "#FFD700",
-            "max_color": "#3CB371",
-        },
-    )
-    writer.sheets["Standings"].conditional_format(
-        "N2:N" + str(standings_sim.shape[0] + 1),
-        {
-            "type": "3_color_scale",
-            "min_color": "#FF6347",
-            "mid_color": "#FFD700",
-            "max_color": "#3CB371",
-        },
-    )
-    if options.name == "The Algorithm":
-        writer.sheets["Standings"].conditional_format(
-            "O2:O" + str(standings_sim.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "max_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "min_color": "#3CB371",
-            },
-        )
+        exporter.export_schedule(schedule_sim)
+    has_many_mile = league.name == "The Algorithm" and not options.bestball
+    exporter.export_standings(standings_sim, has_many_mile)
 
     if options.pickups:
         pickups = league.possible_pickups(
@@ -2664,59 +2416,7 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        writer = excelAutofit(
-            pickups[
-                [
-                    "player_to_drop",
-                    "player_to_add",
-                    "wins_avg",
-                    "wins_stdev",
-                    "points_avg",
-                    "points_stdev",
-                    "per_game_avg",
-                    "per_game_stdev",
-                    "per_game_fano",
-                    "playoffs",
-                    "playoff_bye",
-                    "winner",
-                    "runner_up",
-                    "third",
-                    "earnings",
-                ]
-                + (["many_mile"] if options.name == "The Algorithm" and not options.bestball else [])
-            ],
-            "Pickups",
-            writer,
-            2,
-        )
-        writer.sheets["Pickups"].conditional_format(
-            "J2:N" + str(pickups.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        writer.sheets["Pickups"].conditional_format(
-            "O2:O" + str(pickups.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        if options.name == "The Algorithm":
-            writer.sheets["Pickups"].conditional_format(
-                "P2:P" + str(pickups.shape[0] + 1),
-                {
-                    "type": "3_color_scale",
-                    "max_color": "#FF6347",
-                    "mid_color": "#FFD700",
-                    "min_color": "#3CB371",
-                },
-            )
+        exporter.export_analysis(pickups, "Pickups", freeze_cols=2, has_many_mile=has_many_mile)
 
     if options.adds:
         adds = league.possible_adds(
@@ -2725,114 +2425,14 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        writer = excelAutofit(
-            adds[
-                [
-                    "player_to_add",
-                    "wins_avg",
-                    "wins_stdev",
-                    "points_avg",
-                    "points_stdev",
-                    "per_game_avg",
-                    "per_game_stdev",
-                    "per_game_fano",
-                    "playoffs",
-                    "playoff_bye",
-                    "winner",
-                    "runner_up",
-                    "third",
-                    "earnings",
-                ]
-                + (["many_mile"] if options.name == "The Algorithm" and not options.bestball else [])
-            ],
-            "Adds",
-            writer,
-        )
-        writer.sheets["Adds"].conditional_format(
-            "J2:N" + str(adds.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        writer.sheets["Adds"].conditional_format(
-            "O2:O" + str(adds.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        if options.name == "The Algorithm":
-            writer.sheets["Adds"].conditional_format(
-                "P2:P" + str(adds.shape[0] + 1),
-                {
-                    "type": "3_color_scale",
-                    "max_color": "#FF6347",
-                    "mid_color": "#FFD700",
-                    "min_color": "#3CB371",
-                },
-            )
+        exporter.export_analysis(adds, "Adds", has_many_mile=has_many_mile)
 
     if options.drops:
         drops = league.possible_drops(
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        writer = excelAutofit(
-            drops[
-                [
-                    "player_to_drop",
-                    "wins_avg",
-                    "wins_stdev",
-                    "points_avg",
-                    "points_stdev",
-                    "per_game_avg",
-                    "per_game_stdev",
-                    "per_game_fano",
-                    "playoffs",
-                    "playoff_bye",
-                    "winner",
-                    "runner_up",
-                    "third",
-                    "earnings",
-                ]
-                + (["many_mile"] if options.name == "The Algorithm" and not options.bestball else [])
-            ],
-            "Drops",
-            writer,
-        )
-        writer.sheets["Drops"].conditional_format(
-            "J2:N" + str(drops.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        writer.sheets["Drops"].conditional_format(
-            "O2:O" + str(drops.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        if options.name == "The Algorithm":
-            writer.sheets["Drops"].conditional_format(
-                "P2:P" + str(drops.shape[0] + 1),
-                {
-                    "type": "3_color_scale",
-                    "max_color": "#FF6347",
-                    "mid_color": "#FFD700",
-                    "min_color": "#3CB371",
-                },
-            )
+        exporter.export_analysis(drops, "Drops", has_many_mile=has_many_mile)
 
     if options.trades or options.given:
         if not options.trades:
@@ -2847,95 +2447,13 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        writer = excelAutofit(
-            trades[
-                [
-                    "player_to_trade_away",
-                    "player_to_trade_for",
-                    "their_team",
-                    "my_wins_avg",
-                    "my_wins_stdev",
-                    "my_points_avg",
-                    "my_points_stdev",
-                    "my_per_game_avg",
-                    "my_per_game_stdev",
-                    "my_per_game_fano",
-                    "my_playoffs",
-                    "my_playoff_bye",
-                    "my_winner",
-                    "my_runner_up",
-                    "my_third",
-                    "my_earnings",
-                    "their_wins_avg",
-                    "their_wins_stdev",
-                    "their_points_avg",
-                    "their_points_stdev",
-                    "their_per_game_avg",
-                    "their_per_game_stdev",
-                    "their_per_game_fano",
-                    "their_playoffs",
-                    "their_playoff_bye",
-                    "their_winner",
-                    "their_runner_up",
-                    "their_third",
-                    "their_earnings",
-                ]
-            ],
-            "Trades",
-            writer,
-            3,
-        )
-        writer.sheets["Trades"].conditional_format(
-            "K2:O" + str(trades.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        writer.sheets["Trades"].conditional_format(
-            "P2:P" + str(trades.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        writer.sheets["Trades"].conditional_format(
-            "X2:AB" + str(trades.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
-        writer.sheets["Trades"].conditional_format(
-            "AC2:AC" + str(trades.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
+        exporter.export_analysis(trades, "Trades", freeze_cols=3, has_many_mile=False)
 
     if options.deltas:
         deltas = league.perGameDelta(payouts=options.payouts)
-        writer = excelAutofit(deltas, "Deltas", writer)
-        writer.sheets["Deltas"].conditional_format(
-            "B2:" + chr(ord("A") + deltas.shape[1]) + str(deltas.shape[0] + 1),
-            {
-                "type": "3_color_scale",
-                "min_color": "#FF6347",
-                "mid_color": "#FFD700",
-                "max_color": "#3CB371",
-            },
-        )
+        exporter.export_deltas(deltas)
 
-    writer.close()
+    exporter.close()
     os.system(
         'touch -t {} "{}"'.format(
             datetime.datetime.now().strftime("%Y%m%d%H%M"),
