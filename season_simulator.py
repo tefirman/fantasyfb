@@ -57,8 +57,6 @@ class SeasonSimulator:
         Returns:
             Tuple of (schedule_results, standings_results) DataFrames
         """
-        print(f"DEBUG: Starting season simulation with {num_sims} sims, playoffs={include_playoffs}")
-        
         # Merge projections with schedule
         schedule_with_projections = self._merge_schedule_projections(schedule_df, player_projections)
         
@@ -90,8 +88,6 @@ class SeasonSimulator:
                           projections_df: pd.DataFrame,
                           payouts: List[float]) -> Dict[str, pd.DataFrame]:
         """Simulate playoff brackets and determine final rankings."""
-        print("=== DEBUG: Starting playoff simulation ===")
-        
         # Get playoff teams for each simulation (0-based indexing: 0-5)
         playoff_teams = standings_df[standings_df['playoffs'] == 1].copy()
         playoff_teams['seed'] = playoff_teams.index % self.settings['num_playoff_teams']
@@ -101,26 +97,13 @@ class SeasonSimulator:
         total_teams = self.settings.get('num_teams', 12)
         consolation_teams['seed'] = consolation_teams.index % total_teams
         
-        print(f"DEBUG: Found {len(playoff_teams)} playoff team entries")
-        print(f"DEBUG: Found {len(consolation_teams)} consolation team entries")
-        print(f"DEBUG: Playoff seeds: {sorted(playoff_teams['seed'].unique())}")
-        print(f"DEBUG: Consolation seeds: {sorted(consolation_teams['seed'].unique())}")
-        
         # Check first simulation to see actual team distribution
         first_sim = standings_df['num_sim'].iloc[0]
         first_sim_playoff = playoff_teams[playoff_teams['num_sim'] == first_sim]
         first_sim_consolation = consolation_teams[consolation_teams['num_sim'] == first_sim]
         
-        print(f"DEBUG: First sim playoff teams: {len(first_sim_playoff)}")
-        print(f"DEBUG: First sim consolation teams: {len(first_sim_consolation)}")
-        if len(first_sim_consolation) > 0:
-            print(f"DEBUG: Consolation team names: {first_sim_consolation['team'].tolist()}")
-            print(f"DEBUG: Consolation seeds: {first_sim_consolation['seed'].tolist()}")
-        
         # Simulate main playoffs
         if self.settings['num_playoff_teams'] == 6:
-            print("DEBUG: Simulating 6-team playoffs")
-            
             # Wild card round (week 1)
             wild_card_week = self.settings['playoff_start_week']
             semifinalists = self._simulate_6_team_wildcard(
@@ -141,8 +124,6 @@ class SeasonSimulator:
             runners_up = finalists[~finalists.index.isin(winners.index)]
             
         else:
-            print("DEBUG: Simulating 4-team playoffs")
-            
             # 4-team playoff: Semifinals -> Championship
             semifinal_week = self.settings['playoff_start_week']
             finalists = self._simulate_4_team_semifinals(
@@ -155,22 +136,15 @@ class SeasonSimulator:
             runners_up = finalists[~finalists.index.isin(winners.index)]
         
         # Simulate Many Mile consolation bracket (for non-playoff teams)
-        print("DEBUG: About to simulate Many Mile bracket")
         many_mile_losers = self._simulate_many_mile_bracket(
             consolation_teams, projections_df
         )
-        print(f"DEBUG: Many Mile simulation returned {len(many_mile_losers)} losers")
         
         # Calculate probabilities
         total_sims = len(standings_df['num_sim'].unique())
-        print(f"DEBUG: Total sims: {total_sims}")
-        
         many_mile_probs = {}
         if len(many_mile_losers) > 0:
             many_mile_probs = many_mile_losers.groupby('team').size() / total_sims
-            print(f"DEBUG: Many mile probabilities: {dict(many_mile_probs)}")
-        else:
-            print("DEBUG: No Many Mile losers found!")
         
         results = {
             'winners': winners.groupby('team').size() / total_sims,
@@ -186,8 +160,6 @@ class SeasonSimulator:
         Simulate the Many Mile consolation bracket where you advance by LOSING.
         0-based seeds 6-11 (fantasy seeds 7-12) compete to avoid being the ultimate loser.
         """
-        print(f"DEBUG: Starting Many Mile with {len(consolation_teams)} consolation teams")
-        
         many_mile_losers = []
         total_sims = len(consolation_teams['num_sim'].unique())
         
@@ -196,18 +168,6 @@ class SeasonSimulator:
             
             # Only include 0-based seeds 6-11 (fantasy seeds 7-12, the 6 non-playoff teams)
             sim_teams = sim_teams[sim_teams['seed'].isin([6, 7, 8, 9, 10, 11])]
-            
-            if sim_idx == 0:  # Only print for first sim
-                print(f"DEBUG: Sim {sim_num} - Teams in Many Mile bracket: {len(sim_teams)}")
-                if len(sim_teams) > 0:
-                    print(f"DEBUG: Seeds: {sorted(sim_teams['seed'].tolist())}")
-                    print(f"DEBUG: Teams: {sim_teams['team'].tolist()}")
-            
-            if len(sim_teams) < 6:
-                if sim_idx == 0:
-                    print(f"DEBUG: Skipping sim {sim_num} - only {len(sim_teams)} teams")
-                continue
-                
             sim_teams = sim_teams.sort_values('seed').reset_index(drop=True)
             
             try:
@@ -215,37 +175,18 @@ class SeasonSimulator:
                 week1 = self.settings['playoff_start_week']
                 week1_projections = projections_df[projections_df['week'] == week1]
                 
-                if sim_idx == 0:
-                    print(f"DEBUG: Week {week1} projections available: {len(week1_projections)}")
-                
                 # Byes advance automatically (worst teams get advantage)
                 byes = sim_teams[sim_teams['seed'].isin([10, 11])]
                 
                 # Matchups: 6v9, 7v8 - losers advance
                 matchup1 = sim_teams[sim_teams['seed'].isin([6, 9])]
                 matchup2 = sim_teams[sim_teams['seed'].isin([7, 8])]
-                
-                if sim_idx == 0:
-                    print(f"DEBUG: Matchup 1 teams: {len(matchup1)}, Matchup 2 teams: {len(matchup2)}")
-                    print(f"DEBUG: Byes: {len(byes)}")
-                
-                if len(matchup1) != 2 or len(matchup2) != 2:
-                    if sim_idx == 0:
-                        print(f"DEBUG: Matchup failed - M1: {len(matchup1)}, M2: {len(matchup2)}")
-                    continue
-                
                 loser1 = self._simulate_many_mile_matchup(matchup1, week1_projections)
                 loser2 = self._simulate_many_mile_matchup(matchup2, week1_projections)
                 
                 # Week 2: Semifinals
                 week2 = self.settings['playoff_start_week'] + 1
                 week2_projections = projections_df[projections_df['week'] == week2]
-                
-                if len(byes) < 2:
-                    if sim_idx == 0:
-                        print(f"DEBUG: Not enough bye teams: {len(byes)}")
-                    continue
-                
                 bye1 = byes[byes['seed'] == 10].iloc[0].to_dict()
                 bye2 = byes[byes['seed'] == 11].iloc[0].to_dict()
                 
@@ -264,15 +205,9 @@ class SeasonSimulator:
                 
                 many_mile_losers.append(ultimate_loser)
                 
-                if sim_idx == 0:
-                    print(f"DEBUG: Ultimate loser for sim {sim_num}: {ultimate_loser.get('team', 'Unknown')}")
-                    
             except Exception as e:
-                if sim_idx == 0:
-                    print(f"DEBUG: Error in sim {sim_num}: {e}")
                 continue
         
-        print(f"DEBUG: Total Many Mile losers: {len(many_mile_losers)} out of {total_sims} sims")
         return pd.DataFrame(many_mile_losers)
     
     def _simulate_many_mile_matchup(self, teams_df: pd.DataFrame,
@@ -596,10 +531,6 @@ class SeasonSimulator:
         
         # Always add playoff result columns (even if playoffs weren't simulated)
         if playoff_results:
-            print(f"DEBUG: Mapping playoff results to standings")
-            print(f"DEBUG: Teams in standings: {standings['team'].tolist()}")
-            print(f"DEBUG: Teams in many_mile_losers: {list(playoff_results.get('many_mile_losers', {}).keys())}")
-            
             standings['winner'] = standings['team'].map(playoff_results.get('winners', {})).fillna(0.0)
             standings['runner_up'] = standings['team'].map(playoff_results.get('runners_up', {})).fillna(0.0)
             standings['third'] = 0.0  # Would need third place game simulation
@@ -608,14 +539,7 @@ class SeasonSimulator:
             many_mile_dict = playoff_results.get('many_mile_losers', {})
             if hasattr(many_mile_dict, 'to_dict'):
                 many_mile_dict = many_mile_dict.to_dict()
-            
-            print(f"DEBUG: Many mile dict type: {type(many_mile_dict)}")
-            print(f"DEBUG: Many mile dict contents: {many_mile_dict}")
-            
             standings['many_mile'] = standings['team'].map(many_mile_dict).fillna(0.0)
-            
-            print(f"DEBUG: After mapping many_mile column:")
-            print(standings[['team', 'many_mile']].to_string())
             
             # Calculate earnings
             earnings = (

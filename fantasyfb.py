@@ -31,6 +31,7 @@ import traceback
 from fantasy_scoring import FantasyScorer
 from projection_engine import ProjectionEngine
 from season_simulator import SeasonSimulator
+from yahoo_client import YahooFantasyClient
 
 # Probably not smart long term, but doing it for now...
 import warnings
@@ -93,9 +94,9 @@ class League:
         """ Year of the most recent season """
         self.season = season if type(season) == int else self.latest_season
         """ Season of interest, defaults to most recent season when no value is provided """
-        self.load_credentials()
-        self.load_oauth()
-        self.load_league(name)
+        self.yahoo_client = YahooFantasyClient()
+        self.name, self.lg_id = self.yahoo_client.connect_to_league(self.season, name)
+        self.lg = self.yahoo_client.lg
         self.current_week = self.lg.current_week()
         """ Most recent week of the season of interest """
         self.week = week if type(week) == int else self.current_week
@@ -119,100 +120,6 @@ class League:
         self.war_sim()
         self.get_schedule()
         self.starters(self.week)
-
-    def load_credentials(self):
-        """
-        Loads user credentials from the .env file, specifically the Yahoo consumer key/secret
-        and email credentials to use when emailing a copy of the results to the user.
-        """
-        # Loading Yahoo OAuth credentials from environment variables
-        load_dotenv()
-        if "CONSUMER_KEY" not in os.environ or "CONSUMER_SECRET" not in os.environ:
-            print("No valid .env file present, copying from .env.example")
-            shutil.copyfile(".env.example", ".env")
-        # Updating .env file if default values are still present
-        if (
-            os.environ["CONSUMER_KEY"] == "updatekey"
-            and os.environ["CONSUMER_SECRET"] == "updatesecret"
-        ):
-            # Only have to do this once since we're storing them in environment variables
-            print("It appears you haven't updated your Yahoo OAuth credentials...")
-            print("To get credentials: https://developer.yahoo.com/apps/create/")
-            consumer_key = input("Yahoo OAuth Key: ")
-            os.system("sed -i 's/updatekey/{}/g' .env".format(consumer_key))
-            consumer_secret = input("Yahoo OAuth Secret: ")
-            os.system("sed -i 's/updatesecret/{}/g' .env".format(consumer_secret))
-            load_dotenv()
-            # Previous oauth file is probably bad if it exists, deleting it just in case
-            if os.path.exists("oauth2.json"):
-                os.remove("oauth.json")
-
-    def load_oauth(self):
-        """
-        Initializes an OAuth2 authentication object to connect with Yahoo's API
-        using the credentials loaded above in the load_credentials function.
-        """
-        # Creating oauth file from credentials provided
-        if not os.path.exists("oauth2.json"):
-            creds = {
-                "consumer_key": os.environ["CONSUMER_KEY"],
-                "consumer_secret": os.environ["CONSUMER_SECRET"],
-            }
-            with open("oauth2.json", "w") as f:
-                f.write(json.dumps(creds))
-        self.oauth = OAuth2(None, None, from_file="oauth2.json")
-
-    def load_league(self, name: str = None):
-        """
-        Initializes yahoo_fantasy_api game and league objects used to query Yahoo's API
-        for details about the league in question. Also identifies fantasy team name and 
-        fantasy league id for future reference throughout the script.
-
-        Args:
-            name (str, optional): string specifiying the name of the team of interest 
-            in case a user has multiple leagues, defaults to None.
-        """
-        # Pulling user's Yahoo fantasy games
-        self.gm = yfa.Game(self.oauth, "nfl")
-        while True:
-            try:
-                profile = self.gm.yhandler.get_teams_raw()["fantasy_content"]
-                leagues = profile["users"]["0"]["user"][1]["games"]
-                break
-            except Exception as e:
-                print(
-                    "Teams query crapped out... Waiting 30 seconds and trying again..."
-                )
-                print(e)
-                time.sleep(30)
-        # Identifying user's NFL Yahoo fantasy games
-        for ind in range(leagues["count"] - 1, -1, -1):
-            game = leagues[str(ind)]["game"]
-            if type(game) == dict:
-                continue
-            if game[0]["code"] == "nfl" and game[0]["season"] == str(self.season):
-                teams = game[1]["teams"]
-                details = [teams[str(ind)]["team"][0] for ind in range(teams["count"])]
-                names = [
-                    [val["name"] for val in team if "name" in val][0]
-                    for team in details
-                ]
-                if teams["count"] > 1:
-                    # If user has more than one team, use the name input or prompt them to pick one
-                    while name not in names:
-                        print("Found multiple fantasy teams: " + ", ".join(names))
-                        name = input("Which team would you like to analyze? ")
-                    team = teams[str(names.index(name))]["team"][0]
-                else:
-                    # If user has only one team, use that one and override whatever name was given
-                    team = teams["0"]["team"][0]
-                    name = names[0]
-                self.name = name
-                team_key = [val["team_key"] for val in team if "team_key" in val][0]
-                self.lg_id = ".".join(team_key.split(".")[:3])
-                break
-        # Creating league object
-        self.lg = self.gm.to_league(self.lg_id)
 
     def load_settings(self, sfb: bool = False, bestball: str = ""):
         """
@@ -393,24 +300,6 @@ class League:
             nfl_schedule.date = pd.to_datetime(nfl_schedule.date, format="%m/%d/%y") # Accounting for manual updates to schedule csv... Thanks Excel...
         self.nfl_schedule = nfl_schedule.sort_values(by=["season", "week"], ignore_index=True)
 
-    def refresh_oauth(self, threshold: int = 59):
-        """
-        Checks the status of the current authentication token and refreshes it if expired (1hr).
-
-        Args:
-            threshold (int, optional): integer specifying the number of minutes an auth token 
-            can exist for before the code waits for it to expire and refreshes it, defaults to 59.
-        """
-        diff = (
-            datetime.datetime.now(timezone("GMT"))
-            - datetime.datetime(1970, 1, 1, 0, 0, 0, 0, timezone("GMT"))
-        ).total_seconds() - self.oauth.token_time
-        if diff >= threshold * 60:
-            time.sleep(max(3600 - diff + 5, 0))
-            self.oauth = OAuth2(None, None, from_file="oauth2.json")
-            self.gm = yfa.Game(self.oauth, "nfl")
-            self.lg = self.gm.to_league(self.lg_id)
-
     def get_yahoo_players(self, injurytries: int = 10):
         """
         Pulls a dataframe containing details about all NFL players that are eligible 
@@ -421,7 +310,7 @@ class League:
         Args:
             injurytries (int, optional): maximum number of times the code will try to pull the player list, defaults to 10.
         """
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         tries = 0
         while tries < injurytries:
             tries += 1
@@ -491,7 +380,7 @@ class League:
         Pulls the current fantasy team of each eligible NFL player 
         and merges it into the players dataframe.
         """
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         selected = pd.DataFrame(
             columns=["player_id", "selected_position", "fantasy_team"]
         )
@@ -848,12 +737,12 @@ class League:
         Args:
             inc (int, optional): number of players to pull per API call, defaults to 25.
         """
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         roster_pcts = pd.DataFrame()
         for ind in range(self.players.shape[0] // inc + 1):
             while True:
                 try:
-                    self.refresh_oauth()
+                    self.yahoo_client.refresh_oauth()
                     if self.players.iloc[inc * ind : inc * (ind + 1)].shape[0] == 0:
                         pcts = {"count":0}
                         break
@@ -1059,7 +948,7 @@ class League:
         scores for all matchups up to the week in question.
         """
         as_of = self.season * 100 + self.week
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         schedule = pd.DataFrame()
         for team in self.teams:
             tm = self.lg.to_team(team["team_key"])
@@ -1186,7 +1075,7 @@ class League:
             week (int, optional): week for which to identify starters.
         """
         as_of = self.season * 100 + self.week
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         self.players = pd.merge(
             left=self.players,
             right=self.nfl_schedule.loc[
@@ -1317,7 +1206,7 @@ class League:
         Returns:
             standings (pd.DataFrame): simulated results for the final season standings and playoff projections.
         """
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         projections = pd.DataFrame(columns=["fantasy_team", "week", "points_avg", "points_stdev"])
         for week in range(self.week,self.settings['playoff_start_week']):
             self.starters(week)
@@ -1382,7 +1271,7 @@ class League:
             schedule (pd.DataFrame): simulated results for each matchup throughout the season in question  
             standings (pd.DataFrame): simulated results for the final season standings and playoff projections
         """
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         
         # Calculate team projections for each week (your existing logic)
         self.players["points_var"] = self.players.points_stdev**2
@@ -1597,7 +1486,7 @@ class League:
             pd.DataFrame: dataframe containing the impact and value of every add & drop combination analyzed.
         """
         as_of = self.season * 100 + self.week
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         if bestball:
             orig_standings = self.bestball_sims(payouts)
         else:
@@ -1643,7 +1532,7 @@ class League:
         & (self.players.until.isnull() | (self.players.until < 17)) \
         & (self.players.pct_rostered >= min_rostership)].reset_index(drop=True)
         for my_player in players_to_drop.name:
-            self.refresh_oauth(55)
+            self.yahoo_client.refresh_oauth(55)
             if (
                 players_to_drop.loc[players_to_drop.name == my_player, "until"].values[
                     0
@@ -1762,7 +1651,7 @@ class League:
             pd.DataFrame: dataframe containing the impact and value of every possible add analyzed.
         """
         as_of = self.season * 100 + self.week
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         if bestball:
             orig_standings = self.bestball_sims(payouts)
         else:
@@ -1890,7 +1779,7 @@ class League:
         Returns:
             pd.DataFrame: dataframe containing the impact and value of every possible drop analyzed.
         """
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         if bestball:
             orig_standings = self.bestball_sims(payouts)
         else:
@@ -2008,7 +1897,7 @@ class League:
         Returns:
             pd.DataFrame: dataframe containing the impact and value of every possible trade analyzed.
         """
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         if not team_name:
             team_name = [
                 team["name"]
@@ -2067,7 +1956,7 @@ class League:
         my_added_value = pd.DataFrame()
         their_added_value = pd.DataFrame()
         for my_player in my_players.name:
-            self.refresh_oauth(55)
+            self.yahoo_client.refresh_oauth(55)
             if their_players.name.isin(focus_on).any():
                 possible = their_players.copy()
             else:
@@ -2232,7 +2121,7 @@ class League:
             pd.DataFrame: dataframe containing the impact and value of every matchup during the week of interest.
         """
         as_of = self.season * 100 + self.week
-        self.refresh_oauth()
+        self.yahoo_client.refresh_oauth()
         if not team_name:
             team_name = [
                 team["name"]
