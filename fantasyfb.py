@@ -27,6 +27,7 @@ from projection_engine import ProjectionEngine
 from season_simulator import SeasonSimulator
 from yahoo_client import YahooFantasyClient
 from excel_exporter import FantasyExcelExporter
+from war_calculator import WARCalculator
 
 # Probably not smart long term, but doing it for now...
 import warnings
@@ -1352,104 +1353,13 @@ class League:
 
     def war_sim(self):
         """
-        Simulates the wins-above-replacement (WAR) for each of the players eligible to roster, 
-        i.e. how many more wins in a season you would have by rostering that player 
-        compared to an average player at that position.
+        Simulates the wins-above-replacement (WAR) for each of the players eligible to roster.
         """
         as_of = self.season * 100 + self.week
         self.load_stats(as_of - 100, as_of - 1)
-        """ Creating histograms across all players in each position """
-        pos_hists = {"points": np.arange(-10, 50.1, 0.1)}
-        for pos in self.stats.position.unique():
-            pos_hists[pos] = np.histogram(
-                self.stats.loc[self.stats.position == pos, "points"],
-                bins=pos_hists["points"],
-            )[0]
-            pos_hists[pos] = pos_hists[pos] / sum(pos_hists[pos])
-        pos_hists["FLEX"] = np.histogram(
-            self.stats.loc[self.stats.position.isin(["RB", "WR", "TE"]), "points"],
-            bins=pos_hists["points"],
-        )[0]
-        pos_hists["FLEX"] = pos_hists["FLEX"] / sum(pos_hists["FLEX"])
-        """ Simulating an entire team using average players """
-        sim_scores = pd.DataFrame(
-            {
-                "QB": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["QB"], size=self.num_sims
-                ),
-                "RB1": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["RB"], size=self.num_sims
-                ),
-                "RB2": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["RB"], size=self.num_sims
-                ),
-                "WR1": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["WR"], size=self.num_sims
-                ),
-                "WR2": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["WR"], size=self.num_sims
-                ),
-                "TE": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["TE"], size=self.num_sims
-                ),
-                "FLEX": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["FLEX"], size=self.num_sims
-                ),
-                "K": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["K"], size=self.num_sims
-                ),
-                "DEF": np.random.choice(
-                    pos_hists["points"][:-1], p=pos_hists["DEF"], size=self.num_sims
-                ),
-            }
-        )
-        sim_scores["Total"] = (
-            sim_scores.QB
-            + sim_scores.RB1
-            + sim_scores.RB2
-            + sim_scores.WR1
-            + sim_scores.WR2
-            + sim_scores.TE
-            + sim_scores.FLEX
-            + sim_scores.K
-            + sim_scores.DEF
-        )
-        player_sims = pd.DataFrame(
-            {
-                self.players.loc[ind, "name"]: np.round(
-                    np.random.normal(
-                        loc=self.players.loc[ind, "points_rate"],
-                        scale=self.players.loc[ind, "points_stdev"],
-                        size=sim_scores.shape[0],
-                    )
-                )
-                for ind in range(self.players.shape[0])
-            }
-        )
-        sim_scores = pd.merge(
-            left=sim_scores, right=player_sims, left_index=True, right_index=True
-        )
-        """ Calculating the number of wins above replacement for each player """
-        for player in sim_scores.columns[10:]:
-            if pd.isnull(player):
-                print("Null player name for some reason... Skipping...")
-                continue
-            cols = sim_scores.columns[:9].tolist()
-            pos = self.players.loc[self.players.name == player, "position"].values[0]
-            if pos in ["RB", "WR"]:
-                pos += "1"
-            cols.pop(cols.index(pos))
-            cols.append(player)
-            sim_scores["Alt_Total"] = sim_scores[cols].sum(axis=1)
-            self.players.loc[self.players.name == player, "WAR"] = (
-                sum(
-                    sim_scores.loc[: sim_scores.shape[0] // 2 - 1, "Alt_Total"].values
-                    > sim_scores.loc[sim_scores.shape[0] // 2 :, "Total"].values
-                )
-                / (sim_scores.shape[0] // 2)
-                - 0.5
-            ) * 14
-            del sim_scores["Alt_Total"]
+        
+        calculator = WARCalculator(self.num_sims)
+        self.players = calculator.calculate_war(self.players, self.stats)
 
     def possible_pickups(
         self,
