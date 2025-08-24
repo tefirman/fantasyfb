@@ -17,6 +17,7 @@ import time
 import datetime
 from fantasy_scoring import FantasyScorer
 from league_configs import get_league_config, apply_default_scoring_categories
+from schedule_manager import ScheduleManager
 from projection_engine import ProjectionEngine
 from season_simulator import SeasonSimulator
 from yahoo_client import YahooFantasyClient
@@ -96,6 +97,13 @@ class League:
         """ Week of interest during the season of interest, defaults to most recent week """
         self.load_settings(sfb, bestball)
         self.load_fantasy_teams()
+        self.schedule_manager = ScheduleManager(
+            self.yahoo_client, 
+            self.teams, 
+            self.settings, 
+            self.lg_id,
+            self.latest_season
+        )
         self.load_nfl_abbrevs()
         self.load_nfl_schedule()
         self.get_yahoo_players(injurytries)
@@ -157,7 +165,7 @@ class League:
         )[["display_name", "value"]].astype({"value": float})
         self.scoring.loc[(self.scoring.display_name == "Int") & (self.scoring.value <= 0),"display_name"] = "Int Thrown"
         self.scoring = self.scoring.drop_duplicates(subset=["display_name"]).set_index("display_name")['value'].to_dict()
-        
+
         # Check for predefined platform configurations
         config = None
         if sfb:
@@ -634,124 +642,12 @@ class League:
         Pulls the fantasy schedule for the season in question as well as 
         scores for all matchups up to the week in question.
         """
-        as_of = self.season * 100 + self.week
-        self.yahoo_client.refresh_oauth()
-        schedule = pd.DataFrame()
-        for team in self.teams:
-            tm = self.lg.to_team(team["team_key"])
-            limit = (
-                max(self.settings["playoff_start_week"], as_of % 100 + 1)
-                if as_of
-                else self.settings["playoff_start_week"]
-            )
-            for week in range(1, limit):
-                while True:
-                    try:
-                        matchup = tm.yhandler.get_matchup_raw(tm.team_key, week)
-                        matchup = matchup["fantasy_content"]["team"][1]["matchups"]
-                        break
-                    except:
-                        print(
-                            "Matchup query crapped out... Waiting 30 seconds and trying again..."
-                        )
-                        time.sleep(30)
-                if "0" in matchup.keys():
-                    team_1 = matchup["0"]["matchup"]["0"]["teams"]["0"]["team"]
-                    team_2 = matchup["0"]["matchup"]["0"]["teams"]["1"]["team"]
-                    schedule = pd.concat([schedule,
-                        pd.DataFrame(
-                            {
-                                "week": [week],
-                                "team_1": [team_1[0][2]["name"]],
-                                "team_2": [team_2[0][2]["name"]],
-                                "score_1": [team_1[1]["team_points"]["total"]],
-                                "score_2": [team_2[1]["team_points"]["total"]],
-                            }
-                        )],
-                        ignore_index=True,
-                    )
-        schedule.score_1 = schedule.score_1.astype(float)
-        schedule.score_2 = schedule.score_2.astype(float)
-
-        """ MANY MILE POSTSEASON """
-        if os.path.exists("res/football/many_mile.csv"):
-            many_mile_sched = pd.read_csv("res/football/many_mile.csv")
-        else:
-            many_mile_sched = pd.DataFrame(columns=["season", "week"])
-        algo = (
-            schedule.team_1.isin(["The Algorithm"]).any()
-            or schedule.team_2.isin(["The Algorithm"]).any()
+        self.schedule = self.schedule_manager.get_schedule(
+            self.season, 
+            self.week,
+            self.current_week,
+            self.lg.team_key()
         )
-        if as_of % 100 >= self.settings["playoff_start_week"] and algo:
-            many_mile_sched = many_mile_sched.loc[
-                (many_mile_sched.season == as_of // 100)
-                & (many_mile_sched.week <= as_of % 100)
-            ]
-            del many_mile_sched["season"]
-            if as_of < self.season*100 + self.current_week:
-                many_mile_sched.loc[many_mile_sched.week == as_of % 100, "score_1"] = 0.0
-                many_mile_sched.loc[many_mile_sched.week == as_of % 100, "score_2"] = 0.0
-            standings = schedule.loc[
-                schedule.week < self.settings["playoff_start_week"]
-            ].reset_index(drop=True)
-            standings["win_1"] = (standings.score_1 > standings.score_2).astype(int)
-            standings["win_2"] = 1 - standings.win_1
-            standings = pd.concat([standings.rename(
-                    columns={col: col.replace("_1", "") for col in standings.columns}
-                ),
-                standings.rename(
-                    columns={col: col.replace("_2", "") for col in standings.columns}
-                )],
-                ignore_index=True,
-                sort=False,
-            )
-            standings = standings.groupby("team").sum().reset_index()
-            standings = standings.sort_values(
-                by=["win", "score"], ascending=False, ignore_index=True
-            )
-            consolation = standings.team.tolist()[6:]
-            schedule = schedule.loc[
-                (schedule.week < self.settings["playoff_start_week"])
-                | ~schedule.team_1.isin(consolation)
-            ].reset_index(drop=True)
-            schedule = pd.concat([schedule,
-                many_mile_sched],
-                ignore_index=True,
-                sort=False,
-            )
-        """ MANY MILE POSTSEASON """
-
-        switch = schedule.team_1 > schedule.team_2
-        schedule.loc[switch, "temp"] = schedule.loc[switch, "team_1"]
-        schedule.loc[switch, "team_1"] = schedule.loc[switch, "team_2"]
-        schedule.loc[switch, "team_2"] = schedule.loc[switch, "temp"]
-        schedule.loc[switch, "temp"] = schedule.loc[switch, "score_1"].astype(float)
-        schedule.loc[switch, "score_1"] = schedule.loc[switch, "score_2"].astype(float)
-        schedule.loc[switch, "score_2"] = schedule.loc[switch, "temp"].astype(float)
-        schedule = (
-            schedule[["week", "team_1", "team_2", "score_1", "score_2"]]
-            .drop_duplicates()
-            .sort_values(by=["week", "team_1", "team_2"])
-            .reset_index(drop=True)
-        )
-        team_name = [
-            team["name"]
-            for team in self.teams
-            if team["team_key"] == self.lg.team_key()
-        ][0]
-        schedule["me"] = (schedule["team_1"] == team_name) | (
-            schedule["team_2"] == team_name
-        )
-        if as_of:
-            schedule.loc[schedule.week > as_of % 100, "score_1"] = 0.0
-            schedule.loc[schedule.week > as_of % 100, "score_2"] = 0.0
-            if (
-                self.latest_season > as_of // 100
-                or as_of % 100 < self.current_week
-            ):
-                schedule.loc[schedule.week == as_of % 100, "score_1"] = 0.0
-                schedule.loc[schedule.week == as_of % 100, "score_2"] = 0.0
-        self.schedule = schedule
 
     def starters(self, week: int):
         """

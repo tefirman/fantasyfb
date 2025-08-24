@@ -1,0 +1,210 @@
+"""
+Fantasy league schedule management.
+
+This module handles fetching fantasy schedules, processing Many Mile postseason logic,
+and preparing schedule data for simulations.
+"""
+
+import os
+import pandas as pd
+
+
+class ScheduleManager:
+    """
+    Manages fantasy league schedule operations including regular season and postseason.
+    """
+    
+    def __init__(self, yahoo_client, teams, settings, lg_id, latest_season):
+        """
+        Initialize the schedule manager.
+        
+        Args:
+            yahoo_client: YahooFantasyClient instance
+            teams: List of team dictionaries
+            settings: League settings dictionary
+            lg_id: League ID
+            latest_season: The most recent NFL season year
+        """
+        self.yahoo_client = yahoo_client
+        self.teams = teams
+        self.settings = settings
+        self.lg_id = lg_id
+        self.latest_season = latest_season
+    
+    def get_schedule(self, season, week, current_week, team_key=None):
+        """
+        Pulls the fantasy schedule for the season in question as well as 
+        scores for all matchups up to the week in question.
+        
+        Args:
+            season: Season year
+            week: Current week
+            current_week: The actual current week of the season
+            team_key: Team key for identifying "me" column
+            
+        Returns:
+            DataFrame with fantasy schedule
+        """
+        as_of = season * 100 + week
+        self.yahoo_client.refresh_oauth()
+        
+        # Pull basic schedule
+        schedule = self._pull_basic_schedule(as_of)
+        
+        # Handle Many Mile postseason if applicable
+        schedule = self._handle_many_mile_postseason(schedule, as_of, current_week)
+        
+        # Clean and format schedule
+        schedule = self._clean_schedule(schedule, as_of, current_week, team_key)
+        
+        return schedule
+    
+    def _pull_basic_schedule(self, as_of):
+        """Pull the basic fantasy schedule from Yahoo API."""
+        schedule = pd.DataFrame()
+        
+        for team in self.teams:
+            tm = self.yahoo_client.lg.to_team(team["team_key"])
+            limit = (
+                max(self.settings["playoff_start_week"], as_of % 100 + 1)
+                if as_of
+                else self.settings["playoff_start_week"]
+            )
+            
+            for week in range(1, limit):
+                while True:
+                    try:
+                        matchup = tm.yhandler.get_matchup_raw(tm.team_key, week)
+                        matchup = matchup["fantasy_content"]["team"][1]["matchups"]
+                        break
+                    except:
+                        print("Matchup query failed... Waiting 30 seconds and trying again...")
+                        import time
+                        time.sleep(30)
+                
+                if "0" in matchup.keys():
+                    team_1 = matchup["0"]["matchup"]["0"]["teams"]["0"]["team"]
+                    team_2 = matchup["0"]["matchup"]["0"]["teams"]["1"]["team"]
+                    schedule = pd.concat([schedule,
+                        pd.DataFrame({
+                            "week": [week],
+                            "team_1": [team_1[0][2]["name"]],
+                            "team_2": [team_2[0][2]["name"]],
+                            "score_1": [team_1[1]["team_points"]["total"]],
+                            "score_2": [team_2[1]["team_points"]["total"]],
+                        })],
+                        ignore_index=True,
+                    )
+        
+        schedule.score_1 = schedule.score_1.astype(float)
+        schedule.score_2 = schedule.score_2.astype(float)
+        
+        return schedule
+    
+    def _handle_many_mile_postseason(self, schedule, as_of, current_week):
+        """Handle Many Mile postseason logic."""
+        # Load Many Mile schedule if it exists
+        if os.path.exists("res/football/many_mile.csv"):
+            many_mile_sched = pd.read_csv("res/football/many_mile.csv")
+        else:
+            many_mile_sched = pd.DataFrame(columns=["season", "week"])
+        
+        # Check if "The Algorithm" team exists (indicates Many Mile league)
+        algo = (
+            schedule.team_1.isin(["The Algorithm"]).any()
+            or schedule.team_2.isin(["The Algorithm"]).any()
+        )
+        
+        if as_of % 100 >= self.settings["playoff_start_week"] and algo:
+            many_mile_sched = many_mile_sched.loc[
+                (many_mile_sched.season == as_of // 100)
+                & (many_mile_sched.week <= as_of % 100)
+            ]
+            del many_mile_sched["season"]
+            
+            if as_of < (as_of // 100) * 100 + current_week:
+                many_mile_sched.loc[many_mile_sched.week == as_of % 100, "score_1"] = 0.0
+                many_mile_sched.loc[many_mile_sched.week == as_of % 100, "score_2"] = 0.0
+            
+            # Calculate regular season standings
+            standings = self._calculate_regular_season_standings(schedule)
+            consolation = standings.team.tolist()[6:]  # Bottom 6 teams
+            
+            # Remove consolation teams from main playoffs
+            schedule = schedule.loc[
+                (schedule.week < self.settings["playoff_start_week"])
+                | ~schedule.team_1.isin(consolation)
+            ].reset_index(drop=True)
+            
+            # Add Many Mile schedule
+            schedule = pd.concat([schedule, many_mile_sched], ignore_index=True, sort=False)
+        
+        return schedule
+    
+    def _calculate_regular_season_standings(self, schedule):
+        """Calculate regular season standings for Many Mile logic."""
+        standings = schedule.loc[
+            schedule.week < self.settings["playoff_start_week"]
+        ].reset_index(drop=True)
+        
+        standings["win_1"] = (standings.score_1 > standings.score_2).astype(int)
+        standings["win_2"] = 1 - standings.win_1
+        
+        standings = pd.concat([
+            standings.rename(columns={col: col.replace("_1", "") for col in standings.columns}),
+            standings.rename(columns={col: col.replace("_2", "") for col in standings.columns})
+        ], ignore_index=True, sort=False)
+        
+        standings = standings.groupby("team").sum().reset_index()
+        standings = standings.sort_values(
+            by=["win", "score"], ascending=False, ignore_index=True
+        )
+        
+        return standings
+    
+    def _clean_schedule(self, schedule, as_of, current_week, team_key):
+        """Clean and format the schedule DataFrame."""
+        # Standardize team order (alphabetical)
+        switch = schedule.team_1 > schedule.team_2
+        schedule.loc[switch, "temp"] = schedule.loc[switch, "team_1"]
+        schedule.loc[switch, "team_1"] = schedule.loc[switch, "team_2"]
+        schedule.loc[switch, "team_2"] = schedule.loc[switch, "temp"]
+        schedule.loc[switch, "temp"] = schedule.loc[switch, "score_1"].astype(float)
+        schedule.loc[switch, "score_1"] = schedule.loc[switch, "score_2"].astype(float)
+        schedule.loc[switch, "score_2"] = schedule.loc[switch, "temp"].astype(float)
+        
+        # Remove duplicates and sort
+        schedule = (
+            schedule[["week", "team_1", "team_2", "score_1", "score_2"]]
+            .drop_duplicates()
+            .sort_values(by=["week", "team_1", "team_2"])
+            .reset_index(drop=True)
+        )
+        
+        # Add "me" column if team_key provided
+        if team_key:
+            team_name = [
+                team["name"]
+                for team in self.teams
+                if team["team_key"] == team_key
+            ]
+            if team_name:
+                team_name = team_name[0]
+                schedule["me"] = (schedule["team_1"] == team_name) | (
+                    schedule["team_2"] == team_name
+                )
+        
+        # Zero out future scores
+        if as_of:
+            schedule.loc[schedule.week > as_of % 100, "score_1"] = 0.0
+            schedule.loc[schedule.week > as_of % 100, "score_2"] = 0.0
+            
+            # Zero out current week if it's in the past or current
+            if (
+                self.latest_season > as_of // 100
+                or as_of % 100 < current_week
+            ):
+                schedule.loc[schedule.week == as_of % 100, "score_1"] = 0.0
+                schedule.loc[schedule.week == as_of % 100, "score_2"] = 0.0
+        
+        return schedule
