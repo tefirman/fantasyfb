@@ -24,12 +24,9 @@ from yahoo_client import YahooFantasyClient
 from excel_exporter import FantasyExcelExporter
 from war_calculator import WARCalculator
 from player_data_manager import PlayerDataManager
+from lineup_optimizer import LineupOptimizer
 from email_utils import send_email
 from cli import initialize_inputs
-
-# Probably not smart long term, but doing it for now...
-import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
 
 class League:
     """
@@ -104,6 +101,7 @@ class League:
             self.lg_id,
             self.latest_season
         )
+        self.lineup_optimizer = LineupOptimizer(self.roster_spots, self.teams, self.yahoo_client)
         self.load_nfl_abbrevs()
         self.load_nfl_schedule()
         self.get_yahoo_players(injurytries)
@@ -655,128 +653,17 @@ class League:
         based on fantasy point projections and available roster spots.
 
         Args:
-            week (int, optional): week for which to identify starters.
+            week: week for which to identify starters.
         """
-        as_of = self.season * 100 + self.week
-        self.yahoo_client.refresh_oauth()
-        self.players = pd.merge(
-            left=self.players,
-            right=self.nfl_schedule.loc[
-                (self.nfl_schedule.season == as_of // 100)
-                & (self.nfl_schedule.week == week),
-                ["team", "elo_diff"],
-            ],
-            how="left",
-            left_on="current_team",
-            right_on="team",
+        self.players = self.lineup_optimizer.set_optimal_lineup(
+            self.players, 
+            week, 
+            self.season, 
+            self.current_week, 
+            self.latest_season,
+            self.nfl_schedule, 
+            self.basaloppstringtime
         )
-        self.players.elo_diff = self.players.elo_diff.infer_objects(copy=False).fillna(0.0)
-        if "opp_elo_weight" not in self.players.columns:
-            self.players = pd.merge(left=self.players,right=self.basaloppstringtime,how='left',on='position')
-        self.players["opp_factor"] = (self.players['opp_elo_weight'] * self.players["elo_diff"])
-        self.players["string_factor"] = self.players['string_weight'] * (1 - self.players["string"])
-        self.players["game_factor"] = self.players['basal'] + self.players["opp_factor"] + self.players["string_factor"]
-        self.players["points_avg"] = self.players["points_rate"]*self.players["game_factor"]#.fillna(1.0)
-        del self.players["team"], self.players["elo_diff"]
-        # WAR is linear with points_avg, but slope/intercept depends on position
-        # Harder to characterize how WAR varies with points_stdev, ignoring for now...
-        self.players = self.players.sort_values(by="points_avg", ascending=False)
-        # self.players = self.players.sort_values(by='WAR',ascending=False)
-        self.players["starter"] = False
-        self.players["injured"] = self.players.until >= week
-        if (
-            week == as_of % 100
-            and as_of // 100 == self.latest_season
-            and datetime.datetime.now().month > 8
-        ):  # Careful when your draft is in September...
-            cutoff = datetime.datetime.now()
-            if datetime.datetime.now().hour < 20:
-                cutoff -= datetime.timedelta(days=1)
-            completed = self.nfl_schedule.loc[
-                (self.nfl_schedule.season == as_of // 100)
-                & (self.nfl_schedule.week == week)
-                & (self.nfl_schedule.date < cutoff),
-                "team",
-            ].tolist()
-            for team in self.teams:
-                started = self.players.loc[
-                    (self.players.selected_position != "BN")
-                    & (self.players.fantasy_team == team["name"])
-                    & self.players.current_team.isin(completed)
-                ]
-                not_available = self.players.loc[
-                    (self.players.selected_position == "BN")
-                    & (self.players.fantasy_team == team["name"])
-                    & self.players.current_team.isin(completed)
-                ]
-                lineup = pd.merge(left=self.roster_spots,right=started.groupby('selected_position').size()\
-                .to_frame('num_started').reset_index().rename(columns={'selected_position':'position'}),how='left',on='position')
-                lineup['count'] -= lineup.num_started.fillna(0.0)
-                num_pos = lineup.loc[~lineup.position.isin(["W/T", "W/R/T", "Q/W/R/T", "BN", "IR"])].set_index('position').to_dict()['count']
-                for pos in num_pos:
-                    for num in range(int(num_pos[pos])):
-                        self.players.loc[
-                            self.players.loc[
-                                (self.players.fantasy_team == team["name"])
-                                & ~self.players.starter
-                                & ~self.players.injured
-                                & (self.players.bye_week != week)
-                                & (self.players.position == pos)
-                                & ~self.players.player_id.isin(started.player_id)
-                                & ~self.players.player_id.isin(not_available.player_id)
-                            ]
-                            .iloc[:1]
-                            .index,
-                            "starter",
-                        ] = True
-                flex_pos = {"W/T":['WR','TE'],"W/R/T":['WR','RB','TE'],"Q/W/R/T":['WR','RB','TE','QB']}
-                for pos in flex_pos:
-                    num_flex = int(lineup.loc[lineup.position == pos,'count'].sum())
-                    for flex in range(num_flex):
-                        self.players.loc[
-                            self.players.loc[
-                                (self.players.fantasy_team == team["name"])
-                                & ~self.players.starter
-                                & ~self.players.injured
-                                & (self.players.bye_week != week)
-                                & self.players.position.isin(flex_pos[pos])
-                                & ~self.players.player_id.isin(started.player_id)
-                                & ~self.players.player_id.isin(not_available.player_id)
-                            ]
-                            .iloc[:1]
-                            .index,
-                            "starter",
-                        ] = True
-        elif week >= as_of % 100:
-            num_pos = self.roster_spots.loc[~self.roster_spots.position.isin(["W/T", "W/R/T", "Q/W/R/T", "BN", "IR"])].set_index('position').to_dict()['count']
-            for pos in num_pos:
-                for num in range(num_pos[pos]):
-                    self.players.loc[
-                        self.players.loc[
-                            ~self.players.starter
-                            & ~self.players.injured
-                            & (self.players.bye_week != week)
-                            & (self.players.position == pos)
-                        ]
-                        .drop_duplicates(subset=["fantasy_team"], keep="first")
-                        .index,
-                        "starter",
-                    ] = True
-            flex_pos = {"W/T":['WR','TE'],"W/R/T":['WR','RB','TE'],"Q/W/R/T":['WR','RB','TE','QB']}
-            for pos in flex_pos:
-                num_flex = self.roster_spots.loc[self.roster_spots.position == pos,'count'].sum()
-                for flex in range(num_flex):
-                    self.players.loc[
-                        self.players.loc[
-                            ~self.players.starter
-                            & ~self.players.injured
-                            & (self.players.bye_week != week)
-                            & self.players.position.isin(flex_pos[pos])
-                        ]
-                        .drop_duplicates(subset=["fantasy_team"], keep="first")
-                        .index,
-                        "starter",
-                    ] = True
 
     def bestball_sims(self, payouts: list = [20,20,20]):
         """
