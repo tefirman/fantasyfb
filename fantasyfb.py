@@ -28,6 +28,7 @@ from season_simulator import SeasonSimulator
 from yahoo_client import YahooFantasyClient
 from excel_exporter import FantasyExcelExporter
 from war_calculator import WARCalculator
+from player_data_manager import PlayerDataManager
 
 # Probably not smart long term, but doing it for now...
 import warnings
@@ -103,12 +104,26 @@ class League:
         self.load_nfl_schedule()
         self.get_yahoo_players(injurytries)
         self.get_fantasy_rosters()
-        self.name_corrections()
-        self.get_player_ids()
-        self.add_injuries()
-        self.add_bye_weeks()
-        self.add_roster_pcts()
-        self.add_depth_charts()
+        
+        # Initialize player data manager and process all player data
+        player_manager = PlayerDataManager(self.yahoo_client, self.season, self.current_week)
+        
+        # We need stats for name corrections, so load them first
+        self.load_stats((self.season - 2) * 100 + 1, self.season * 100 + self.week - 1)
+        
+        # Load NFL rosters for get_rates() method
+        self.nfl_rosters = sr.get_bulk_rosters(self.season - 1, self.latest_season, "NFLRosters.csv")
+        self.nfl_rosters = self.nfl_rosters.rename(columns={'player':'name','player_id':'player_id_sr','team':'current_team'})
+        
+        # Process all player data in one call
+        self.players = player_manager.process_players(
+            self.players, 
+            self.stats, 
+            self.nfl_schedule, 
+            self.lg_id, 
+            self.week
+        )
+        
         self.load_parameters(earliest, reference_games, basaloppstringtime)
         self.num_sims = num_sims if type(num_sims) == int else 10000
         """ Number of simulations to run when assessing the league of interest """
@@ -519,58 +534,6 @@ class League:
             on=["season", "week", "team"],
         )
 
-    def name_corrections(self):
-        """
-        Applies name corrections between Pro Football Reference and Yahoo.
-        """
-        self.load_stats((self.season - 2) * 100 + 1, self.season * 100 + self.week - 1)
-        corrections = pd.read_csv(
-            "https://raw.githubusercontent.com/"
-            + "tefirman/fantasy-data/main/fantasyfb/name_corrections.csv"
-        )
-        self.players = pd.merge(
-            left=self.players, right=corrections, how="left", on="name"
-        )
-        to_fix = ~self.players.new_name.isnull()
-        self.players.loc[to_fix, "name"] = self.players.loc[to_fix, "new_name"]
-
-    def get_player_ids(self):
-        """
-        Maps between Yahoo player ID's and SportsRef player ID's based on team rosters and draft results.
-        """
-        self.nfl_rosters = sr.get_bulk_rosters(self.season - 1,self.latest_season,"NFLRosters.csv")
-        self.nfl_rosters = self.nfl_rosters.rename(columns={'player':'name','player_id':'player_id_sr','team':'current_team'})
-        self.players = pd.merge(
-            left=self.players,right=self.nfl_teams[["real_abbrev", "yahoo"]].rename(
-                columns={"yahoo": "editorial_team_abbr", "real_abbrev": "current_team"}
-            ),
-            how="inner",
-            on="editorial_team_abbr",
-        )
-        self.players = pd.merge(left=self.players,right=self.nfl_rosters[['name','current_team','player_id_sr']].drop_duplicates()\
-        .rename(columns={'player':'name','player_id':'player_id_sr','team':'current_team'}),how='left',on=['name','current_team'])
-        # Two Michael Carter's on the same team. What are the odds...
-        self.players = self.players.loc[~self.players.player_id_sr.isin(['CartMi02'])].reset_index(drop=True)
-        id_check = self.players.groupby('player_id_sr').size().to_frame('freq').reset_index()
-        if id_check.freq.max() > 1:
-            print('Found the same player ID on multiple players: ' + ', '.join(id_check.loc[id_check.freq > 1,'player_id_sr'].tolist()))
-        defenses = self.players.position.isin(['DEF'])
-        self.players.loc[defenses,'player_id_sr'] = self.players.loc[defenses,'name']
-        latest_draft = sr.get_draft(self.latest_season)[['player','player_id','team_abbrev']]\
-        .rename(columns={'player':'name','player_id':'player_id_sr','team_abbrev':'current_team'})
-        missing = self.players.player_id_sr.isnull() & self.players.name.isin(latest_draft.name.unique())
-        unsigned = self.players[missing].reset_index(drop=True)
-        del unsigned['player_id_sr']
-        unsigned = pd.merge(left=unsigned,right=latest_draft[['name','current_team','player_id_sr']].drop_duplicates(subset=['name'],keep='first'),how='inner',on=['name','current_team'])
-        self.players = pd.concat([self.players[~missing],unsigned],ignore_index=True)
-        missing = self.players.player_id_sr.isnull() & self.players.name.isin(self.nfl_rosters.name.unique())
-        closest = self.players[missing].reset_index(drop=True)
-        del closest['player_id_sr'], closest['current_team']
-        closest = pd.merge(left=closest,right=self.nfl_rosters[['name','current_team','player_id_sr']].drop_duplicates(subset=['name'],keep='last'),how='inner',on='name')
-        self.players = pd.concat([self.players[~missing],closest],ignore_index=True)
-        still_missing = self.players.player_id_sr.isnull()
-        self.players.loc[still_missing,'player_id_sr'] = self.players.loc[still_missing,'player_id']
-
     def load_parameters(self, earliest: int = None, reference_games: int = None, basaloppstringtime: list = []):
         """
         Initializes rate adjustment parameters for future season simulations. 
@@ -612,223 +575,6 @@ class League:
         else:
             self.basaloppstringtime = params.loc[params.week == self.week, \
             ["position", "basal", "opp_elo_weight", "string_weight", "time_scale"]]
-
-    def add_injuries(self):
-        """
-        Adds manual projections for injury timespans. If a new injury pops up 
-        and no projection has been provided yet, timespan defaults to one week.
-        """
-        as_of = self.season * 100 + self.week
-        if "until" in self.players.columns:
-            del self.players["until"]
-        self.players["until"] = float("NaN")
-        if as_of < self.latest_season * 100 + self.current_week:
-            self.load_stats(self.season * 100 + 1, self.season * 100 + 17)
-            self.stats = self.stats.loc[
-                self.stats.season * 100 + self.stats.week >= as_of
-            ]
-            healthy = self.stats.loc[
-                self.stats.season * 100 + self.stats.week == as_of, "name"
-            ].tolist()
-            injured = self.players.loc[
-                ~self.players.name.isin(healthy), "name"
-            ].tolist()
-            for name in injured:
-                until = self.stats.loc[self.stats.name == name, "week"].min() - 1
-                if not np.isnan(until):
-                    self.players.loc[self.players.name == name, "until"] = until
-                elif self.season < self.latest_season:
-                    self.players.loc[self.players.name == name, "until"] = 17
-        if as_of // 100 == self.latest_season:
-            inj_proj = pd.read_csv(
-                "https://raw.githubusercontent.com/"
-                + "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
-            )
-            inj_proj = inj_proj.loc[inj_proj.until >= self.current_week]
-            self.players = pd.merge(
-                left=self.players.rename(columns={"until": "until_orig"}),
-                right=inj_proj,
-                how="left",
-                on=["player_id_sr", "name", "position"],
-            )
-            if as_of % 100 == self.current_week:
-                newInjury = (
-                    self.players.status.isin(
-                        [
-                            "O",
-                            "D",
-                            "SUSP",
-                            "IR",
-                            "PUP-R",
-                            "PUP-P",
-                            "NFI-R",
-                            "NA",
-                            "COVID-19",
-                        ]
-                    )
-                    & (
-                        self.players.until.isnull()
-                        | (self.players.until < self.current_week)
-                    )
-                    & (~self.players.fantasy_team.isnull())
-                )  # | (self.players.WAR >= 0))
-                if newInjury.sum() > 0:
-                    print(
-                        "Need to look up new injuries... "
-                        + ", ".join(self.players.loc[newInjury, "name"].tolist())
-                    )
-                    self.players.loc[newInjury, "until"] = self.current_week
-                    self.players.loc[newInjury,["player_id_sr","name","position","status"]].to_csv("NewInjuries.csv",index=False)
-                oldInjury = (
-                    ~self.players.status.isin(
-                        [
-                            "O",
-                            "D",
-                            "SUSP",
-                            "IR",
-                            "PUP-R",
-                            "PUP-P",
-                            "NFI-R",
-                            "NA",
-                            "COVID-19",
-                        ]
-                    )
-                    & (self.players.until >= self.current_week)
-                    & (~self.players.fantasy_team.isnull())
-                )  # | (self.players.WAR >= 0))
-                if oldInjury.sum() > 0:
-                    print(
-                        "Need to update old injuries... "
-                        + ", ".join(self.players.loc[oldInjury, "name"].tolist())
-                    )
-                    self.players.loc[oldInjury,["player_id_sr","name","position"]].to_csv("OldInjuries.csv",index=False)
-                    # self.players.loc[oldInjury,'until'] = self.current_week
-            self.players["until"] = self.players[["until_orig", "until"]].min(axis=1)
-            del self.players["until_orig"]
-
-    def add_bye_weeks(self):
-        """
-        Derives bye weeks based on the current NFL schedule and merges them to the players dataframe.
-        """
-        byes = pd.DataFrame()
-        for team in self.nfl_schedule.team.unique():
-            bye_week = 1
-            while (
-                (self.nfl_schedule.team == team)
-                & (self.nfl_schedule.season == self.season)
-                & (self.nfl_schedule.week == bye_week)
-            ).any():
-                bye_week += 1
-            byes = pd.concat([byes,
-                pd.DataFrame({"current_team": [team], "bye_week": [bye_week]})], ignore_index=True
-            )
-        self.players = pd.merge(
-            left=self.players, right=byes, how="left", on="current_team"
-        )
-
-    def add_roster_pcts(self, inc: int = 25):
-        """
-        Pulls the percentage of leagues each player is rostered in and merges it into the players dataframe.
-
-        Args:
-            inc (int, optional): number of players to pull per API call, defaults to 25.
-        """
-        self.yahoo_client.refresh_oauth()
-        roster_pcts = pd.DataFrame()
-        for ind in range(self.players.shape[0] // inc + 1):
-            while True:
-                try:
-                    self.yahoo_client.refresh_oauth()
-                    if self.players.iloc[inc * ind : inc * (ind + 1)].shape[0] == 0:
-                        pcts = {"count":0}
-                        break
-                    player_ids = (
-                        self.players.iloc[inc * ind : inc * (ind + 1)]
-                        .player_id.astype(str)
-                        .tolist()
-                    )
-                    player_ids = [
-                        val.split(".")[0] for val in player_ids if val != "nan"
-                    ]
-                    if len(player_ids) > 0:
-                        pcts = self.lg.yhandler.get(
-                            "league/{}/players;player_keys={}.p.{}/percent_owned".format(
-                                self.lg_id, self.lg_id.split('.')[0], ",{}.p.".format(self.lg_id.split('.')[0]).join(player_ids)
-                            )
-                        )["fantasy_content"]["league"][1]["players"]
-                    else:
-                        pcts = {"count":0}
-                    break
-                except:
-                    err_message = traceback.format_exc()
-                    print(err_message)
-                    print(
-                        "Roster percentage query crapped out... Waiting 30 seconds and trying again..."
-                    )
-                    time.sleep(30)
-            for player_ind in range(pcts["count"]):
-                player = pcts[str(player_ind)]["player"]
-                player_id = [
-                    int(val["player_id"]) for val in player[0] if "player_id" in val
-                ]
-                # full_name = [val["name"]["full"] for val in player[0] if "name" in val]
-                pct_owned = [
-                    float(val["value"]) / 100.0
-                    for val in player[1]["percent_owned"]
-                    if "value" in val
-                ]
-                if len(pct_owned) == 0:
-                    # print("Can't find roster percentage for {}...".format(full_name))
-                    pct_owned = [0.0]
-                roster_pcts = pd.concat([roster_pcts,
-                    pd.DataFrame(
-                        {
-                            "player_id": player_id,
-                            # "name": full_name,
-                            "pct_rostered": pct_owned,
-                        }
-                    )],
-                    ignore_index=True,
-                    sort=False,
-                )
-        self.players = pd.merge(
-            left=self.players, right=roster_pcts, how="left", on=["player_id"]#, "name"]
-        )
-        self.players.pct_rostered = self.players.pct_rostered.fillna(0.0)
-        not_found = (self.players.player_id == self.players.player_id_sr) \
-        & (~self.players.fantasy_team.isnull() | (self.players.pct_rostered > 0.0))
-        if not_found.any():
-            # What about unsigned draft picks??? Maybe look them up individually?
-            print(
-                "Need to reconcile player names with Pro Football Reference... "
-                + ", ".join(self.players.loc[not_found, "name"])
-            )
-
-    def add_depth_charts(self):
-        """
-        Pulls current team depth charts from ESPN and merges them into the players dataframe.
-        """
-        if self.season == self.latest_season and self.week == self.current_week:
-            # Include name corrections here???
-            self.players = pd.merge(left=self.players,right=sr.get_all_depth_charts()\
-            .rename(columns={'player':'name','pos':'position','team':'current_team'}),\
-            how="left",on=["current_team","name",'position'])
-            missing = self.players.string.isnull() & ~self.players.position.isin(['DEF']) \
-            & ((self.players.pct_rostered > 0.05) | ~self.players.fantasy_team.isnull()) \
-            & ~self.players.status.isin(['NA']) & self.players.until.isnull()
-            if missing.any():
-                print(
-                    "Need to reconcile player names with ESPN... "
-                    + ", ".join(self.players.loc[missing, "name"])
-                )
-        else:
-            self.load_stats(self.season * 100 + 1, self.season * 100 + 17)
-            strings = self.stats.loc[self.stats.season * 100 + self.stats.week >= self.season*100 + self.week]\
-            .sort_values(by=['season','week'],ascending=True)[['player_id_sr','string']]\
-            .drop_duplicates(subset=['player_id_sr'],keep='first')
-            self.players = pd.merge(left=self.players,right=strings,how='left',on=['player_id_sr'])
-        self.players.loc[self.players.position == 'DEF','string'] = 1.0
-        self.players.string = self.players.string.fillna(2.0)
 
     def get_rates(self, reload: bool = True):
         """
