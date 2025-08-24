@@ -15,20 +15,16 @@ import numpy as np
 import sportsref_nfl as sr
 import time
 import datetime
-import optparse
-import smtplib, ssl
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import traceback
 from fantasy_scoring import FantasyScorer
+from league_configs import get_league_config, apply_default_scoring_categories
 from projection_engine import ProjectionEngine
 from season_simulator import SeasonSimulator
 from yahoo_client import YahooFantasyClient
 from excel_exporter import FantasyExcelExporter
 from war_calculator import WARCalculator
 from player_data_manager import PlayerDataManager
+from email_utils import send_email
+from cli import initialize_inputs
 
 # Probably not smart long term, but doing it for now...
 import warnings
@@ -161,77 +157,26 @@ class League:
         )[["display_name", "value"]].astype({"value": float})
         self.scoring.loc[(self.scoring.display_name == "Int") & (self.scoring.value <= 0),"display_name"] = "Int Thrown"
         self.scoring = self.scoring.drop_duplicates(subset=["display_name"]).set_index("display_name")['value'].to_dict()
+        
+        # Check for predefined platform configurations
+        config = None
         if sfb:
-            # # SFB13
-            # self.settings['playoff_start_week'] = 12
-            # self.settings['num_playoff_teams'] = 6
-            # self.scoring = {'Pass Yds':0.04,'Pass Comp':0.1,'Pass TD':6.0,'Pass 1D':0.1,'Pass 300+':0.0,\
-            # 'Int Thrown':0.0,'Rush Yds':0.1,'Rush Att':0.25,'Rush TD':6.0,'Rush 1D':1.0,'Rush 100+':0.0,\
-            # 'Rec Yds':0.1,'Rec':1.0,'Rec TD':6.0,'Rec 1D':1.0,'Rec 100+':0.0,'Ret Yds':0.0,'Ret TD':6.0,\
-            # 'TE Rec Bonus':1.0,'TE 1D Bonus':1.0,'2-PT':2.0,'Fum Lost':0.0,'Fum Ret TD':6.0,\
-            # 'FG 0-19':2.0,'FG 20-29':2.5,'FG 30-39':3.5,'FG 40-49':4.5,'FG 50+':5.5,'PAT Made':3.3,\
-            # 'Sack':0.0,'Int':0.0,'Fum Rec':0.0,'TD':0.0,'Safe':0.0,'Blk Kick':0.0,\
-            # 'Pts Allow 0':0.0,'Pts Allow 1-6':0.0,'Pts Allow 7-13':0.0,'Pts Allow 14-20':0.0,\
-            # 'Pts Allow 21-27':0.0,'Pts Allow 28-34':0.0,'Pts Allow 35+':0.0,'XPR':0.0}
-            # self.roster_spots = pd.DataFrame({'position':['QB','RB','WR','TE','W/R/T','Q/W/R/T','K','BN'],'count':[1,2,3,1,2,1,1,11]})
-            # # SFB14
-            # self.scoring = {'Pass Yds':0.02,'Pass Comp':0.0,'Pass TD':6.0,'Pass 1D':0.0,'Pass 300+':0.0,\
-            # 'Int Thrown':0.0,'Rush Yds':0.1,'Rush Att':0.25,'Rush TD':6.0,'Rush 1D':0.5,'Rush 100+':0.0,\
-            # 'Rec Yds':0.1,'Rec':0.75,'Rec TD':6.0,'Rec 1D':0.5,'Rec 100+':0.0,'Ret Yds':0.2,'Ret TD':10.0,\
-            # 'TE Rec Bonus':0.75,'TE 1D Bonus':1.0,'2-PT':2.0,'Fum Lost':0.0,'Fum Ret TD':6.0,\
-            # 'FG 0-19':2.0,'FG 20-29':2.5,'FG 30-39':3.5,'FG 40-49':4.5,'FG 50+':5.5,'PAT Made':3.3,\
-            # 'Sack':0.0,'Int':0.0,'Fum Rec':0.0,'TD':0.0,'Safe':0.0,'Blk Kick':0.0,\
-            # 'Pts Allow 0':0.0,'Pts Allow 1-6':0.0,'Pts Allow 7-13':0.0,'Pts Allow 14-20':0.0,\
-            # 'Pts Allow 21-27':0.0,'Pts Allow 28-34':0.0,'Pts Allow 35+':0.0,'XPR':0.0}
-            # self.roster_spots = pd.DataFrame({'position':['QB','RB','WR','TE','W/R/T','Q/W/R/T','K','BN'],'count':[1,1,1,1,5,1,1,11]})
-            # SFB15
-            self.scoring = {'Pass Yds':0.04,'Pass Comp':0.0,'Pass TD':6.0,'Pass 1D':0.0,'Pass 300+':0.0,\
-            'Int Thrown':0.0,'Rush Yds':0.1,'Rush Att':0.5,'Rush TD':6.0,'Rush 1D':1.0,'Rush 100+':0.0,\
-            'Rec Yds':0.1,'Rec':2.5,'Rec TD':6.0,'Rec 1D':1.0,'Rec 100+':0.0,'Ret Yds':0.0,'Ret TD':6.0,\
-            'TE Rec Bonus':1.0,'TE 1D Bonus':1.0,'2-PT':2.0,'Fum Lost':0.0,'Fum Ret TD':6.0,\
-            'FG 0-19':0.0,'FG 20-29':0.0,'FG 30-39':0.0,'FG 40-49':0.0,'FG 50+':0.0,'PAT Made':0.0,\
-            'Sack':0.0,'Int':0.0,'Fum Rec':0.0,'TD':0.0,'Safe':0.0,'Blk Kick':0.0,\
-            'Pts Allow 0':0.0,'Pts Allow 1-6':0.0,'Pts Allow 7-13':0.0,'Pts Allow 14-20':0.0,\
-            'Pts Allow 21-27':0.0,'Pts Allow 28-34':0.0,'Pts Allow 35+':0.0,'XPR':0.0}
-            self.roster_spots = pd.DataFrame({'position':['QB','RB','WR','TE','W/R/T','Q/W/R/T','K','BN'],'count':[0,0,0,0,9,2,0,11]})
+            config = get_league_config('sfb')
         elif str(bestball).lower() in ["dk", "draftkings"]:
-            self.settings['playoff_start_week'] = 14
-            self.settings['num_playoff_teams'] = 2
-            self.scoring = {'Pass Yds':0.04,'Pass Comp':0.0,'Pass TD':4.0,'Pass 1D':0.0,'Pass 300+':3.0,\
-            'Int Thrown':-1.0,'Rush Yds':0.1,'Rush Att':0.0,'Rush TD':6.0,'Rush 1D':0.0,'Rush 100+':3.0,\
-            'Rec Yds':0.1,'Rec':1.0,'Rec TD':6.0,'Rec 1D':0.0,'Rec 100+':3.0,'Ret Yds':0.0,'Ret TD':6.0,\
-            'TE Rec Bonus':0.0,'TE 1D Bonus':0.0,'2-PT':2.0,'Fum Lost':-1.0,'Fum Ret TD':6.0,\
-            'FG 0-19':0.0,'FG 20-29':0.0,'FG 30-39':0.0,'FG 40-49':0.0,'FG 50+':0.0,'PAT Made':0.0,\
-            'Sack':0.0,'Int':0.0,'Fum Rec':0.0,'TD':0.0,'Safe':0.0,'Blk Kick':0.0,\
-            'Pts Allow 0':0.0,'Pts Allow 1-6':0.0,'Pts Allow 7-13':0.0,'Pts Allow 14-20':0.0,\
-            'Pts Allow 21-27':0.0,'Pts Allow 28-34':0.0,'Pts Allow 35+':0.0,'XPR':0.0}
-            self.roster_spots = pd.DataFrame({'position':['QB','RB','WR','TE','W/R/T','Q/W/R/T','K','BN'],'count':[1,2,3,1,1,0,0,12]})
+            config = get_league_config('draftkings')
         elif str(bestball).lower() in ["underdog"]:
-            # Slow Puppy
-            self.settings['playoff_start_week'] = 14
-            self.settings['num_playoff_teams'] = 2
-            self.scoring = {'Pass Yds':0.04,'Pass Comp':0.0,'Pass TD':4.0,'Pass 1D':0.0,'Pass 300+':0.0,\
-            'Int Thrown':-1.0,'Rush Yds':0.1,'Rush Att':0.0,'Rush TD':6.0,'Rush 1D':0.0,'Rush 100+':0.0,\
-            'Rec Yds':0.1,'Rec':0.5,'Rec TD':6.0,'Rec 1D':0.0,'Rec 100+':0.0,'Ret Yds':0.0,'Ret TD':0.0,\
-            'TE Rec Bonus':0.0,'TE 1D Bonus':0.0,'2-PT':2.0,'Fum Lost':-2.0,'Fum Ret TD':0.0,\
-            'FG 0-19':0.0,'FG 20-29':0.0,'FG 30-39':0.0,'FG 40-49':0.0,'FG 50+':0.0,'PAT Made':0.0,\
-            'Sack':0.0,'Int':0.0,'Fum Rec':0.0,'TD':0.0,'Safe':0.0,'Blk Kick':0.0,\
-            'Pts Allow 0':0.0,'Pts Allow 1-6':0.0,'Pts Allow 7-13':0.0,'Pts Allow 14-20':0.0,\
-            'Pts Allow 21-27':0.0,'Pts Allow 28-34':0.0,'Pts Allow 35+':0.0,'XPR':0.0}
-            self.roster_spots = pd.DataFrame({'position':['QB','RB','WR','TE','W/R/T','Q/W/R/T','K','BN'],'count':[1,2,3,1,1,0,0,10]})
-            # # Pomeranian Superflex
-            # self.settings['num_playoff_teams'] = 3
-            # self.roster_spots = pd.DataFrame({'position':['QB','RB','WR','TE','W/R/T','Q/W/R/T','K','BN'],'count':[1,2,2,1,1,1,0,12]})
+            config = get_league_config('underdog')
+
+        if config:
+            # Apply predefined configuration
+            if 'settings' in config:
+                for key, value in config['settings'].items():
+                    self.settings[key] = value
+            self.scoring = config['scoring']
+            self.roster_spots = config['roster_spots']
         else:
-            if "FG 0-19" not in self.scoring:
-                self.scoring["FG 0-19"] = 3
-            if "Rec" not in self.scoring:
-                self.scoring["Rec"] = 0
-            if "Ret Yds" not in self.scoring:
-                self.scoring["Ret Yds"] = 0
-            for stat in ['Pass Comp','Pass 1D','Rush Att','Rush 1D','Rec 1D',\
-            'TE Rec Bonus','TE 1D Bonus','Pass 300+','Rush 100+','Rec 100+']:
-                self.scoring[stat] = 0.0
+            # Use default Yahoo scoring with missing categories filled in
+            self.scoring = apply_default_scoring_categories(self.scoring)
 
     def load_fantasy_teams(self):
         """
@@ -1794,206 +1739,6 @@ class League:
         )
 
 
-def sendEmail(subject: str, body: str, address: str, filename: str = None):
-    """
-    Sends an email to the address provided with whichever subject, body, and attachements desired.
-
-    Args:
-        subject (str): subject line of the email to be sent.  
-        body (str): body text of the email to be sent.  
-        address (str): email address to send the message to.  
-        filename (str, optional): location of a file to be attached to the email, defaults to None.
-    """
-    message = MIMEMultipart()
-    message["From"] = os.environ["EMAIL_SENDER"]
-    message["To"] = address
-    message["Subject"] = subject
-    message.attach(MIMEText(body + "\n\n", "plain"))
-    if filename and os.path.exists(str(filename)):
-        with open(filename, "rb") as attachment:
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(attachment.read())
-        encoders.encode_base64(part)
-        part.add_header(
-            "Content-Disposition", "attachment; filename= " + filename.split("/")[-1]
-        )
-        message.attach(part)
-    text = message.as_string()
-    context = ssl.create_default_context()
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-        server.login(os.environ["EMAIL_SENDER"], os.environ["EMAIL_PW"])
-        server.sendmail(os.environ["EMAIL_SENDER"], address, text)
-
-
-def initialize_inputs():
-    """
-    Initializing arguments based on command line inputs provided by the user.
-
-    Returns:
-        optparse.Values: collection of cleaned input values based on inputs and basic logic.
-    """
-    parser = optparse.OptionParser()
-    parser.add_option(
-        "--season",
-        action="store",
-        type="int",
-        dest="season",
-        help="season of interest"
-    )
-    parser.add_option(
-        "--week",
-        action="store",
-        type="int",
-        dest="week",
-        help="week to project the season from"
-    )
-    parser.add_option(
-        "--name",
-        action="store",
-        dest="name",
-        help="name of team to analyze in the case of multiple teams in a single season",
-    )
-    parser.add_option(
-        "--earliest",
-        action="store",
-        type="int",
-        dest="earliest",
-        help="earliest week of stats being considered, e.g. 201807 corresponds to week 7 of the 2018 season",
-    )
-    parser.add_option(
-        "--games",
-        action="store",
-        type="int",
-        dest="games",
-        help="number of games to build each player's prior off of",
-    )
-    parser.add_option(
-        "--basaloppstringtime",
-        action="store",
-        dest="basaloppstringtime",
-        help="scaling factors for basal/opponent/depthchart/time factors, comma-separated string of values",
-    )
-    parser.add_option(
-        "--sims", action="store", type="int", dest="sims", help="number of season simulations"
-    )
-    parser.add_option(
-        "--payouts",
-        action="store",
-        dest="payouts",
-        help="comma separated string containing integer payouts for 1st, 2nd, and 3rd",
-    )
-    parser.add_option(
-        "--injurytries",
-        action="store",
-        type="int",
-        dest="injurytries",
-        default=10,
-        help="number of times to try pulling injury statuses before rolling with it",
-    )
-    parser.add_option(
-        "--bestball",
-        action="store_true",
-        dest="bestball",
-        help="whether to assess the league of interest in the context of bestball (simulates bench contributions better)",
-    )
-    parser.add_option(
-        "--pickups",
-        action="store",
-        dest="pickups",
-        help='assess possible free agent pickups for the players specified ("all" will analyze all possible pickups)',
-    )
-    parser.add_option(
-        "--adds",
-        action="store_true",
-        dest="adds",
-        help="whether to assess possible free agent adds",
-    )
-    parser.add_option(
-        "--drops",
-        action="store_true",
-        dest="drops",
-        help="whether to assess possible drops",
-    )
-    parser.add_option(
-        "--trades",
-        action="store",
-        dest="trades",
-        help='assess possible trades for the players specified ("all" will analyze all possible trades)',
-    )
-    parser.add_option(
-        "--given",
-        action="store",
-        dest="given",
-        help="given players to start with for multi-player trades",
-    )
-    parser.add_option(
-        "--deltas",
-        action="store_true",
-        dest="deltas",
-        help="whether to assess deltas for each matchup of the current week",
-    )
-    parser.add_option(
-        "--output",
-        action="store",
-        dest="output",
-        help="where to save the final projections spreadsheet",
-    )
-    parser.add_option(
-        "--email",
-        action="store",
-        dest="email",
-        help="where to send the final projections spreadsheet",
-    )
-    options, args = parser.parse_args()
-    if not options.season:
-        options.season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
-    if options.basaloppstringtime:
-        options.basaloppstringtime = options.basaloppstringtime.split(",")
-        if all([val.isnumeric() for val in options.basaloppstringtime]) and len(options.basal_oppstringtime) == 4:
-            options.basaloppstringtime = [float(val) for val in options.basaloppstringtime]
-        else:
-            print("Invalid rate inference parameters, using defaults...")
-            options.basaloppstringtime = None
-    if options.payouts:
-        options.payouts = options.payouts.split(",")
-        if all([val.isnumeric() for val in options.payouts]) and len(options.payouts) == 3:
-            options.payouts = [float(val) for val in options.payouts]
-        else:
-            print("Weird values provided for payouts... Assuming standard payouts...")
-            options.payouts = [60.0,30.0,10.0]
-    elif options.name == "The Algorithm":
-        options.payouts = [720, 360, 120]
-    elif options.name == "Toothless Wonders":
-        options.payouts = [350, 100, 50]
-    elif options.name == "The GENIEs":
-        options.payouts = [120, 0, 0]
-    elif options.name == "The Great Gadsby's":
-        options.payouts = [50, 35, 15]
-    else:
-        options.payouts = [60.0,30.0,10.0]
-    if not options.output:
-        options.output = (
-            os.path.expanduser("~/Documents/")
-            if os.path.exists(os.path.expanduser("~/Documents/"))
-            else os.path.expanduser("~/")
-        )
-        if not os.path.exists(options.output + options.name.replace(" ", "")):
-            os.mkdir(options.output + options.name.replace(" ", ""))
-        if not os.path.exists(
-            options.output + options.name.replace(" ", "") + "/" + str(options.season)
-        ):
-            os.mkdir(
-                options.output
-                + options.name.replace(" ", "")
-                + "/"
-                + str(options.season)
-            )
-        options.output += options.name.replace(" ", "") + "/" + str(options.season)
-    if options.output[-1] != "/":
-        options.output += "/"
-    return options
-
-
 def main():
     options = initialize_inputs()
     league = League(
@@ -2118,7 +1863,7 @@ def main():
     )
     if options.email:
         try:
-            sendEmail(
+            send_email(
                 "Fantasy Football Projections for " + options.name,
                 "Best of luck to you this fantasy football season!!!",
                 options.email,
