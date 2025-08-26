@@ -747,9 +747,7 @@ class League:
         
         # Calculate team projections for each week (your existing logic)
         self.players["points_var"] = self.players.points_stdev**2
-        projections = pd.DataFrame(
-            columns=["fantasy_team", "week", "points_avg", "points_var"]
-        )
+        projections_list = []
         for week in range(17):
             self.starters(week + 1)
             week_projections = (
@@ -759,9 +757,12 @@ class League:
                 .reset_index()
             )
             if not week_projections.empty:
-                projections = pd.concat([projections, week_projections], 
-                                    ignore_index=True, sort=False)
-            projections.loc[projections.week.isnull(), "week"] = week + 1
+                week_projections["week"] = week + 1
+                projections_list.append(week_projections)
+        if projections_list:
+            projections = pd.concat(projections_list, ignore_index=True)
+        else:
+            projections = pd.DataFrame(columns=["fantasy_team", "week", "points_avg", "points_var"])
         projections["points_stdev"] = projections["points_var"] ** 0.5
         del self.players["points_var"]
         
