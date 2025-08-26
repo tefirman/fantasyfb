@@ -13,7 +13,6 @@ import pandas as pd
 import os
 import numpy as np
 import sportsref_nfl as sr
-import time
 import datetime
 from fantasy_scoring import FantasyScorer
 from league_configs import get_league_config, apply_default_scoring_categories
@@ -104,8 +103,14 @@ class League:
         )
         self.load_nfl_abbrevs()
         self.load_nfl_schedule()
-        self.get_yahoo_players(injurytries)
-        self.get_fantasy_rosters()
+        self.players = self.yahoo_client.get_all_players(injurytries)
+        selected = self.yahoo_client.get_team_rosters(self.teams, self.week)
+        self.players = pd.merge(
+            left=self.players, 
+            right=selected, 
+            how="left", 
+            on="player_id"
+        )
         self.lineup_optimizer = LineupOptimizer(self.roster_spots, self.teams, self.yahoo_client)
         self.move_analyzer = MoveAnalyzer(self)
         
@@ -263,148 +268,6 @@ class League:
         except:
             nfl_schedule.date = pd.to_datetime(nfl_schedule.date, format="%m/%d/%y") # Accounting for manual updates to schedule csv... Thanks Excel...
         self.nfl_schedule = nfl_schedule.sort_values(by=["season", "week"], ignore_index=True)
-
-    def get_yahoo_players(self, injurytries: int = 10):
-        """
-        Pulls a dataframe containing details about all NFL players that are eligible 
-        to be rostered in the fantasy league in question. Injury statuses will occasionally 
-        be excluded by API; in that case, the function will repeat the pull until it sees 
-        the injury statuses or hits the upper limit provided in injurytries.
-
-        Args:
-            injurytries (int, optional): maximum number of times the code will try to pull the player list, defaults to 10.
-        """
-        self.yahoo_client.refresh_oauth()
-        tries = 0
-        while tries < injurytries:
-            tries += 1
-            players = []
-            # Rostered Players
-            for page_ind in range(100):
-                while True:
-                    try:
-                        page = self.lg.yhandler.get_players_raw(self.lg_id, page_ind * 25, "T")
-                        page = page["fantasy_content"]["league"][1]["players"]
-                        break
-                    except:
-                        print("Players query crapped out... Waiting 30 seconds and trying again...")
-                        time.sleep(30)
-                if page == []:
-                    break
-                for player_ind in range(page["count"]):
-                    player = [
-                        field
-                        for field in page[str(player_ind)]["player"][0]
-                        if type(field) == dict
-                    ]
-                    vals = {}
-                    for field in player:
-                        vals.update(field)
-                    vals["name"] = vals["name"]["full"]
-                    vals["eligible_positions"] = [
-                        pos["position"] for pos in vals["eligible_positions"]
-                    ]
-                    vals["bye_weeks"] = vals["bye_weeks"]["week"]
-                    players.append(vals)
-            # Available Players
-            for page_ind in range(100):
-                """Accounting for a weird player_id deletion in 2015..."""
-                while True:
-                    try:
-                        page = self.lg.yhandler.get_players_raw(self.lg_id, page_ind * 25, "A")
-                        page = page["fantasy_content"]["league"][1]["players"]
-                        break
-                    except:
-                        print("Players query crapped out... Waiting 30 seconds and trying again...")
-                        time.sleep(30)
-                if page == []:
-                    break
-                for player_ind in range(page["count"]):
-                    player = [
-                        field
-                        for field in page[str(player_ind)]["player"][0]
-                        if type(field) == dict
-                    ]
-                    vals = {}
-                    for field in player:
-                        vals.update(field)
-                    vals["name"] = vals["name"]["full"]
-                    vals["eligible_positions"] = [
-                        pos["position"] for pos in vals["eligible_positions"]
-                    ]
-                    vals["bye_weeks"] = vals["bye_weeks"]["week"]
-                    players.append(vals)
-            self.players = pd.DataFrame(players)
-            self.players.player_id = self.players.player_id.astype(int)
-            if not self.players.status.isnull().all():
-                break
-
-    def get_fantasy_rosters(self):
-        """
-        Pulls the current fantasy team of each eligible NFL player 
-        and merges it into the players dataframe.
-        """
-        self.yahoo_client.refresh_oauth()
-        selected = pd.DataFrame(
-            columns=["player_id", "selected_position", "fantasy_team"]
-        )
-        for team in self.teams:
-            while True:
-                try:
-                    tm = self.lg.to_team(team["team_key"])
-                    players = pd.DataFrame(tm.roster(self.week))
-                    break
-                except:
-                    print("Team roster query crapped out... Waiting 30 seconds and trying again...")
-                    time.sleep(30)
-            if players.shape[0] == 0:
-                continue
-            if (~players.player_id.isin(self.players.player_id)).any():
-                print(
-                    "Some players are missing... "
-                    + ", ".join(
-                        players.loc[~players.player_id.isin(rosters.player_id), "name"]
-                    )
-                )
-            players["fantasy_team"] = team["name"]
-            selected = pd.concat([selected,
-                players[["player_id", "selected_position", "fantasy_team"]]],
-                ignore_index=True,
-                sort=False,
-            )
-        rosters = pd.merge(
-            left=self.players, right=selected, how="left", on="player_id"
-        )
-        if "fantasy_team" not in rosters.columns:
-            rosters["fantasy_team"] = None
-        rosters.loc[rosters.player_id == 100014, "name"] += " Rams"
-        rosters.loc[rosters.player_id == 100024, "name"] += " Chargers"
-        rosters.loc[rosters.player_id == 100020, "name"] += " Jets"
-        rosters.loc[rosters.player_id == 100019, "name"] += " Giants"
-        rosters = pd.merge(
-            left=rosters,
-            right=self.nfl_teams[["real_abbrev", "name"]],
-            how="left",
-            on="name",
-        )
-        rosters.loc[~rosters.real_abbrev.isnull(), "name"] = rosters.loc[
-            ~rosters.real_abbrev.isnull(), "real_abbrev"
-        ]
-        rosters["position"] = rosters.display_position.apply(
-            lambda x: [pos for pos in x.split(',') if pos in ['QB','WR','TE','K','RB','DEF']][0]
-        )
-        self.players = rosters[
-            [
-                "name",
-                "eligible_positions",
-                "selected_position",
-                "status",
-                "player_id",
-                "editorial_team_abbr",
-                "fantasy_team",
-                "position",
-            ]
-        ]
 
     def pull_stats(self, start: int, finish: int, path: str = "GameByGameFantasyFootballStats.csv"):
         """

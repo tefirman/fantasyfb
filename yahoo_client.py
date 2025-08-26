@@ -301,6 +301,11 @@ class YahooFantasyClient:
             if not players_df.status.isnull().all():
                 break
         
+        # Extracting primary position
+        players_df["position"] = players_df.display_position.apply(
+            lambda x: [pos for pos in x.split(',') if pos in ['QB','WR','TE','K','RB','DEF']][0]
+        )
+
         return players_df
     
     def get_team_rosters(self, teams: List[Dict], week: int) -> pd.DataFrame:
