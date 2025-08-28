@@ -90,6 +90,9 @@ class ProjectionEngine:
         
         # Apply Bayesian updating with position priors
         final_projections = self._apply_bayesian_updating(player_projections, position_priors)
+
+        # Append position priors as average players
+        final_projections = pd.concat([final_projections, position_priors], ignore_index=True, sort=False)
         
         return final_projections
     
