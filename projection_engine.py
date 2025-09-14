@@ -271,7 +271,8 @@ class ProjectionEngine:
                     projections.loc[update_mask, 'points_squared'] -
                     projections.loc[update_mask, 'points_rate'] ** 2
                 )
-                projections.loc[update_mask, 'points_stdev'] = np.sqrt(variance.clip(lower=0))
+                # projections.loc[update_mask, 'points_stdev'] = np.sqrt(variance.clip(lower=0))
+                projections.loc[update_mask, 'points_stdev'] = np.sqrt(np.clip(variance, 0, None))
         
         # Clean up temporary columns
         if 'points_squared' in projections.columns:
