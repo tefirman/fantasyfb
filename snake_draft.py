@@ -253,7 +253,7 @@ def main():
             progress.to_csv(options.output,index=False)
             pick_num += 1
         elif pick_name.lower() == "best":
-            best = league.possible_adds([pick_name],exclude,limit_per=5,team_name="My Team",\
+            best = league.move_analyzer.possible_adds([pick_name],exclude,limit_per=5,team_name="My Team",\
             verbose=False,payouts=options.payouts,bestball=options.bestball)
             best = pd.merge(left=best,right=adp[['name','position','avg_pick','avg_round']]\
             .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
@@ -263,7 +263,7 @@ def main():
             print(best[display_cols].to_string(index=False))
         elif pick_name.lower() == "nearest":
             nearby = league.players.loc[league.players.avg_pick <= pick_num + 2*num_teams,'name'].tolist()
-            nearest = league.possible_adds(nearby,exclude,limit_per=5,team_name="My Team",\
+            nearest = league.move_analyzer.possible_adds(nearby,exclude,limit_per=5,team_name="My Team",\
             verbose=False,payouts=options.payouts,bestball=options.bestball)
             nearest = pd.merge(left=nearest,right=adp[['name','position','avg_pick','avg_round']]\
             .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
@@ -274,7 +274,7 @@ def main():
         elif pick_name.lower() == "bestball":
             league.num_sims = 1000
             besties = league.players.loc[~league.players.position.isin(['K','DEF']),'name'].tolist()
-            best = league.possible_adds(besties,exclude,limit_per=5,team_name="My Team",\
+            best = league.move_analyzer.possible_adds(besties,exclude,limit_per=5,team_name="My Team",\
             verbose=False,payouts=options.payouts,bestball=True)
             best = pd.merge(left=best,right=adp[['name','position','avg_pick','avg_round']]\
             .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
@@ -287,7 +287,7 @@ def main():
             league.num_sims = 1000
             nearby = league.players.loc[(league.players.avg_pick <= pick_num + 2*num_teams) \
             & ~league.players.position.isin(['K','DEF']),'name'].tolist()
-            nearest = league.possible_adds(nearby,exclude,limit_per=5,team_name="My Team",\
+            nearest = league.move_analyzer.possible_adds(nearby,exclude,limit_per=5,team_name="My Team",\
             verbose=False,payouts=options.payouts,bestball=True)
             nearest = pd.merge(left=nearest,right=adp[['name','position','avg_pick','avg_round']]\
             .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
@@ -301,7 +301,7 @@ def main():
             while focus is None:
                 focus = check_pick_name(league,input("Which player would you like to check? "),["nevermind"])
             if focus != "nevermind":
-                lookup = league.possible_adds([focus],exclude,team_name="My Team",\
+                lookup = league.move_analyzer.possible_adds([focus],exclude,team_name="My Team",\
                 verbose=False,payouts=options.payouts,bestball=options.bestball)
                 lookup = pd.merge(left=lookup,right=adp[['name','position','avg_pick','avg_round']]\
                 .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
