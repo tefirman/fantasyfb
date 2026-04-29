@@ -12,7 +12,8 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import sportsref_nfl as sr
+
+from nfl_data_provider import NFLDataProvider
 
 
 class PlayerDataManager:
@@ -20,18 +21,21 @@ class PlayerDataManager:
     Manages all player data operations including ID mapping, corrections, and enrichment.
     """
     
-    def __init__(self, yahoo_client, season: int, current_week: int):
+    def __init__(self, yahoo_client, season: int, current_week: int,
+                 nfl_provider: NFLDataProvider):
         """
         Initialize the player data manager.
-        
+
         Args:
             yahoo_client: YahooFantasyClient instance
             season: Current NFL season
             current_week: Current week in season
+            nfl_provider: Pluggable NFL data backend.
         """
         self.yahoo_client = yahoo_client
         self.season = season
         self.current_week = current_week
+        self.nfl_provider = nfl_provider
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         
         # Load required reference data
@@ -69,19 +73,23 @@ class PlayerDataManager:
 
     def map_player_ids(self, players: pd.DataFrame) -> pd.DataFrame:
         """
-        Map between Yahoo player IDs and SportsRef player IDs based on team rosters and draft results.
-        
+        Map Yahoo player IDs to NFL player IDs.
+
+        nflreadpy's weekly roster feed carries the Yahoo player ID directly,
+        so we can join on that instead of the legacy name-matching cascade.
+        That eliminates the bespoke name_corrections.csv layer that used to
+        be required because Pro Football Reference and Yahoo disagreed on
+        player spellings.
+
         Args:
             players: DataFrame with Yahoo player data
-            
+
         Returns:
             DataFrame with mapped player IDs
         """
-        # Load NFL rosters
-        nfl_rosters = sr.get_bulk_rosters(self.season - 1, self.latest_season, "NFLRosters.csv")
-        nfl_rosters = nfl_rosters.rename(columns={'player':'name','player_id':'player_id_sr','team':'current_team'})
-        
-        # Map team abbreviations
+        nfl_rosters = self.nfl_provider.get_rosters(self.season - 1, self.latest_season)
+
+        # Map Yahoo team abbreviations -> NFL team abbreviations.
         players = pd.merge(
             left=players,
             right=self.nfl_teams[["real_abbrev", "yahoo"]].rename(
@@ -90,62 +98,43 @@ class PlayerDataManager:
             how="inner",
             on="editorial_team_abbr",
         )
-        
-        # Primary mapping via roster
-        players = pd.merge(
-            left=players,
-            right=nfl_rosters[['name','current_team','player_id_sr']].drop_duplicates()
-            .rename(columns={'player':'name','player_id':'player_id_sr','team':'current_team'}),
-            how='left',
-            on=['name','current_team']
-        )
-        
-        # Remove duplicate Michael Carters (edge case)
-        players = players.loc[~players.player_id_sr.isin(['CartMi02'])].reset_index(drop=True)
-        
-        # Check for duplicate IDs
-        id_check = players.groupby('player_id_sr').size().to_frame('freq').reset_index()
-        if id_check.freq.max() > 1:
-            print('Found the same player ID on multiple players: ' + 
-                  ', '.join(id_check.loc[id_check.freq > 1,'player_id_sr'].tolist()))
-        
-        # Handle defenses
-        defenses = players.position.isin(['DEF'])
-        players.loc[defenses,'player_id_sr'] = players.loc[defenses,'name']
-        
-        # Try to map missing players via draft data
-        latest_draft = sr.get_draft(self.latest_season)[['player','player_id','team_abbrev']]
-        latest_draft = latest_draft.rename(columns={'player':'name','player_id':'player_id_sr','team_abbrev':'current_team'})
-        
-        missing = players.player_id_sr.isnull() & players.name.isin(latest_draft.name.unique())
-        if missing.any():
-            unsigned = players[missing].reset_index(drop=True)
-            del unsigned['player_id_sr']
-            unsigned = pd.merge(
-                left=unsigned,
-                right=latest_draft[['name','current_team','player_id_sr']].drop_duplicates(subset=['name'],keep='first'),
-                how='inner',
-                on=['name','current_team']
+
+        if "yahoo_id" in nfl_rosters.columns:
+            # Preferred path: exact ID join. Take the most recent roster
+            # entry per yahoo_id to handle mid-season team changes.
+            roster_by_yid = (
+                nfl_rosters.dropna(subset=["yahoo_id"])
+                .assign(yahoo_id=lambda d: d["yahoo_id"].astype(str))
+                .sort_values("season")
+                .drop_duplicates(subset=["yahoo_id"], keep="last")
+                [["yahoo_id", "player_id_sr"]]
             )
-            players = pd.concat([players[~missing], unsigned], ignore_index=True)
-        
-        # Final attempt via name matching only
-        missing = players.player_id_sr.isnull() & players.name.isin(nfl_rosters.name.unique())
-        if missing.any():
-            closest = players[missing].reset_index(drop=True)
-            del closest['player_id_sr'], closest['current_team']
-            closest = pd.merge(
-                left=closest,
-                right=nfl_rosters[['name','current_team','player_id_sr']].drop_duplicates(subset=['name'],keep='last'),
-                how='inner',
-                on='name'
+            players = players.assign(yahoo_id=players["player_id"].astype(str)).merge(
+                roster_by_yid, on="yahoo_id", how="left"
             )
-            players = pd.concat([players[~missing], closest], ignore_index=True)
-        
-        # Use Yahoo ID as fallback
-        still_missing = players.player_id_sr.isnull()
-        players.loc[still_missing,'player_id_sr'] = players.loc[still_missing,'player_id']
-        
+            del players["yahoo_id"]
+        else:
+            # Fallback: name + team match.
+            players = players.merge(
+                nfl_rosters[["name", "current_team", "player_id_sr"]].drop_duplicates(),
+                on=["name", "current_team"], how="left",
+            )
+
+        # Defenses use the team abbreviation as their ID.
+        defenses = players["position"].isin(["DEF"])
+        players.loc[defenses, "player_id_sr"] = players.loc[defenses, "name"]
+
+        # Surface duplicate IDs so we can flag data-quality regressions early.
+        id_check = players.groupby("player_id_sr").size().to_frame("freq").reset_index()
+        if not id_check.empty and id_check.freq.max() > 1:
+            print("Found the same player ID on multiple players: " +
+                  ", ".join(id_check.loc[id_check.freq > 1, "player_id_sr"].astype(str).tolist()))
+
+        # Final fallback: anyone we still couldn't link gets their Yahoo ID
+        # so downstream joins on player_id_sr don't drop them entirely.
+        still_missing = players["player_id_sr"].isnull()
+        players.loc[still_missing, "player_id_sr"] = players.loc[still_missing, "player_id"]
+
         return players
 
     def add_injuries(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
@@ -350,15 +339,24 @@ class PlayerDataManager:
             DataFrame with depth chart information added
         """
         if self.season == self.latest_season and week == self.current_week:
-            # Get current depth charts
-            players = pd.merge(
-                left=players,
-                right=sr.get_all_depth_charts().rename(columns={
-                    'player':'name','pos':'position','team':'current_team'
-                }),
-                how="left",
-                on=["current_team", "name", 'position']
-            )
+            # Get current depth charts. Prefer the player_id_sr join when
+            # we have it (immune to name spelling drift); fall back to
+            # name+team for whatever the provider couldn't ID-link.
+            depth = self.nfl_provider.get_depth_charts()
+            id_join = depth.dropna(subset=["player_id_sr"])[["player_id_sr", "string"]]
+            players = players.merge(id_join, on="player_id_sr", how="left")
+
+            still_unset = players["string"].isnull()
+            if still_unset.any():
+                name_join = depth[["name", "current_team", "position", "string"]].rename(
+                    columns={"string": "string_name"}
+                )
+                players = players.merge(
+                    name_join, on=["name", "current_team", "position"], how="left"
+                )
+                players.loc[still_unset, "string"] = players.loc[still_unset, "string_name"]
+                if "string_name" in players.columns:
+                    del players["string_name"]
             
             # Check for missing depth chart entries
             missing = (
