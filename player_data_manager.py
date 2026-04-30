@@ -37,12 +37,7 @@ class PlayerDataManager:
         self.current_week = current_week
         self.nfl_provider = nfl_provider
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
-        
-        # Load required reference data
-        self.nfl_teams = pd.read_csv(
-            "https://raw.githubusercontent.com/"
-            + "tefirman/fantasy-data/main/fantasyfb/team_abbrevs.csv"
-        )
+        self.nfl_teams = self.nfl_provider.team_aliases()
         
     def apply_name_corrections(self, players: pd.DataFrame, stats: pd.DataFrame) -> pd.DataFrame:
         """

@@ -15,6 +15,23 @@ import pandas as pd
 from nfl_data_provider import NFLDataProvider
 
 
+# Yahoo's `editorial_team_abbr` -> nflreadpy team code. Yahoo and nflreadpy
+# disagree on a handful of teams (Rams: LAR vs LA; Raiders' relocation; the
+# Cardinals/Ravens/Texans/Colts/Chargers/Titans triplets the legacy CSV
+# stored in PFR-style real_abbrev). Hardcoded here because the active set
+# of NFL franchises changes ~once a decade.
+_YAHOO_TO_NFL_TEAM = {
+    "Ari": "ARI", "Atl": "ATL", "Bal": "BAL", "Buf": "BUF",
+    "Car": "CAR", "Chi": "CHI", "Cin": "CIN", "Cle": "CLE",
+    "Dal": "DAL", "Den": "DEN", "Det": "DET",  "GB": "GB",
+    "Hou": "HOU", "Ind": "IND", "Jax": "JAX",  "KC": "KC",
+    "LAC": "LAC", "LAR": "LA",  "Mia": "MIA", "Min": "MIN",
+     "NO": "NO",   "NE": "NE",  "NYG": "NYG", "NYJ": "NYJ",
+     "LV": "LV",  "Phi": "PHI", "Pit": "PIT", "Sea": "SEA",
+     "SF": "SF",   "TB": "TB",  "Ten": "TEN", "Was": "WAS",
+}
+
+
 # Map of stat names from nflreadpy player_stats -> the legacy fantasyfb schema
 # expected by fantasy_scoring.FantasyScorer.
 _OFFENSE_RENAMES = {
@@ -269,3 +286,8 @@ class NflreadpyProvider(NFLDataProvider):
             "team": "current_team",
         })
         return out[["name", "current_team", "player_id_sr"]].reset_index(drop=True)
+
+    def team_aliases(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [{"yahoo": y, "real_abbrev": t} for y, t in _YAHOO_TO_NFL_TEAM.items()]
+        )
