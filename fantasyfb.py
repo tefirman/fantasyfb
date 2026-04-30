@@ -12,7 +12,6 @@
 import pandas as pd
 import os
 import numpy as np
-import sportsref_nfl as sr
 import datetime
 from fantasy_scoring import FantasyScorer
 from league_configs import get_league_config, apply_default_scoring_categories
@@ -27,6 +26,8 @@ from lineup_optimizer import LineupOptimizer
 from move_analyzer import MoveAnalyzer
 from email_utils import send_email
 from cli import initialize_inputs
+from nfl_data_provider import NFLDataProvider
+from nflreadpy_provider import NflreadpyProvider
 
 class League:
     """
@@ -65,6 +66,7 @@ class League:
         basaloppstringtime: list = [],
         sfb: bool = False,
         bestball: str = "",
+        nfl_provider: NFLDataProvider = None,
     ):
         """
         Initializes a League object using the parameters provided and class functions defined below.
@@ -83,6 +85,8 @@ class League:
         """
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         """ Year of the most recent season """
+        self.nfl_provider = nfl_provider if nfl_provider is not None else NflreadpyProvider()
+        """ Pluggable NFL data backend; defaults to nflreadpy """
         self.season = season if type(season) == int else self.latest_season
         """ Season of interest, defaults to most recent season when no value is provided """
         self.yahoo_client = YahooFantasyClient()
@@ -115,14 +119,15 @@ class League:
         self.move_analyzer = MoveAnalyzer(self)
         
         # Initialize player data manager and process all player data
-        player_manager = PlayerDataManager(self.yahoo_client, self.season, self.current_week)
-        
+        player_manager = PlayerDataManager(
+            self.yahoo_client, self.season, self.current_week, self.nfl_provider
+        )
+
         # We need stats for name corrections, so load them first
         self.load_stats((self.season - 2) * 100 + 1, self.season * 100 + self.week - 1)
-        
+
         # Load NFL rosters for get_rates() method
-        self.nfl_rosters = sr.get_bulk_rosters(self.season - 1, self.latest_season, "NFLRosters.csv")
-        self.nfl_rosters = self.nfl_rosters.rename(columns={'player':'name','player_id':'player_id_sr','team':'current_team'})
+        self.nfl_rosters = self.nfl_provider.get_rosters(self.season - 1, self.latest_season)
         
         # Process all player data in one call
         self.players = player_manager.process_players(
@@ -218,111 +223,32 @@ class League:
 
     def load_nfl_schedule(self, path: str = "NFLSchedule.csv"):
         """
-        Loads and processes the NFL schedule for use in future simulations
+        Loads and processes the NFL schedule for use in future simulations.
+
+        Pulls the last eight seasons through the current season from the
+        configured NFL data provider; the on-disk cache is bypassed because
+        nflreadpy reads parquet locally and is already fast.
 
         Args:
-            path (str, optional): location of saved NFL schedule, defaults to "NFLSchedule.csv".
+            path (str, optional): retained for backward compatibility, unused.
         """
-        if os.path.exists(path):
-            nfl_schedule = pd.read_csv(path)
-        else:
-            nfl_schedule = pd.DataFrame(columns=['season','week','score1','score2'])
-        before = nfl_schedule.season*100 + nfl_schedule.week < self.season*100 + self.week
-        missing = before & nfl_schedule.score1.isnull() & nfl_schedule.score2.isnull()
-        if missing.any() or self.season not in nfl_schedule.season.unique():
-            s = sr.Schedule(self.season - 8,self.season,False,True,False)
-            s.schedule.to_csv(path,index=False)
-            nfl_schedule = s.schedule.copy()
-        
-        nfl_schedule = nfl_schedule[[
-                "season",
-                "game_date",
-                "week",
-                "team1_abbrev",
-                "team2_abbrev",
-                "elo1_pre",
-                "elo2_pre",
-                "elo_diff",
-            ]].rename(
-            columns={
-                "game_date": "date",
-                "team1_abbrev": "home_team",
-                "team2_abbrev": "away_team",
-                "elo1_pre": "home_elo",
-                "elo2_pre": "away_elo",
-                "elo_diff": "home_elo_diff",
-            },
+        nfl_schedule = self.nfl_provider.get_schedule(self.season - 8, self.season)
+        nfl_schedule["date"] = pd.to_datetime(nfl_schedule["date"], errors="coerce")
+        self.nfl_schedule = nfl_schedule.sort_values(
+            by=["season", "week"], ignore_index=True
         )
-        nfl_schedule["away_elo_diff"] = -1*nfl_schedule["home_elo_diff"]
-        home = nfl_schedule[["season", "week", "date", "home_team", "home_elo_diff", "away_elo"]]\
-        .rename(columns={"home_team": "team", "home_elo_diff": "elo_diff", "away_elo": "opp_elo"})
-        home["home_away"] = "Home"
-        away = nfl_schedule[["season", "week", "date", "away_team", "away_elo_diff", "home_elo"]]\
-        .rename(columns={"away_team": "team", "away_elo_diff": "elo_diff", "home_elo": "opp_elo"})
-        away["home_away"] = "Away"
-        nfl_schedule = pd.concat([home, away], ignore_index=True)
-        nfl_schedule.elo_diff = nfl_schedule.elo_diff / 1500
-        nfl_schedule.opp_elo = 1500 / nfl_schedule.opp_elo
-        try:
-            nfl_schedule.date = pd.to_datetime(nfl_schedule.date, format="%Y-%m-%d")
-        except:
-            nfl_schedule.date = pd.to_datetime(nfl_schedule.date, format="%m/%d/%y") # Accounting for manual updates to schedule csv... Thanks Excel...
-        self.nfl_schedule = nfl_schedule.sort_values(by=["season", "week"], ignore_index=True)
 
     def pull_stats(self, start: int, finish: int, path: str = "GameByGameFantasyFootballStats.csv"):
         """
-        Pulls a dataframe containing event rates based on per-game statistics during the specified timeframe.
+        Pulls per-game player and team-defense statistics for the requested
+        YYYYWW range from the configured NFL data provider.
 
         Args:
-            start (int): year and number of the first week of interest (YYYYWW, e.g. 202102 = week 2 of 2021).  
-            finish (int): year and number of the last week of interest (YYYYWW, e.g. 202307 = week 7 of 2023).  
-            path (str, optional): location of saved per-game statistics, defaults to "GameByGameFantasyFootballStats.csv".
-
-        Returns:
-            pd.DataFrame: dataframe containing player rates based on games during the timespan of interest.
+            start (int): year and number of the first week of interest (YYYYWW, e.g. 202102 = week 2 of 2021).
+            finish (int): year and number of the last week of interest (YYYYWW, e.g. 202307 = week 7 of 2023).
+            path (str, optional): retained for backward compatibility, unused.
         """
-        s = sr.Schedule(start//100,finish//100)
-        stats = sr.get_bulk_stats(start//100,start%100,finish//100,finish%100,False,path,schedule_data=s.schedule)
-        pts_allowed = pd.concat([s.schedule[['boxscore_abbrev','team1_abbrev','score2']]\
-        .rename(columns={'boxscore_abbrev':'game_id','team1_abbrev':'team','score2':'points_allowed'}),\
-        s.schedule[['boxscore_abbrev','team2_abbrev','score1']]\
-        .rename(columns={'boxscore_abbrev':'game_id','team2_abbrev':'team','score1':'points_allowed'})],ignore_index=True)
-        stats = pd.merge(left=stats,right=pts_allowed,how='left',on=['game_id','team'])
-        pos_corrections = pd.read_csv(
-            "https://raw.githubusercontent.com/"
-            + "tefirman/fantasy-data/main/fantasyfb/pos_corrections.csv"
-        )
-        stats = pd.merge(left=stats,right=pos_corrections[['player_id','actual_pos']],how='left',on=['player_id'])
-        stats.loc[~stats.actual_pos.isnull(),'pos'] = stats.loc[~stats.actual_pos.isnull(),'actual_pos']
-        del stats['actual_pos']
-        to_fix = ~stats.pos.isin(["QB", "RB", "WR", "TE", "K"]) & (
-            stats.pos.str.contains("QB")
-            | stats.pos.str.contains("WR")
-            | stats.pos.str.contains("RB")
-            | stats.pos.str.contains("TE")
-            | (stats.pos.str.contains("K") & ~stats.pos.isin(["MIKE","JACK"]))
-        )
-        if to_fix.any():
-            print('Weird positions in game-by-game stats...')
-            print(stats.loc[to_fix, ["player_id", "player", "pos"]].to_string(index=False))
-        defenses = (
-            stats.loc[~stats.pos.isin(["QB", "RB", "WR", "TE", "K"])]
-            .groupby(
-                ["game_id", "season", "week", "team", "opponent", "points_allowed"]
-            )
-            .sum(numeric_only=True)
-            .reset_index()
-        )
-        defenses["player"] = defenses["team"]
-        defenses["player_id"] = defenses["player"]
-        defenses["pos"] = "DEF"
-        if "string" in defenses.columns:
-            defenses["string"] = 1.0
-        defenses = defenses[[col for col in stats.columns if col in defenses.columns]]
-        stats = stats.loc[stats.pos.isin(["QB", "RB", "WR", "TE", "K"])]
-        self.stats = pd.concat([stats,defenses], ignore_index=True)\
-        .rename(columns={'pos':'position','player':'name','player_id':'player_id_sr'})
-        self.stats["weeks_ago"] = (datetime.datetime.now() - pd.to_datetime(self.stats.game_id.str[:8])).dt.days / 7.0
+        self.stats = self.nfl_provider.get_player_stats(start, finish)
 
     def add_points(self):
         """
