@@ -248,7 +248,7 @@ class NflreadpyProvider(NFLDataProvider):
         # replaced with (dt, team, player_name, pos_abb, pos_rank). We
         # support both because mid-package upgrades shouldn't trip up
         # users still pulling historical seasons.
-        latest = pd.Timestamp.utcnow().year
+        latest = pd.Timestamp.now(tz="UTC").year
         raw = nfl.load_depth_charts(seasons=[latest]).to_pandas()
         if raw.empty and latest > 1999:
             raw = nfl.load_depth_charts(seasons=[latest - 1]).to_pandas()
