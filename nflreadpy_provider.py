@@ -198,7 +198,17 @@ class NflreadpyProvider(NFLDataProvider):
         # In nflreadpy, positive spread_line = home team favored (verified
         # empirically on 2024 W1 games). A team's elo_diff under the legacy
         # convention is positive when that team is favored.
+        #
+        # The divisor matches elo_diff to the scale the legacy sportsref_nfl
+        # provider produced (range ~±0.25, vs the ~±1.0 you'd get from a
+        # naive spread/14). The remote weighting_factors.csv was MLE-fit
+        # against that legacy scale, so we preserve it here. Empirically
+        # back-fit from 2025 W12: spread / 60 lands within the old range,
+        # though correlation isn't perfect since the legacy provider used
+        # Elo ratings (team-strength prior) while we only have per-game
+        # spreads. Good enough until weighting_factors.csv is refit.
         spread = raw["spread_line"].fillna(0).astype(float)
+        elo_divisor = 60.0
 
         home = pd.DataFrame({
             "season": raw["season"],
@@ -207,7 +217,7 @@ class NflreadpyProvider(NFLDataProvider):
             "team": raw["home_team"],
             "opp_team": raw["away_team"],
             "home_away": "Home",
-            "elo_diff": spread / 14.0,
+            "elo_diff": spread / elo_divisor,
             "opp_elo": 1.0,
         })
         away = pd.DataFrame({
@@ -217,7 +227,7 @@ class NflreadpyProvider(NFLDataProvider):
             "team": raw["away_team"],
             "opp_team": raw["home_team"],
             "home_away": "Away",
-            "elo_diff": -spread / 14.0,
+            "elo_diff": -spread / elo_divisor,
             "opp_elo": 1.0,
         })
         out = pd.concat([home, away], ignore_index=True)
