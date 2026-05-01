@@ -208,7 +208,17 @@ class NflreadpyProvider(NFLDataProvider):
         # Elo ratings (team-strength prior) while we only have per-game
         # spreads. Good enough until weighting_factors.csv is refit.
         spread = raw["spread_line"].fillna(0).astype(float)
+        total = raw["total_line"].fillna(0).astype(float)
         elo_divisor = 60.0
+
+        # Per-team Vegas implied scoring totals. With spread sign convention
+        # "positive = home favored", the home team's implied total is
+        # (total + spread)/2 and the away team's is (total - spread)/2 --
+        # they sum to the over/under by construction. These let downstream
+        # matchup models reason about the scoring environment directly,
+        # rather than the win-probability proxy we get from the spread alone.
+        home_implied = (total + spread) / 2.0
+        away_implied = (total - spread) / 2.0
 
         home = pd.DataFrame({
             "season": raw["season"],
@@ -219,6 +229,10 @@ class NflreadpyProvider(NFLDataProvider):
             "home_away": "Home",
             "elo_diff": spread / elo_divisor,
             "opp_elo": 1.0,
+            "spread_line": spread,
+            "total_line": total,
+            "implied_total": home_implied,
+            "opp_implied_total": away_implied,
         })
         away = pd.DataFrame({
             "season": raw["season"],
@@ -229,6 +243,10 @@ class NflreadpyProvider(NFLDataProvider):
             "home_away": "Away",
             "elo_diff": -spread / elo_divisor,
             "opp_elo": 1.0,
+            "spread_line": -spread,
+            "total_line": total,
+            "implied_total": away_implied,
+            "opp_implied_total": home_implied,
         })
         out = pd.concat([home, away], ignore_index=True)
         return out.sort_values(["season", "week"], ignore_index=True)
