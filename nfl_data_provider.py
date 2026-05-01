@@ -85,3 +85,18 @@ class NFLDataProvider(ABC):
         Required columns:
             name, current_team, player_id_sr
         """
+
+    @abstractmethod
+    def team_aliases(self) -> pd.DataFrame:
+        """Translation table between Yahoo and provider-native team codes.
+
+        Required columns:
+            yahoo        -- value Yahoo emits as `editorial_team_abbr`
+            real_abbrev  -- provider-native team code (matches the `team`
+                            column returned by get_player_stats and
+                            get_schedule)
+
+        The column names mirror the legacy team_abbrevs.csv schema so that
+        existing callers reading `nfl_teams.real_abbrev` keep working; the
+        values now point at the active backend rather than at PFR.
+        """

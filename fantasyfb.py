@@ -214,12 +214,13 @@ class League:
 
     def load_nfl_abbrevs(self):
         """
-        Loads a translation table for all NFL team abbreviations across platforms
+        Loads a translation table for all NFL team abbreviations across platforms.
+
+        Sourced from the active NFL data provider so the `real_abbrev`
+        column matches whatever team codes the rest of the pipeline will
+        see in stats and schedules.
         """
-        self.nfl_teams = pd.read_csv(
-            "https://raw.githubusercontent.com/"
-            + "tefirman/fantasy-data/main/fantasyfb/team_abbrevs.csv"
-        )
+        self.nfl_teams = self.nfl_provider.team_aliases()
 
     def load_nfl_schedule(self, path: str = "NFLSchedule.csv"):
         """

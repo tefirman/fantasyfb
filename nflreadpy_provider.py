@@ -15,6 +15,23 @@ import pandas as pd
 from nfl_data_provider import NFLDataProvider
 
 
+# Yahoo's `editorial_team_abbr` -> nflreadpy team code. Yahoo and nflreadpy
+# disagree on a handful of teams (Rams: LAR vs LA; Raiders' relocation; the
+# Cardinals/Ravens/Texans/Colts/Chargers/Titans triplets the legacy CSV
+# stored in PFR-style real_abbrev). Hardcoded here because the active set
+# of NFL franchises changes ~once a decade.
+_YAHOO_TO_NFL_TEAM = {
+    "Ari": "ARI", "Atl": "ATL", "Bal": "BAL", "Buf": "BUF",
+    "Car": "CAR", "Chi": "CHI", "Cin": "CIN", "Cle": "CLE",
+    "Dal": "DAL", "Den": "DEN", "Det": "DET",  "GB": "GB",
+    "Hou": "HOU", "Ind": "IND", "Jax": "JAX",  "KC": "KC",
+    "LAC": "LAC", "LAR": "LA",  "Mia": "MIA", "Min": "MIN",
+     "NO": "NO",   "NE": "NE",  "NYG": "NYG", "NYJ": "NYJ",
+     "LV": "LV",  "Phi": "PHI", "Pit": "PIT", "Sea": "SEA",
+     "SF": "SF",   "TB": "TB",  "Ten": "TEN", "Was": "WAS",
+}
+
+
 # Map of stat names from nflreadpy player_stats -> the legacy fantasyfb schema
 # expected by fantasy_scoring.FantasyScorer.
 _OFFENSE_RENAMES = {
@@ -181,7 +198,17 @@ class NflreadpyProvider(NFLDataProvider):
         # In nflreadpy, positive spread_line = home team favored (verified
         # empirically on 2024 W1 games). A team's elo_diff under the legacy
         # convention is positive when that team is favored.
+        #
+        # The divisor matches elo_diff to the scale the legacy sportsref_nfl
+        # provider produced (range ~±0.25, vs the ~±1.0 you'd get from a
+        # naive spread/14). The remote weighting_factors.csv was MLE-fit
+        # against that legacy scale, so we preserve it here. Empirically
+        # back-fit from 2025 W12: spread / 60 lands within the old range,
+        # though correlation isn't perfect since the legacy provider used
+        # Elo ratings (team-strength prior) while we only have per-game
+        # spreads. Good enough until weighting_factors.csv is refit.
         spread = raw["spread_line"].fillna(0).astype(float)
+        elo_divisor = 60.0
 
         home = pd.DataFrame({
             "season": raw["season"],
@@ -190,7 +217,7 @@ class NflreadpyProvider(NFLDataProvider):
             "team": raw["home_team"],
             "opp_team": raw["away_team"],
             "home_away": "Home",
-            "elo_diff": spread / 14.0,
+            "elo_diff": spread / elo_divisor,
             "opp_elo": 1.0,
         })
         away = pd.DataFrame({
@@ -200,7 +227,7 @@ class NflreadpyProvider(NFLDataProvider):
             "team": raw["away_team"],
             "opp_team": raw["home_team"],
             "home_away": "Away",
-            "elo_diff": -spread / 14.0,
+            "elo_diff": -spread / elo_divisor,
             "opp_elo": 1.0,
         })
         out = pd.concat([home, away], ignore_index=True)
@@ -231,7 +258,7 @@ class NflreadpyProvider(NFLDataProvider):
         # replaced with (dt, team, player_name, pos_abb, pos_rank). We
         # support both because mid-package upgrades shouldn't trip up
         # users still pulling historical seasons.
-        latest = pd.Timestamp.utcnow().year
+        latest = pd.Timestamp.now(tz="UTC").year
         raw = nfl.load_depth_charts(seasons=[latest]).to_pandas()
         if raw.empty and latest > 1999:
             raw = nfl.load_depth_charts(seasons=[latest - 1]).to_pandas()
@@ -269,3 +296,8 @@ class NflreadpyProvider(NFLDataProvider):
             "team": "current_team",
         })
         return out[["name", "current_team", "player_id_sr"]].reset_index(drop=True)
+
+    def team_aliases(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [{"yahoo": y, "real_abbrev": t} for y, t in _YAHOO_TO_NFL_TEAM.items()]
+        )
