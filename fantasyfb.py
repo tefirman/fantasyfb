@@ -346,51 +346,47 @@ class League:
             as_of,
             self.nfl_schedule,
         )
-        # ProjectionEngineV2 emits diagnostic columns (volume_rate,
-        # efficiency_rate); drop them here so the downstream merge with
-        # self.players doesn't pick up duplicates if the player table
-        # gets enriched with the same names later.
-        projections = projections[[
-            "player_id_sr", "position", "points_rate", "points_stdev", "num_games",
-        ]]
-        
+
         # Separate average players and real players
         league_avg = projections[projections['player_id_sr'].str.startswith('avg_')].copy()
         league_avg['string'] = 2.0
-        
+
         # Merge projections with existing player metadata
         by_player = pd.merge(
             projections[~projections['player_id_sr'].str.startswith('avg_')],
             self.players[[
-                "player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
+                "player_id_sr", "player_id", "status", "fantasy_team", "current_team",
                 "position", "string", "until", "bye_week", "pct_rostered", "selected_position"
             ]].drop_duplicates(),
             how="right",
             on=["player_id_sr", "position"],
         )
-        
+
         # Handle rookies (players not in projections) - merge with position averages
         rookies = pd.merge(
             left=by_player.loc[
                 by_player.num_games.isnull(),
-                ["player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
+                ["player_id_sr", "player_id", "status", "fantasy_team", "current_team",
                 "position", "string", "until", "bye_week", "pct_rostered", "selected_position"],
             ],
-            right=league_avg[["position", "points_rate", "points_stdev"]],
+            right=league_avg[["position", "points_rate", "points_stdev",
+                              "volume_rate", "efficiency_rate"]],
             how="inner",
             on="position",
         )
-        
+
         # Combine players with data and rookies
         by_player = by_player.loc[~by_player.num_games.isnull()]
+        keep_cols = [
+            "player_id_sr", "player_id", "status", "fantasy_team", "current_team",
+            "position", "points_rate", "points_stdev",
+            "volume_rate", "efficiency_rate",
+            "string", "until", "bye_week", "pct_rostered", "selected_position",
+        ]
         by_player = pd.concat([
-            by_player[["player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
-                    "position", "points_rate", "points_stdev", "string", "until", 
-                    "bye_week", "pct_rostered", "selected_position"]],
-            rookies[["player_id_sr", "player_id", "status", "fantasy_team", "current_team", 
-                    "position", "points_rate", "points_stdev", "string", "until", 
-                    "bye_week", "pct_rostered", "selected_position"]],
-            league_avg
+            by_player[keep_cols],
+            rookies[keep_cols],
+            league_avg,
         ], ignore_index=True, sort=False)
         
         # Add back player names from NFL rosters
