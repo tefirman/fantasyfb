@@ -26,10 +26,10 @@ class LineupOptimizer:
         self.teams = teams
         self.yahoo_client = yahoo_client
 
-    def set_optimal_lineup(self, players, week, season, current_week, latest_season, 
-                        nfl_schedule, basaloppstringtime):
+    def set_optimal_lineup(self, players, week, season, current_week, latest_season,
+                        nfl_schedule, matchup_model):
         """
-        Identifies which players should be started on each fantasy team 
+        Identifies which players should be started on each fantasy team
         based on fantasy point projections and available roster spots.
 
         Args:
@@ -38,45 +38,24 @@ class LineupOptimizer:
             season: Current season
             current_week: The actual current week
             latest_season: Most recent NFL season
-            nfl_schedule: NFL schedule with ELO data
-            basaloppstringtime: Weighting factors DataFrame
+            nfl_schedule: NFL schedule with Vegas implied totals
+            matchup_model: MatchupModel that produces the per-week
+                multiplicative factor on points_rate. Replaces V1's
+                basal/opp_elo/string_weight formula.
 
         Returns:
             DataFrame with players marked as starters and injury/game factors added
         """
         as_of = season * 100 + week
         self.yahoo_client.refresh_oauth()
-        
-        # Add game context factors
-        players = pd.merge(
-            left=players,
-            right=nfl_schedule.loc[
-                (nfl_schedule.season == as_of // 100)
-                & (nfl_schedule.week == week),
-                ["team", "elo_diff"],
-            ],
-            how="left",
-            left_on="current_team",
-            right_on="team",
-        )
-        
-        players.elo_diff = players.elo_diff.infer_objects(copy=False).fillna(0.0)
-        
-        # Add weighting factors if not present
-        if "opp_elo_weight" not in players.columns:
-            players = pd.merge(left=players, right=basaloppstringtime, how='left', on='position')
-        
-        # Calculate game factors
-        players["opp_factor"] = (players['opp_elo_weight'] * players["elo_diff"])
-        players["string_factor"] = players['string_weight'] * (1 - players["string"])
-        players["game_factor"] = players['basal'] + players["opp_factor"] + players["string_factor"]
-        players["points_avg"] = players["points_rate"] * players["game_factor"]
-        
-        # Clean up temporary columns
-        if "team" in players.columns:
-            del players["team"]
-        if "elo_diff" in players.columns:
-            del players["elo_diff"]
+
+        players = matchup_model.apply_factors(players, nfl_schedule, as_of=as_of)
+        # Backfill the Vegas join columns when a player's team is on bye
+        # this week (apply_factors leaves them NaN by design).
+        for col in ("matchup_factor",):
+            if col in players.columns:
+                players[col] = players[col].fillna(1.0)
+        players["points_avg"] = players["points_rate"] * players["matchup_factor"]
         
         # Sort by projected points
         players = players.sort_values(by="points_avg", ascending=False)

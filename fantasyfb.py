@@ -16,7 +16,8 @@ import datetime
 from fantasy_scoring import FantasyScorer
 from league_configs import get_league_config, apply_default_scoring_categories
 from schedule_manager import ScheduleManager
-from projection_engine import ProjectionEngine
+from projection_engine_v2 import ProjectionEngineV2
+from matchup_model import MatchupModel
 from season_simulator import SeasonSimulator
 from yahoo_client import YahooFantasyClient
 from excel_exporter import FantasyExcelExporter
@@ -67,6 +68,7 @@ class League:
         sfb: bool = False,
         bestball: str = "",
         nfl_provider: NFLDataProvider = None,
+        fit_matchup: bool = False,
     ):
         """
         Initializes a League object using the parameters provided and class functions defined below.
@@ -141,6 +143,9 @@ class League:
         self.load_parameters(earliest, reference_games, basaloppstringtime)
         self.num_sims = num_sims if type(num_sims) == int else 10000
         """ Number of simulations to run when assessing the league of interest """
+        self.matchup_model = MatchupModel.from_history(self.stats, self.nfl_schedule)
+        if fit_matchup:
+            self.refit_matchup_weights()
         self.get_rates()
         self.war_sim()
         self.get_schedule()
@@ -279,45 +284,48 @@ class League:
 
     def load_parameters(self, earliest: int = None, reference_games: int = None, basaloppstringtime: list = []):
         """
-        Initializes rate adjustment parameters for future season simulations. 
-        If parameters are not manually, optimal values are chosen based on 
-        maximum likelihood fitting over five years.
+        Initializes rate adjustment parameters for the projection engine.
+
+        V2 only needs the per-position `earliest` cutoff; `reference_games`
+        and `basaloppstringtime` are accepted for backward compatibility
+        with the V1 CLI but ignored downstream.
 
         Args:
-            earliest (int, optional): year and number of the earliest week to be included in the prior for rate calculation, defaults to None.  
-            reference_games (int, optional): number of games to include the prior for rate calculation, defaults to None.  
-            basaloppstringtime (list, optional): list containing the basal factor, opponent elo factor, and depth chart factor, defaults to [].
+            earliest (int, optional): YYYYWW of the earliest game to consider.
+                Defaults to two seasons before the current one.
+            reference_games: legacy V1 parameter, retained for backward
+                compat but unused; V2 uses Bayesian shrinkage in the
+                ProjectionEngineV2 instead.
+            basaloppstringtime: legacy V1 weighting factors, retained
+                for backward compat but unused; V2 uses MatchupModel
+                instead.
         """
-        params = pd.read_csv(
-            "https://raw.githubusercontent.com/"
-            + "tefirman/fantasy-data/main/fantasyfb/weighting_factors.csv"
-        )
+        positions = ["QB", "RB", "WR", "TE", "K", "DEF"]
         if earliest:
-            self.earliest = {}
-            for pos in ["QB","RB","WR","TE","K","DEF"]:
-                self.earliest[pos] = earliest
+            self.earliest = {pos: earliest for pos in positions}
         else:
-            priors = params.loc[params.week == self.week].set_index("position").to_dict()['prior']
-            self.earliest = {}
-            for pos in priors:
-                self.earliest[pos] = (self.season - priors[pos] // 17) * 100 + self.week - priors[pos] % 17
-                if (self.earliest[pos] % 100 == 0) | (self.earliest[pos] % 100 > 50):
-                    self.earliest[pos] -= 83  # Assuming 17 weeks... Need to change this soon...
-        if reference_games:
-            self.reference_games = {}
-            for pos in ["QB","RB","WR","TE","K","DEF"]:
-                self.reference_games[pos] = reference_games
-        else:
-            self.reference_games = params.loc[params.week == self.week].set_index("position").to_dict()['games']
-        if basaloppstringtime:
-            self.basaloppstringtime = pd.DataFrame({"position":["QB","RB","WR","TE","K","DEF"]})
-            self.basaloppstringtime["basal"] = basaloppstringtime[0]
-            self.basaloppstringtime["opp_elo_weight"] = basaloppstringtime[1]
-            self.basaloppstringtime["string_weight"] = basaloppstringtime[2]
-            self.basaloppstringtime["time_scale"] = basaloppstringtime[3]
-        else:
-            self.basaloppstringtime = params.loc[params.week == self.week, \
-            ["position", "basal", "opp_elo_weight", "string_weight", "time_scale"]]
+            self.earliest = {pos: (self.season - 2) * 100 + 1 for pos in positions}
+        # Legacy attributes preserved so external callers reading them
+        # (cli.py, notebooks) don't crash. Values are placeholders.
+        self.reference_games = {pos: 16 for pos in positions}
+        self.basaloppstringtime = None
+
+    def refit_matchup_weights(self, training_seasons: list = None) -> None:
+        """Refit MatchupModel coefficients via walk-forward least squares.
+
+        Defaults to training on the season prior to the current one.
+        Costs ~5-10s on typical history; the default-weight model the
+        constructor builds is competitive enough that this is only worth
+        running when you want the small extra accuracy that comes from
+        empirically fitting alpha and beta against your own scoring rules.
+        """
+        from model_fitter import fit_from_history
+
+        seasons = training_seasons or [self.season - 1]
+        fitted = fit_from_history(self.stats, self.nfl_schedule, seasons)
+        self.matchup_model = MatchupModel.from_history(
+            self.stats, self.nfl_schedule, weights=fitted,
+        )
 
     def get_rates(self, reload: bool = True):
         """
@@ -331,14 +339,20 @@ class League:
         if not hasattr(self, "stats") or reload:
             self.load_stats(min(self.earliest.values()), as_of - 1)
         
-        # Use the new ProjectionEngine
-        engine = ProjectionEngine(self.basaloppstringtime, self.reference_games)
+        engine = ProjectionEngineV2()
         projections = engine.calculate_projections(
-            self.stats, 
-            self.earliest, 
+            self.stats,
+            self.earliest,
             as_of,
-            self.nfl_schedule
+            self.nfl_schedule,
         )
+        # ProjectionEngineV2 emits diagnostic columns (volume_rate,
+        # efficiency_rate); drop them here so the downstream merge with
+        # self.players doesn't pick up duplicates if the player table
+        # gets enriched with the same names later.
+        projections = projections[[
+            "player_id_sr", "position", "points_rate", "points_stdev", "num_games",
+        ]]
         
         # Separate average players and real players
         league_avg = projections[projections['player_id_sr'].str.startswith('avg_')].copy()
@@ -448,13 +462,13 @@ class League:
             week: week for which to identify starters.
         """
         self.players = self.lineup_optimizer.set_optimal_lineup(
-            self.players, 
-            week, 
-            self.season, 
-            self.current_week, 
+            self.players,
+            week,
+            self.season,
+            self.current_week,
             self.latest_season,
-            self.nfl_schedule, 
-            self.basaloppstringtime
+            self.nfl_schedule,
+            self.matchup_model,
         )
 
     def bestball_sims(self, payouts: list = [20,20,20]):

@@ -13,7 +13,7 @@ import pytest
 
 from fantasy_scoring import FantasyScorer
 from league_configs import apply_default_scoring_categories
-from projection_engine import ProjectionEngine
+from projection_engine_v2 import ProjectionEngineV2
 
 
 PPR_HALF_SCORING = apply_default_scoring_categories({
@@ -59,13 +59,7 @@ class TestProjectionEngine:
     def projections(self, merged: pd.DataFrame) -> pd.DataFrame:
         df = merged.copy()
         df["string"] = 1.0
-        weighting = pd.DataFrame([
-            {"position": pos, "basal": 1.0, "opp_elo_weight": 0.05,
-             "string_weight": 0.05, "time_scale": 0.01}
-            for pos in ["QB", "RB", "WR", "TE", "K", "DEF"]
-        ])
-        ref_games = {p: 16 for p in ["QB", "RB", "WR", "TE", "K", "DEF"]}
-        engine = ProjectionEngine(weighting_factors=weighting, reference_games=ref_games)
+        engine = ProjectionEngineV2()
         earliest = {p: 202401 for p in ["QB", "RB", "WR", "TE", "K", "DEF"]}
         return engine.calculate_projections(df, earliest, current_week=202405)
 
