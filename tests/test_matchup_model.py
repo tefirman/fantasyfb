@@ -149,6 +149,16 @@ class TestStringPenalty:
         weird = m.factor("RB", 22.0, 22.0, "GOOD", string=0.5)
         assert weird == starter
 
+    def test_extreme_string_clipped_at_zero(self, synthetic_history) -> None:
+        # nflreadpy's depth charts go very deep -- pos_rank=9 is a real
+        # value for fringe roster players. Without the clip, that would
+        # produce factor <= -3 and downstream points_avg becomes wildly
+        # negative, which breaks "rank by projection" logic.
+        stats, schedule = synthetic_history
+        m = MatchupModel.from_history(stats, schedule)
+        f = m.factor("QB", 22.0, 22.0, "GOOD", string=9.0)
+        assert f == 0.0
+
 
 class TestApplyFactors:
     def test_attaches_matchup_factor_column(self, synthetic_history) -> None:

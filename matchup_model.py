@@ -177,12 +177,19 @@ class MatchupModel:
         z_allowed = self._z_allowed(opp_team, position)
         string_penalty = max(0.0, string - 1.0)
 
-        return float(
+        factor = (
             1.0
             + weights.alpha * z_total
             + weights.beta * z_allowed
             - weights.gamma * string_penalty
         )
+        # Clip at 0: a deep-depth-chart player (e.g. nflreadpy ranks
+        # some receivers down to string 8 or 9) can otherwise produce
+        # a wildly negative factor, which becomes a wildly negative
+        # `points_avg` and breaks downstream "rank by projection"
+        # logic. Zero is the honest floor -- a player who isn't going
+        # to play projects at zero, not at minus-forty.
+        return float(max(0.0, factor))
 
     def apply_factors(
         self,
