@@ -370,7 +370,7 @@ class League:
                 "position", "string", "until", "bye_week", "pct_rostered", "selected_position"],
             ],
             right=league_avg[["position", "points_rate", "points_stdev",
-                              "volume_rate", "efficiency_rate"]],
+                              "volume_rate", "efficiency_rate", "num_games"]],
             how="inner",
             on="position",
         )
@@ -379,7 +379,7 @@ class League:
         by_player = by_player.loc[~by_player.num_games.isnull()]
         keep_cols = [
             "player_id_sr", "player_id", "status", "fantasy_team", "current_team",
-            "position", "points_rate", "points_stdev",
+            "position", "points_rate", "points_stdev", "num_games",
             "volume_rate", "efficiency_rate",
             "string", "until", "bye_week", "pct_rostered", "selected_position",
         ]

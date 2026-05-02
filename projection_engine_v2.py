@@ -255,11 +255,18 @@ class ProjectionEngineV2:
     ) -> pd.DataFrame:
         """Bayesian-blend each player's rate against the position prior.
 
-        The blend weights player vs. position by relative game counts:
-        with k = shrinkage_n[position], a player with n games gets
-            blended = (n * player + k * prior) / (n + k)
-        so a player with 0 games inherits the position prior, while a
-        player with many games approaches their own observed rate.
+        Shrinks the points-per-game *product* directly rather than
+        shrinking volume and efficiency independently. The independent
+        approach was elegant on paper but produces nonsensical results
+        for outliers: a special-teams RB with low real volume (1.8
+        touches) and inflated efficiency from kick-return TDs ends up
+        with volume shrunk *up* toward position avg AND efficiency
+        shrunk *down* -- the product is then larger than either pre-
+        shrinkage component would suggest. Shrinking the product
+        directly fixes this; volume_rate and efficiency_rate are still
+        emitted as the player's *observed* (pre-shrinkage) rates so the
+        diagnostic columns let you read off "what they actually did"
+        vs. "what we project them at."
         """
         merged = player_components.merge(
             position_priors.rename(columns={
@@ -276,14 +283,9 @@ class ProjectionEngineV2:
         k = merged["k"]
         denom = n + k
 
-        merged["volume_rate"] = (
-            n * merged["volume_rate"] + k * merged["vol_prior"]
-        ) / denom
-        merged["efficiency_rate"] = (
-            n * merged["efficiency_rate"] + k * merged["eff_prior"]
-        ) / denom
-
-        merged["points_rate"] = merged["volume_rate"] * merged["efficiency_rate"]
+        observed_points = merged["volume_rate"] * merged["efficiency_rate"]
+        prior_points = merged["vol_prior"] * merged["eff_prior"]
+        merged["points_rate"] = (n * observed_points + k * prior_points) / denom
 
         # Stdev: blend the player's own observed stdev with the position
         # stdev. Same shape as the mean blend so projections for low-
