@@ -33,6 +33,7 @@ testpaths = ["tests"]
 
 [tool.setuptools]
 py-modules = [
+    "backtest",
     "cli",
     "email_utils",
     "excel_exporter",
@@ -40,11 +41,14 @@ py-modules = [
     "fantasyfb",
     "league_configs",
     "lineup_optimizer",
+    "matchup_model",
+    "model_fitter",
     "move_analyzer",
     "nfl_data_provider",
     "nflreadpy_provider",
     "player_data_manager",
     "projection_engine",
+    "projection_engine_v2",
     "salary_cap_draft",
     "schedule_manager",
     "season_simulator",

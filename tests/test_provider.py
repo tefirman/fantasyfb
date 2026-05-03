@@ -77,6 +77,28 @@ class TestSchedule:
         assert not kc_w1.empty
         assert float(kc_w1.iloc[0]["elo_diff"]) > 0
 
+    def test_vegas_columns_present(self, schedule: pd.DataFrame) -> None:
+        for col in ["spread_line", "total_line", "implied_total", "opp_implied_total"]:
+            assert col in schedule.columns
+
+    def test_implied_totals_sum_to_over_under(self, schedule: pd.DataFrame) -> None:
+        # By construction: home_implied + away_implied == total_line. Pick
+        # one game per week to spot-check this identity.
+        sample = schedule[(schedule.season == 2024) & (schedule.total_line > 0)]
+        sample = sample.drop_duplicates(subset=["season", "week", "team"]).head(20)
+        for _, row in sample.iterrows():
+            assert row["implied_total"] + row["opp_implied_total"] == pytest.approx(row["total_line"])
+
+    def test_home_favorite_has_higher_implied_total(self, schedule: pd.DataFrame) -> None:
+        kc_w1 = schedule[
+            (schedule.season == 2024) & (schedule.week == 1) & (schedule.team == "KC")
+        ].iloc[0]
+        bal_w1 = schedule[
+            (schedule.season == 2024) & (schedule.week == 1) & (schedule.team == "BAL")
+        ].iloc[0]
+        # KC was favored by 3, so KC's implied total should beat BAL's by 3.
+        assert kc_w1["implied_total"] - bal_w1["implied_total"] == pytest.approx(3.0)
+
 
 class TestRosters:
     def test_returns_rows(self, rosters: pd.DataFrame) -> None:

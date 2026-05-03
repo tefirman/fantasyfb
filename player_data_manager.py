@@ -333,46 +333,49 @@ class PlayerDataManager:
         Returns:
             DataFrame with depth chart information added
         """
-        if self.season == self.latest_season and week == self.current_week:
-            # Get current depth charts. Prefer the player_id_sr join when
-            # we have it (immune to name spelling drift); fall back to
-            # name+team for whatever the provider couldn't ID-link.
-            depth = self.nfl_provider.get_depth_charts()
-            id_join = depth.dropna(subset=["player_id_sr"])[["player_id_sr", "string"]]
-            players = players.merge(id_join, on="player_id_sr", how="left")
+        # Always load the current depth chart, regardless of which season
+        # the user is analyzing. The previous gate (only loading for
+        # current season + current week) made sense in a world where we
+        # had historical depth charts to fall back on, but we don't --
+        # nflreadpy only ships current depth charts and the alternative
+        # was every offensive player getting fillna(2.0), which silently
+        # imposed a ~50% backup penalty on every legitimate starter for
+        # any non-current-season analysis. Today's depth chart is the best
+        # info we have; trust it.
+        depth = self.nfl_provider.get_depth_charts()
+        id_join = depth.dropna(subset=["player_id_sr"])[["player_id_sr", "string"]]
+        players = players.merge(id_join, on="player_id_sr", how="left")
 
-            still_unset = players["string"].isnull()
-            if still_unset.any():
-                name_join = depth[["name", "current_team", "position", "string"]].rename(
-                    columns={"string": "string_name"}
-                )
-                players = players.merge(
-                    name_join, on=["name", "current_team", "position"], how="left"
-                )
-                players.loc[still_unset, "string"] = players.loc[still_unset, "string_name"]
-                if "string_name" in players.columns:
-                    del players["string_name"]
-            
-            # Check for missing depth chart entries
+        still_unset = players["string"].isnull()
+        if still_unset.any():
+            name_join = depth[["name", "current_team", "position", "string"]].rename(
+                columns={"string": "string_name"}
+            )
+            players = players.merge(
+                name_join, on=["name", "current_team", "position"], how="left"
+            )
+            players.loc[still_unset, "string"] = players.loc[still_unset, "string_name"]
+            if "string_name" in players.columns:
+                del players["string_name"]
+
+        # Surface unmapped fantasy-relevant players so name drift
+        # (especially for newly-signed players) gets flagged early.
+        if self.season == self.latest_season and week == self.current_week:
             missing = (
-                players.string.isnull() 
-                & ~players.position.isin(['DEF']) 
-                & ((players.pct_rostered > 0.05) | ~players.fantasy_team.isnull()) 
-                & ~players.status.isin(['NA']) 
+                players.string.isnull()
+                & ~players.position.isin(['DEF'])
+                & ((players.pct_rostered > 0.05) | ~players.fantasy_team.isnull())
+                & ~players.status.isin(['NA'])
                 & players.until.isnull()
             )
             if missing.any():
-                print("Need to reconcile player names with ESPN... " + 
+                print("Need to reconcile player names with ESPN... " +
                       ", ".join(players.loc[missing, "name"]))
-        else:
-            # For historical analysis, would need to load stats and infer depth
-            # Simplified for now - just set default values
-            pass
-        
+
         # Set defaults
         players.loc[players.position == 'DEF', 'string'] = 1.0
         players.string = players.string.fillna(2.0)
-        
+
         return players
 
     def process_players(self, players: pd.DataFrame, stats: pd.DataFrame, 

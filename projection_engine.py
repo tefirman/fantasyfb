@@ -1,8 +1,16 @@
 """
-Fantasy football projection engine.
+Fantasy football projection engine (V1, legacy).
 
-This module provides sophisticated player projection algorithms using
-weighted historical performance with opponent, depth chart, and time factors.
+Superseded by ProjectionEngineV2 in projection_engine_v2.py. Retained
+because backtest.py compares V2 against this V1 implementation as the
+historical baseline -- if you delete this module, delete the V1 branch
+of backtest.py first.
+
+V1 model: weighted historical performance with opponent (ELO), depth-
+chart, and time-decay factors, plus Bayesian shrinkage to a position
+prior. Replaced because the ELO signal was tied to FiveThirtyEight's
+ratings (now offline) and because the model was too history-focused
+relative to forward-looking signals like Vegas implied team totals.
 """
 
 import pandas as pd
