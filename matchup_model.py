@@ -214,6 +214,17 @@ class MatchupModel:
             (schedule["season"] == season) & (schedule["week"] == week)
         ][["team", "opp_team", "implied_total", "opp_implied_total"]]
 
+        # apply_factors adds opp_team/implied_total/opp_implied_total to
+        # players via the merge below. season_sims calls us once per week
+        # against the same self.players, so on the second call those
+        # columns already exist and the merge collides on duplicate
+        # column names. Drop them defensively to keep this function
+        # idempotent across repeated calls.
+        players = players.drop(
+            columns=["opp_team", "implied_total", "opp_implied_total"],
+            errors="ignore",
+        )
+
         out = players.merge(
             week_sched.rename(columns={"team": "current_team"}),
             on="current_team",

@@ -177,6 +177,25 @@ class TestApplyFactors:
         good_row = out[out.current_team == "GOOD"].iloc[0]
         assert high_row["matchup_factor"] > good_row["matchup_factor"]
 
+    def test_repeated_calls_do_not_collide_on_columns(self, synthetic_history) -> None:
+        # season_sims calls apply_factors once per week against the same
+        # self.players DataFrame. Without idempotence, the second call
+        # collides on duplicate join columns (opp_team, implied_total,
+        # opp_implied_total) and pandas raises MergeError.
+        stats, schedule = synthetic_history
+        m = MatchupModel.from_history(stats, schedule)
+        players = pd.DataFrame({
+            "player_id_sr": ["qb_HIGH"],
+            "current_team": ["HIGH"],
+            "position": ["QB"],
+            "string": [1.0],
+        })
+        out_w1 = m.apply_factors(players, schedule, as_of=202401)
+        # Second call against the *output* of the first -- this is what
+        # League.season_sims actually does in production.
+        out_w2 = m.apply_factors(out_w1, schedule, as_of=202402)
+        assert "matchup_factor" in out_w2.columns
+
     def test_team_on_bye_gets_neutral_factor(self, synthetic_history) -> None:
         # A team that doesn't appear in the schedule for the requested
         # week (bye) should pass through with factor 1.0 rather than NaN.
