@@ -59,7 +59,7 @@ def cmd_tiers(args: argparse.Namespace) -> int:
     pool = league.players[~league.players["player_id_sr"].astype(str)
                           .str.startswith("avg_")]
     with_vorp = compute_vorp(pool, league.roster_spots, len(league.teams))
-    tiered = assign_tiers(with_vorp, min_gap_z=args.gap_z)
+    tiered = assign_tiers(with_vorp, min_gap_z=args.gap_z, top_n=args.top_n)
 
     positions = [args.position] if args.position else ["QB", "RB", "WR", "TE", "K", "DEF"]
     show_cols = ["name", "current_team", "position", "tier",
@@ -87,7 +87,7 @@ def cmd_values(args: argparse.Namespace) -> int:
     pool = league.players[~league.players["player_id_sr"].astype(str)
                           .str.startswith("avg_")]
     with_vorp = compute_vorp(pool, league.roster_spots, len(league.teams))
-    tiered = assign_tiers(with_vorp, min_gap_z=args.gap_z)
+    tiered = assign_tiers(with_vorp, min_gap_z=args.gap_z, top_n=args.top_n)
 
     adp = load_adp_csv(args.adp)
     merged = merge_adp(tiered, adp, num_teams=len(league.teams))
@@ -178,8 +178,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="restrict to one position (QB/RB/WR/TE/K/DEF)")
     p_tiers.add_argument("--top", type=int, default=30,
                          help="rows per position (default 30)")
-    p_tiers.add_argument("--gap-z", type=float, default=1.0, dest="gap_z",
-                         help="tier-break z-score threshold (default 1.0)")
+    p_tiers.add_argument("--gap-z", type=float, default=2.5, dest="gap_z",
+                         help="tier-break z-score threshold (default 2.5)")
+    p_tiers.add_argument("--top-n", type=int, default=30, dest="top_n",
+                         help="players per position considered for tiering "
+                              "(default 30; rest get tier=NaN)")
     p_tiers.set_defaults(func=cmd_tiers)
 
     p_vals = sub.add_parser("values", help="biggest projection-vs-ADP deltas")
@@ -187,8 +190,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_vals.add_argument("--adp", required=True, help="path to ADP CSV")
     p_vals.add_argument("--top", type=int, default=40,
                         help="rows to show (default 40)")
-    p_vals.add_argument("--gap-z", type=float, default=1.0, dest="gap_z",
-                        help="tier-break z-score threshold (default 1.0)")
+    p_vals.add_argument("--gap-z", type=float, default=2.5, dest="gap_z",
+                        help="tier-break z-score threshold (default 2.5)")
+    p_vals.add_argument("--top-n", type=int, default=30, dest="top_n",
+                        help="players per position considered for tiering "
+                             "(default 30)")
     p_vals.set_defaults(func=cmd_values)
 
     p_mock = sub.add_parser("mock", help="run mock draft(s)")

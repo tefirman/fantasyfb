@@ -184,15 +184,59 @@ class TestTiers:
         assert (out["tier"] == 1).all()
 
     def test_max_tiers_caps(self):
-        """A long monotone falling sequence shouldn't get an unbounded
-        number of tiers -- the cap should kick in."""
+        """A monotone-falling sequence with growing gaps -- where every
+        gap exceeds any reasonable threshold -- should still be capped
+        at max_tiers."""
+        # Quadratic falloff so gaps strictly increase, ensuring each
+        # one beats the median+MAD threshold even at the default z.
         df = pd.DataFrame([
-            _make_projection(f"WR{i:02d}", "WR", 100 - i * 10)
+            _make_projection(f"WR{i:02d}", "WR", 1000 - i ** 2)
             for i in range(20)
         ])
-        # Force every gap to be a tier break with z<0
-        out = assign_tiers(df, positions=["WR"], min_gap_z=-10, max_tiers=4)
+        out = assign_tiers(df, positions=["WR"], min_gap_z=-100, max_tiers=4)
         assert int(out["tier"].max()) == 4
+
+    def test_realistic_distribution_does_not_singletons(self):
+        """Regression for the original 'every player gets its own tier'
+        bug. With a realistic decay (top heavy, smooth tail), the top
+        of the position should produce tiers with multiple players,
+        not rank-1-per-tier."""
+        rows = []
+        # Top 3 elites tightly clustered, then a clear break, then a
+        # smooth descent of ~25 RBs (mimics real RB-position shape).
+        for name, rate in [
+            ("Elite1", 15.75), ("Elite2", 15.63), ("Elite3", 15.59),
+            ("Bijan",  14.43),  # 1.16 gap (real tier break)
+        ]:
+            rows.append(_make_projection(name, "RB", rate))
+        # Smooth descent: rates fall by 0.2-0.4 each rank
+        rates_tail = [14.11, 13.83, 13.49, 13.33, 13.22, 12.77,
+                      11.74, 11.11, 10.62, 10.60, 10.59,
+                      9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5,
+                      5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0]
+        for i, r in enumerate(rates_tail):
+            rows.append(_make_projection(f"Tail{i:02d}", "RB", r))
+        df = pd.DataFrame(rows)
+        out = assign_tiers(df, positions=["RB"])
+        # Top 4 (Elite1-3 + Bijan) should span at most 2 tiers.
+        top4 = out.loc[out["name"].isin(
+            ["Elite1", "Elite2", "Elite3", "Bijan"]), "tier"]
+        assert top4.nunique() <= 2
+        # And the top 15 shouldn't fragment into more than ~6 tiers --
+        # if it does, we're back to rank-as-tier behavior.
+        tiered = out["tier"].dropna()
+        assert tiered.nunique() <= 6
+
+    def test_players_beyond_top_n_get_nan_tier(self):
+        df = pd.DataFrame([
+            _make_projection(f"WR{i:03d}", "WR", 100 - i)
+            for i in range(50)
+        ])
+        out = assign_tiers(df, positions=["WR"], top_n=10)
+        in_top = out[out["name"].isin([f"WR{i:03d}" for i in range(10)])]
+        below = out[out["name"].isin([f"WR{i:03d}" for i in range(10, 50)])]
+        assert in_top["tier"].notna().all()
+        assert below["tier"].isna().all()
 
 
 # --------------------------------------------------------------------- #

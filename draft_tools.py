@@ -146,20 +146,43 @@ def assign_tiers(
     *,
     by: str = "points_rate",
     positions: Optional[Iterable[str]] = None,
+    top_n: int = 30,
     max_tiers: int = 12,
-    min_gap_z: float = 1.0,
+    min_gap_z: float = 2.5,
 ) -> pd.DataFrame:
     """Group players within each position into tiers separated by
     statistically significant gaps in projected output.
 
-    Algorithm: for each position, sort descending by `by`, compute
-    the consecutive-player gap series, and declare a tier break wherever
-    a gap exceeds `mean(gap) + min_gap_z * std(gap)`. Tiers are 1-indexed
-    from the top and capped at `max_tiers` (everything beyond gets the
-    last tier number).
+    Algorithm: for each position, sort descending by `by`, take the
+    top `top_n` players, and look at consecutive-player gaps among
+    that group. Compute median+MAD of just the *upper half* of those
+    gaps -- the half-most-significant breaks -- and declare a tier
+    boundary wherever a gap exceeds `median + min_gap_z * MAD`. Tiers
+    are 1-indexed from the top and capped at `max_tiers`.
 
-    The threshold is per-position because RB and TE distributions look
-    nothing alike; a 2-pt gap is huge at TE and noise at RB.
+    Three design choices, each fallout from real-data runs that
+    produced one-player-per-tier nonsense at earlier iterations:
+
+    1. Restrict to top_n. Fantasy projections have a long tail of
+       depth players whose rates differ by ~0.05 pts. Letting those
+       gaps influence the threshold drags it down. Tiers only matter
+       for draftable players anyway.
+
+    2. Use only the upper half of gaps when computing the threshold.
+       Even within the top_n, intra-tier gaps (small) outnumber inter-
+       tier gaps (large), and the small ones cluster tightly enough
+       that median+MAD computed over all gaps would still be too low.
+       Filtering to the upper half discards the within-tier noise and
+       calibrates the threshold against the actual signal -- the
+       typical inter-tier break.
+
+    3. Median+MAD instead of mean+std for robustness. Gap distributions
+       are heavy-tailed; mean+std is dominated by a few huge outliers,
+       which paradoxically lowers the bar for "real" breaks once you
+       subtract one std.
+
+    Players beyond `top_n` at each position get tier = NaN -- they're
+    bench/depth and the tier abstraction doesn't apply to them.
 
     Returns a copy of the input with a new `tier` integer column.
     """
@@ -171,7 +194,7 @@ def assign_tiers(
 
     for pos in positions:
         mask = (out["position"] == pos) & out[by].notna()
-        sub = out.loc[mask].sort_values(by=by, ascending=False)
+        sub = out.loc[mask].sort_values(by=by, ascending=False).head(top_n)
         if sub.empty:
             continue
         rates = sub[by].to_numpy()
@@ -179,14 +202,14 @@ def assign_tiers(
             out.loc[sub.index, "tier"] = 1
             continue
         gaps = -np.diff(rates)  # positive: how much rank-i beats rank-(i+1)
-        # Threshold is robust enough for small samples: mean + z * std,
-        # with std clamped >0 so a position with all-equal rates doesn't
-        # divide by zero.
         if gaps.size == 0:
             threshold = np.inf
         else:
-            std = float(np.std(gaps))
-            threshold = float(np.mean(gaps)) + min_gap_z * max(std, 1e-9)
+            # Upper half of gaps: where the inter-tier signal lives.
+            upper = np.sort(gaps)[-max(gaps.size // 2, 1):]
+            median = float(np.median(upper))
+            mad = float(np.median(np.abs(upper - median)))
+            threshold = median + min_gap_z * max(mad, 1e-9)
 
         tiers = np.ones(rates.size, dtype=int)
         current = 1
