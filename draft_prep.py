@@ -54,10 +54,25 @@ def _maybe_save(df: pd.DataFrame, path: Optional[str]) -> None:
         print(f"\nSaved to {path}")
 
 
+def _build_pool(league) -> pd.DataFrame:
+    """Extract fantasy-relevant projection rows from the League.
+
+    Drops league-average synthetic rows (player_id_sr starts with
+    'avg_') and de-duplicates by player_id_sr. The dedupe is defensive:
+    League.get_rates() can occasionally emit a player on multiple rows
+    when their player_id_sr appears under more than one historical
+    team affiliation in the upstream roster data. The right long-term
+    fix is upstream, but stripping duplicates here keeps tiers / values
+    / mock output clean in the meantime.
+    """
+    return (league.players[~league.players["player_id_sr"].astype(str)
+                           .str.startswith("avg_")]
+            .drop_duplicates(subset=["player_id_sr"], keep="first"))
+
+
 def cmd_tiers(args: argparse.Namespace) -> int:
     league = _build_league(args)
-    pool = league.players[~league.players["player_id_sr"].astype(str)
-                          .str.startswith("avg_")]
+    pool = _build_pool(league)
     with_vorp = compute_vorp(pool, league.roster_spots, len(league.teams))
     tiered = assign_tiers(with_vorp, min_gap_z=args.gap_z,
                           top_n=args.top_n, max_per_tier=args.max_per_tier)
@@ -85,8 +100,7 @@ def cmd_tiers(args: argparse.Namespace) -> int:
 
 def cmd_values(args: argparse.Namespace) -> int:
     league = _build_league(args)
-    pool = league.players[~league.players["player_id_sr"].astype(str)
-                          .str.startswith("avg_")]
+    pool = _build_pool(league)
     with_vorp = compute_vorp(pool, league.roster_spots, len(league.teams))
     tiered = assign_tiers(with_vorp, min_gap_z=args.gap_z,
                           top_n=args.top_n, max_per_tier=args.max_per_tier)
@@ -105,6 +119,9 @@ def cmd_values(args: argparse.Namespace) -> int:
     # would meaningfully draft them.
     rated = merged.dropna(subset=["adp", "adp_value", "tier"]).copy()
     rated = rated[rated["vorp_per_game"] >= args.min_vorp]
+    excluded_positions = [p.strip() for p in args.exclude.split(",") if p.strip()]
+    if excluded_positions:
+        rated = rated[~rated["position"].isin(excluded_positions)]
     rated = rated.sort_values("adp_value", ascending=False).head(args.top)
 
     show_cols = ["name", "current_team", "position", "tier",
@@ -120,8 +137,7 @@ def cmd_values(args: argparse.Namespace) -> int:
 
 def cmd_mock(args: argparse.Namespace) -> int:
     league = _build_league(args)
-    pool = league.players[~league.players["player_id_sr"].astype(str)
-                          .str.startswith("avg_")]
+    pool = _build_pool(league)
     with_vorp = compute_vorp(pool, league.roster_spots, len(league.teams))
 
     adp = load_adp_csv(args.adp)
@@ -216,6 +232,10 @@ def build_parser() -> argparse.ArgumentParser:
                         dest="min_vorp",
                         help="minimum VORP (per game) to include "
                              "(default 0.0 = above replacement only)")
+    p_vals.add_argument("--exclude", default="K,DEF",
+                        help="comma-separated positions to exclude "
+                             "(default 'K,DEF' since they're convention-"
+                             "drafted at the end regardless of projection)")
     p_vals.set_defaults(func=cmd_values)
 
     p_mock = sub.add_parser("mock", help="run mock draft(s)")
