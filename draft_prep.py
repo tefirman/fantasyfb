@@ -98,38 +98,60 @@ def cmd_tiers(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_values(args: argparse.Namespace) -> int:
-    league = _build_league(args)
+def _value_table(league, args: argparse.Namespace) -> pd.DataFrame:
+    """Shared pipeline for the values/traps views.
+
+    Builds the projection pool, computes VORP and tiers, joins ADP,
+    and applies the filters that both views need (no null ADP, no
+    null tier, VORP at or above replacement, exclude K/DEF by default).
+    Sort direction and any view-specific filters (e.g. round caps for
+    traps) are applied by the caller.
+    """
     pool = _build_pool(league)
     with_vorp = compute_vorp(pool, league.roster_spots, len(league.teams))
     tiered = assign_tiers(with_vorp, min_gap_z=args.gap_z,
                           top_n=args.top_n, max_per_tier=args.max_per_tier)
-
     adp = load_adp_csv(args.adp)
     merged = merge_adp(tiered, adp, num_teams=len(league.teams))
 
-    # Three-stage filter:
-    # (a) ADP must not be null -- player is actually drafted somewhere
-    # (b) tier must not be null -- player is in top-N at their position
-    # (c) VORP >= min_vorp -- player is above replacement level
-    # Without (c), backup QBs and other below-replacement players who
-    # happen to be inside the top-N at their position (like a QB13-30
-    # in a 1-QB league) flood the table because their late ADP minus
-    # their middling rank gives a big "value" delta even though no one
-    # would meaningfully draft them.
     rated = merged.dropna(subset=["adp", "adp_value", "tier"]).copy()
     rated = rated[rated["vorp_per_game"] >= args.min_vorp]
     excluded_positions = [p.strip() for p in args.exclude.split(",") if p.strip()]
     if excluded_positions:
         rated = rated[~rated["position"].isin(excluded_positions)]
-    rated = rated.sort_values("adp_value", ascending=False).head(args.top)
+    return rated
 
-    show_cols = ["name", "current_team", "position", "tier",
-                 "points_rate", "vorp_per_game", "adp", "adp_round",
-                 "vorp_rank", "proj_rank", "adp_value"]
-    show_cols = [c for c in show_cols if c in rated.columns]
+
+_VALUE_COLS = ["name", "current_team", "position", "tier",
+               "points_rate", "vorp_per_game", "adp", "adp_round",
+               "vorp_rank", "proj_rank", "adp_value"]
+
+
+def cmd_values(args: argparse.Namespace) -> int:
+    league = _build_league(args)
+    rated = _value_table(league, args)
+    rated = rated.sort_values("adp_value", ascending=False).head(args.top)
+    show_cols = [c for c in _VALUE_COLS if c in rated.columns]
 
     print(f"\nTop {len(rated)} value picks (positive = market under-rates):")
+    print(rated[show_cols].to_string(index=False))
+    _maybe_save(rated[show_cols], args.output)
+    return 0
+
+
+def cmd_traps(args: argparse.Namespace) -> int:
+    league = _build_league(args)
+    rated = _value_table(league, args)
+    # Restrict to "competitive" draft rounds. After ~10-12 rounds,
+    # drafters are picking handcuffs / fliers without careful
+    # valuation -- a negative adp_value there isn't really a "trap"
+    # so much as noise.
+    rated = rated[rated["adp_round"] <= args.max_adp_round]
+    rated = rated.sort_values("adp_value", ascending=True).head(args.top)
+    show_cols = [c for c in _VALUE_COLS if c in rated.columns]
+
+    print(f"\nTop {len(rated)} trap picks (negative = market over-rates "
+          f"-- avoid in rounds 1-{args.max_adp_round}):")
     print(rated[show_cols].to_string(index=False))
     _maybe_save(rated[show_cols], args.output)
     return 0
@@ -215,28 +237,44 @@ def build_parser() -> argparse.ArgumentParser:
                               "split (default 12)")
     p_tiers.set_defaults(func=cmd_tiers)
 
+    def add_value_args(p: argparse.ArgumentParser) -> None:
+        """Args shared between `values` and `traps` -- both consume the
+        same VORP+tier+ADP pipeline and only differ in sort direction."""
+        p.add_argument("--adp", required=True, help="path to ADP CSV")
+        p.add_argument("--top", type=int, default=40,
+                       help="rows to show (default 40)")
+        p.add_argument("--gap-z", type=float, default=1.0, dest="gap_z",
+                       help="tier-break z-score threshold (default 1.0)")
+        p.add_argument("--top-n", type=int, default=30, dest="top_n",
+                       help="players per position considered for tiering "
+                            "(default 30)")
+        p.add_argument("--max-per-tier", type=int, default=12,
+                       dest="max_per_tier",
+                       help="max players in a single tier (default 12)")
+        p.add_argument("--min-vorp", type=float, default=0.0,
+                       dest="min_vorp",
+                       help="minimum VORP (per game) to include "
+                            "(default 0.0 = above replacement only)")
+        p.add_argument("--exclude", default="K,DEF",
+                       help="comma-separated positions to exclude "
+                            "(default 'K,DEF' since they're convention-"
+                            "drafted at the end regardless of projection)")
+
     p_vals = sub.add_parser("values", help="biggest projection-vs-ADP deltas")
     add_common(p_vals)
-    p_vals.add_argument("--adp", required=True, help="path to ADP CSV")
-    p_vals.add_argument("--top", type=int, default=40,
-                        help="rows to show (default 40)")
-    p_vals.add_argument("--gap-z", type=float, default=1.0, dest="gap_z",
-                        help="tier-break z-score threshold (default 1.0)")
-    p_vals.add_argument("--top-n", type=int, default=30, dest="top_n",
-                        help="players per position considered for tiering "
-                             "(default 30)")
-    p_vals.add_argument("--max-per-tier", type=int, default=12,
-                        dest="max_per_tier",
-                        help="max players in a single tier (default 12)")
-    p_vals.add_argument("--min-vorp", type=float, default=0.0,
-                        dest="min_vorp",
-                        help="minimum VORP (per game) to include "
-                             "(default 0.0 = above replacement only)")
-    p_vals.add_argument("--exclude", default="K,DEF",
-                        help="comma-separated positions to exclude "
-                             "(default 'K,DEF' since they're convention-"
-                             "drafted at the end regardless of projection)")
+    add_value_args(p_vals)
     p_vals.set_defaults(func=cmd_values)
+
+    p_traps = sub.add_parser("traps",
+                             help="overdrafted players to avoid (inverse "
+                                  "of values)")
+    add_common(p_traps)
+    add_value_args(p_traps)
+    p_traps.add_argument("--max-adp-round", type=int, default=10,
+                         dest="max_adp_round",
+                         help="only flag traps inside the first N rounds "
+                              "(default 10; later rounds are noise)")
+    p_traps.set_defaults(func=cmd_traps)
 
     p_mock = sub.add_parser("mock", help="run mock draft(s)")
     add_common(p_mock)
