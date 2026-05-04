@@ -238,6 +238,53 @@ class TestTiers:
         assert in_top["tier"].notna().all()
         assert below["tier"].isna().all()
 
+    def test_max_per_tier_splits_giant_blob(self):
+        """Regression for the WR catchall case using the actual
+        user-reported rates: top has clean breaks, then a 20-player
+        descent with subtle but real seams. max_per_tier should split
+        the blob at its biggest internal gap rather than leaving 20
+        players in a single unreadable tier."""
+        rates = [12.521, 11.264, 11.129, 10.628, 10.547, 10.142,
+                 9.980, 9.748, 9.487, 9.482, 9.471, 9.469,
+                 9.140, 9.054, 8.772, 8.719, 8.656, 8.629,
+                 8.607, 8.516, 8.422, 8.307, 8.219, 8.027]
+        rows = [_make_projection(f"WR{i:02d}", "WR", r)
+                for i, r in enumerate(rates)]
+        df = pd.DataFrame(rows)
+
+        no_cap = assign_tiers(df, positions=["WR"], top_n=24,
+                              max_per_tier=999, min_gap_z=1.0)
+        capped = assign_tiers(df, positions=["WR"], top_n=24,
+                              max_per_tier=10, min_gap_z=1.0)
+
+        # Without the cap, one tier swallows most of the position.
+        assert no_cap["tier"].value_counts().max() >= 18
+        # With the cap, that same tier gets split at its biggest gap.
+        assert capped["tier"].value_counts().max() < no_cap["tier"].value_counts().max()
+        # And the biggest internal gap in the blob (London->Rice at
+        # 9.469 -> 9.140, a 0.33 jump) should land on a tier boundary.
+        london_tier = capped.loc[capped["name"] == "WR11", "tier"].iloc[0]
+        rice_tier = capped.loc[capped["name"] == "WR12", "tier"].iloc[0]
+        assert rice_tier > london_tier
+
+    def test_max_per_tier_skips_uniform_gap_groups(self):
+        """Safety rail: a tier whose players are uniformly spaced
+        shouldn't fragment into singletons just because it's larger
+        than max_per_tier."""
+        rows = []
+        # One elite at the top (forces tier 1), then 20 perfectly
+        # evenly-spaced followers that should land in one tier despite
+        # exceeding max_per_tier -- there's no "biggest gap" to split on.
+        rows.append(_make_projection("Elite", "RB", 25.0))
+        for i in range(20):
+            rows.append(_make_projection(f"Even{i:02d}", "RB", 15.0 - i * 0.2))
+        df = pd.DataFrame(rows)
+        out = assign_tiers(df, positions=["RB"], top_n=21, max_per_tier=8)
+        even_tiers = out.loc[out["name"].str.startswith("Even"), "tier"]
+        # The 20 evenly-spaced players collapse into one tier despite
+        # being more numerous than max_per_tier.
+        assert even_tiers.nunique() == 1
+
 
 # --------------------------------------------------------------------- #
 # ADP loader + merge

@@ -141,6 +141,49 @@ def compute_vorp(
     return out
 
 
+def _enforce_max_per_tier(
+    tiers: np.ndarray, rates: np.ndarray,
+    max_per_tier: int, max_tiers: int,
+) -> np.ndarray:
+    """Iteratively split any tier with more than `max_per_tier` members
+    at its largest internal gap, until all tiers fit or we'd hit
+    `max_tiers`.
+
+    Two safety rails: we never split if it would push us over the tier
+    cap, and we don't split a tier whose largest internal gap isn't at
+    least 1.5x the tier's median internal gap. The second rule keeps
+    uniformly-spaced players from fragmenting into singletons -- if
+    every gap inside a fat tier looks the same, there's no defensible
+    place to break, so we leave it alone and let the user dial
+    `max_per_tier` higher if they don't mind.
+    """
+    tiers = tiers.copy()
+    while int(tiers.max()) < max_tiers:
+        sizes = pd.Series(tiers).value_counts()
+        oversized = sorted(sizes[sizes > max_per_tier].index.tolist())
+        if not oversized:
+            break
+        # Always split the topmost oversized tier first so tier numbers
+        # stay densely allocated to the high-value end of the position.
+        target = oversized[0]
+        idxs = np.where(tiers == target)[0]
+        if idxs.size < 2:
+            break
+        sub = rates[idxs[0]:idxs[-1] + 1]
+        internal = -np.diff(sub)
+        if internal.size == 0:
+            break
+        max_gap = float(internal.max())
+        median_gap = float(np.median(internal))
+        if max_gap < 1.5 * max(median_gap, 1e-9):
+            break
+        # idxs[argmax + 1] is the first player on the new (lower) side
+        # of the break; everyone from there onward bumps up one tier.
+        split_at = idxs[int(np.argmax(internal)) + 1]
+        tiers = np.where(np.arange(tiers.size) >= split_at, tiers + 1, tiers)
+    return tiers
+
+
 def assign_tiers(
     projections: pd.DataFrame,
     *,
@@ -148,38 +191,33 @@ def assign_tiers(
     positions: Optional[Iterable[str]] = None,
     top_n: int = 30,
     max_tiers: int = 12,
-    min_gap_z: float = 2.5,
+    max_per_tier: int = 12,
+    min_gap_z: float = 1.0,
 ) -> pd.DataFrame:
     """Group players within each position into tiers separated by
     statistically significant gaps in projected output.
 
-    Algorithm: for each position, sort descending by `by`, take the
-    top `top_n` players, and look at consecutive-player gaps among
-    that group. Compute median+MAD of just the *upper half* of those
-    gaps -- the half-most-significant breaks -- and declare a tier
-    boundary wherever a gap exceeds `median + min_gap_z * MAD`. Tiers
-    are 1-indexed from the top and capped at `max_tiers`.
+    Two-pass algorithm:
 
-    Three design choices, each fallout from real-data runs that
-    produced one-player-per-tier nonsense at earlier iterations:
+    Pass 1 (gap-driven): for each position, sort descending by `by`,
+    take the top `top_n` players, and look at consecutive-player gaps
+    among that group. Compute median+MAD of just the *upper half* of
+    those gaps -- the half-most-significant breaks -- and declare a
+    tier boundary wherever a gap exceeds `median + min_gap_z * MAD`.
 
-    1. Restrict to top_n. Fantasy projections have a long tail of
-       depth players whose rates differ by ~0.05 pts. Letting those
-       gaps influence the threshold drags it down. Tiers only matter
-       for draftable players anyway.
+    Pass 2 (size cap): any resulting tier with more than `max_per_tier`
+    members is split at its largest internal gap. Repeats until all
+    tiers are size-bounded or `max_tiers` is reached. This is what
+    keeps positions like WR -- where the top 3 tiers fall out cleanly
+    but the rest is a 20-player smooth descent -- from collapsing
+    everything-after-tier-3 into a single unreadable blob.
 
-    2. Use only the upper half of gaps when computing the threshold.
-       Even within the top_n, intra-tier gaps (small) outnumber inter-
-       tier gaps (large), and the small ones cluster tightly enough
-       that median+MAD computed over all gaps would still be too low.
-       Filtering to the upper half discards the within-tier noise and
-       calibrates the threshold against the actual signal -- the
-       typical inter-tier break.
-
-    3. Median+MAD instead of mean+std for robustness. Gap distributions
-       are heavy-tailed; mean+std is dominated by a few huge outliers,
-       which paradoxically lowers the bar for "real" breaks once you
-       subtract one std.
+    Knobs:
+    - `min_gap_z` controls Pass 1 strictness. Higher = fewer natural
+      breaks recognized.
+    - `max_per_tier` controls Pass 2 strictness. Lower = more aggressive
+      forced splits inside otherwise-flat regions.
+    - `max_tiers` is the hard cap on either pass.
 
     Players beyond `top_n` at each position get tier = NaN -- they're
     bench/depth and the tier abstraction doesn't apply to them.
@@ -217,6 +255,7 @@ def assign_tiers(
             if gap > threshold and current < max_tiers:
                 current += 1
             tiers[i + 1] = current
+        tiers = _enforce_max_per_tier(tiers, rates, max_per_tier, max_tiers)
         out.loc[sub.index, "tier"] = tiers
 
     out["tier"] = out["tier"].astype("Int64")
