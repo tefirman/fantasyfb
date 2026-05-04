@@ -304,14 +304,23 @@ def merge_adp(
     Adds:
         adp:            average draft pick across sources
         adp_round:      ceil(adp / num_teams)
-        proj_rank:      overall rank by points_rate among the full pool
-        adp_value:      adp - proj_rank.  Positive = market under-rates
-                        the player relative to your projection (a value
-                        pick); negative = market over-rates.
+        proj_rank:      overall rank by points_rate (diagnostic only)
+        vorp_rank:      overall rank by vorp_per_game; only set when
+                        vorp_per_game is present on the input
+        adp_value:      adp - vorp_rank when VORP is available, else
+                        adp - proj_rank.  Positive = market under-rates
+                        the player relative to your projection.
+
+    Why VORP rank rather than points rank: ranking by absolute fantasy
+    points puts QBs at the top of the overall list (passing yards +
+    TDs accumulate fast), but the actual draft market knows QB is a
+    shallow position and waits on it. That mismatch made every late-
+    round QB look like a "value" under a points-based rank. VORP
+    centers each position on its own replacement level, so cross-
+    position ranks reflect real draft value.
 
     Players the projection knows about but ADP doesn't get NaN ADP and
-    NaN adp_value, which is the right behavior -- they're presumably
-    undraftable depth and shouldn't be flagged as huge values.
+    NaN adp_value -- they're presumably undraftable depth.
     """
     out = projections.copy()
     pool_mask = ~out["player_id_sr"].astype(str).str.startswith("avg_")
@@ -319,12 +328,20 @@ def merge_adp(
     ranked = out.loc[pool_mask, "points_rate"].rank(method="min", ascending=False)
     out.loc[pool_mask, "proj_rank"] = ranked.astype("Int64")
 
+    has_vorp = "vorp_per_game" in out.columns
+    if has_vorp:
+        out["vorp_rank"] = pd.NA
+        vranked = (out.loc[pool_mask, "vorp_per_game"]
+                   .rank(method="min", ascending=False))
+        out.loc[pool_mask, "vorp_rank"] = vranked.astype("Int64")
+
     merged = out.merge(
         adp_df[["name", "position", "adp"]],
         how="left", on=["name", "position"],
     )
     merged["adp_round"] = np.ceil(merged["adp"] / max(num_teams, 1))
-    merged["adp_value"] = merged["adp"] - merged["proj_rank"].astype("Float64")
+    rank_for_value = "vorp_rank" if has_vorp else "proj_rank"
+    merged["adp_value"] = merged["adp"] - merged[rank_for_value].astype("Float64")
     return merged
 
 

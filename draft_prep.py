@@ -94,14 +94,22 @@ def cmd_values(args: argparse.Namespace) -> int:
     adp = load_adp_csv(args.adp)
     merged = merge_adp(tiered, adp, num_teams=len(league.teams))
 
-    # Drop players with no ADP (mostly undraftable depth) so the
-    # "values" view stays a market-vs-projection comparison.
-    rated = merged.dropna(subset=["adp", "adp_value"]).copy()
+    # Three-stage filter:
+    # (a) ADP must not be null -- player is actually drafted somewhere
+    # (b) tier must not be null -- player is in top-N at their position
+    # (c) VORP >= min_vorp -- player is above replacement level
+    # Without (c), backup QBs and other below-replacement players who
+    # happen to be inside the top-N at their position (like a QB13-30
+    # in a 1-QB league) flood the table because their late ADP minus
+    # their middling rank gives a big "value" delta even though no one
+    # would meaningfully draft them.
+    rated = merged.dropna(subset=["adp", "adp_value", "tier"]).copy()
+    rated = rated[rated["vorp_per_game"] >= args.min_vorp]
     rated = rated.sort_values("adp_value", ascending=False).head(args.top)
 
     show_cols = ["name", "current_team", "position", "tier",
                  "points_rate", "vorp_per_game", "adp", "adp_round",
-                 "proj_rank", "adp_value"]
+                 "vorp_rank", "proj_rank", "adp_value"]
     show_cols = [c for c in show_cols if c in rated.columns]
 
     print(f"\nTop {len(rated)} value picks (positive = market under-rates):")
@@ -204,6 +212,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_vals.add_argument("--max-per-tier", type=int, default=12,
                         dest="max_per_tier",
                         help="max players in a single tier (default 12)")
+    p_vals.add_argument("--min-vorp", type=float, default=0.0,
+                        dest="min_vorp",
+                        help="minimum VORP (per game) to include "
+                             "(default 0.0 = above replacement only)")
     p_vals.set_defaults(func=cmd_values)
 
     p_mock = sub.add_parser("mock", help="run mock draft(s)")

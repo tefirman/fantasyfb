@@ -336,6 +336,43 @@ class TestADP:
         merged = merge_adp(small_pool, adp_df, num_teams=12)
         assert pd.isna(merged.loc[merged["name"] == "WR00", "adp"].iloc[0])
 
+    def test_uses_vorp_rank_when_present(
+        self, small_pool, standard_roster_spec,
+    ):
+        """When VORP is on the input, adp_value uses vorp_rank rather
+        than proj_rank. Critical for cross-position fairness: high
+        absolute-points QBs shouldn't dominate the value list just
+        because passing accumulates fast."""
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        adp_df = pd.DataFrame({
+            "name":     ["RB00"],
+            "position": ["RB"],
+            "adp":      [10.0],
+        })
+        merged = merge_adp(with_vorp, adp_df, num_teams=12)
+        rb00 = merged.loc[merged["name"] == "RB00"].iloc[0]
+        assert "vorp_rank" in merged.columns
+        # adp_value must derive from vorp_rank, not proj_rank. RB00 is
+        # the top player by points_rate (proj_rank=1) but several WRs
+        # outrank him by VORP because the WR replacement level sits
+        # lower in this roster -- so vorp_rank > 1, and adp_value
+        # accordingly differs from adp - proj_rank.
+        assert rb00["proj_rank"] == 1
+        assert rb00["vorp_rank"] > 1
+        assert rb00["adp_value"] == pytest.approx(10.0 - rb00["vorp_rank"])
+        assert rb00["adp_value"] != pytest.approx(10.0 - rb00["proj_rank"])
+
+    def test_proj_rank_used_when_vorp_absent(self, small_pool):
+        """Without VORP on the input, adp_value falls back to using
+        proj_rank so the function stays usable on bare projections."""
+        adp_df = pd.DataFrame({
+            "name": ["RB00"], "position": ["RB"], "adp": [10.0],
+        })
+        merged = merge_adp(small_pool, adp_df, num_teams=12)
+        assert "vorp_rank" not in merged.columns
+        rb00 = merged.loc[merged["name"] == "RB00"].iloc[0]
+        assert rb00["adp_value"] == pytest.approx(10.0 - rb00["proj_rank"])
+
 
 # --------------------------------------------------------------------- #
 # Mock draft simulator
