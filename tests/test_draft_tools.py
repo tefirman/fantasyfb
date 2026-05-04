@@ -406,7 +406,7 @@ class TestMockDraft:
         self, draft_ready_pool, standard_roster_spec,
     ):
         md = MockDraft(draft_ready_pool, standard_roster_spec,
-                       num_teams=12, my_pick=6, noise_sd=4.0)
+                       num_teams=12, my_pick=6, noise_slope=0.1)
         result = md.simulate(seed=42)
         # 1+2+3+1+1+1+1 starters + 6 bench = 16 per team * 12 teams
         assert len(result) == 16 * 12
@@ -415,7 +415,7 @@ class TestMockDraft:
         self, draft_ready_pool, standard_roster_spec,
     ):
         md = MockDraft(draft_ready_pool, standard_roster_spec,
-                       num_teams=12, my_pick=1, noise_sd=4.0)
+                       num_teams=12, my_pick=1, noise_slope=0.1)
         result = md.simulate(seed=7)
         assert result["name"].is_unique
 
@@ -423,7 +423,7 @@ class TestMockDraft:
         self, draft_ready_pool, standard_roster_spec,
     ):
         md = MockDraft(draft_ready_pool, standard_roster_spec,
-                       num_teams=12, my_pick=1, snake=True, noise_sd=4.0)
+                       num_teams=12, my_pick=1, snake=True, noise_slope=0.1)
         result = md.simulate(seed=1)
         round1 = result[result["round"] == 1]["team"].tolist()
         round2 = result[result["round"] == 2]["team"].tolist()
@@ -436,7 +436,7 @@ class TestMockDraft:
         """With BPA, the user's first pick should be the highest
         points_rate available at their slot."""
         md = MockDraft(draft_ready_pool, standard_roster_spec,
-                       num_teams=12, my_pick=1, noise_sd=2.0,
+                       num_teams=12, my_pick=1, noise_slope=0.05,
                        my_strategy="bpa")
         result = md.simulate(seed=11)
         first_user_pick = result[result["is_user"]].iloc[0]
@@ -453,7 +453,7 @@ class TestMockDraft:
         late in the draft when remaining ADP-near players don't fit
         anyone's open slots."""
         md = MockDraft(draft_ready_pool, standard_roster_spec,
-                       num_teams=12, my_pick=12, noise_sd=0.5,
+                       num_teams=12, my_pick=12, noise_slope=0.02, noise_floor=0.3,
                        my_strategy="bpa")
         result = md.simulate(seed=3)
         # First two rounds (24 picks): the average gap between actual
@@ -466,7 +466,7 @@ class TestMockDraft:
         self, draft_ready_pool, standard_roster_spec,
     ):
         md = MockDraft(draft_ready_pool, standard_roster_spec,
-                       num_teams=12, my_pick=6, noise_sd=4.0)
+                       num_teams=12, my_pick=6, noise_slope=0.1)
         a = md.simulate_many(3, seed=99)
         b = md.simulate_many(3, seed=99)
         pd.testing.assert_frame_equal(a, b)
@@ -476,7 +476,7 @@ class TestMockDraft:
         self, draft_ready_pool, standard_roster_spec,
     ):
         md = MockDraft(draft_ready_pool, standard_roster_spec,
-                       num_teams=12, my_pick=6, noise_sd=4.0)
+                       num_teams=12, my_pick=6, noise_slope=0.1)
         runs = md.simulate_many(5, seed=2)
         avail = md.availability(runs, pick_number=12)
         # Player taken in every sim before pick 12 should show 0%

@@ -170,7 +170,8 @@ def cmd_mock(args: argparse.Namespace) -> int:
 
     md = MockDraft(
         merged, league.roster_spots, num_teams=len(league.teams),
-        my_pick=args.my_pick, snake=not args.linear, noise_sd=args.noise_sd,
+        my_pick=args.my_pick, snake=not args.linear,
+        noise_slope=args.noise_slope, noise_floor=args.noise_floor,
         my_strategy=args.strategy,
     )
 
@@ -286,8 +287,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="user pick strategy (default vorp)")
     p_mock.add_argument("--sims", type=int, default=1,
                         help="number of mock drafts to run (default 1)")
-    p_mock.add_argument("--noise-sd", type=float, default=8.0, dest="noise_sd",
-                        help="ADP noise stdev for opponents (default 8.0)")
+    p_mock.add_argument("--noise-slope", type=float, default=0.1,
+                        dest="noise_slope",
+                        help="per-pick growth of opponent ADP-noise stdev "
+                             "(default 0.1: pick 10 stdev=1, pick 100 stdev=10)")
+    p_mock.add_argument("--noise-floor", type=float, default=1.0,
+                        dest="noise_floor",
+                        help="minimum opponent ADP-noise stdev applied at "
+                             "the top of the draft (default 1.0)")
     p_mock.add_argument("--linear", action="store_true",
                         help="use linear (non-snake) draft order")
     p_mock.add_argument("--seed", type=int, default=None,

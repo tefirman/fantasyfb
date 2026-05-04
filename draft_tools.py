@@ -416,22 +416,29 @@ def _opponent_pick(
     available: pd.DataFrame,
     pick_overall: int,
     roster: _Roster,
-    noise_sd: float,
+    noise_slope: float,
+    noise_floor: float,
     rng: np.random.Generator,
 ) -> int:
     """Choose an index from `available` for an opponent's pick.
 
     Selection probability is gaussian in the distance from the player's
-    ADP to the current overall pick number, scaled by the team's
-    positional need. Players without ADP get a tiny floor weight so
-    they're occasionally taken late. Returns the row index in `available`.
+    ADP to the current overall pick number, with the gaussian's stdev
+    scaled by pick number: `sd = max(noise_floor, noise_slope * pick_overall)`.
+    Constant-stdev noise was wildly too generous at the top of the
+    draft -- in real drafts the top ~3 picks have ADP stdev ~0.5 (the
+    elite RBs / WRs always go in the top 3 in some order), but pick
+    100 has stdev ~10. Linear-with-floor matches that shape: tight at
+    the top, looser deep in the draft.
+
+    Players without ADP get a synthetic late-draft ADP so they only
+    get picked once everyone with real ADP is gone.
     """
     adp = available["adp"].to_numpy(dtype=float)
     pos = available["position"].to_numpy()
-    # Default ADP for unknown players: end of the draft, far from any
-    # current pick, so they only get picked if everyone with ADP is gone.
     adp = np.where(np.isnan(adp), pick_overall + 200.0, adp)
-    z = (adp - pick_overall) / max(noise_sd, 1e-6)
+    sd = max(noise_floor, noise_slope * pick_overall)
+    z = (adp - pick_overall) / sd
     base_w = np.exp(-0.5 * z * z)
     need = np.array([roster.need_score(p) for p in pos])
     w = base_w * need + 1e-9
@@ -485,10 +492,16 @@ class MockDraft:
         1-indexed draft slot for the user's team.
     snake : bool
         If True, picks reverse direction every round.
-    noise_sd : float
-        Standard deviation, in pick numbers, of the gaussian around ADP
-        used to model opponent picks. ~6-10 matches observed real-draft
-        variance for redraft leagues.
+    noise_slope : float
+        Per-pick growth rate of the gaussian stdev that scrambles
+        opponent picks around their ADP. The effective stdev at pick
+        N is `max(noise_floor, noise_slope * N)`. Default 0.1 roughly
+        matches FantasyPros ADP stdev shape -- pick 10 has stdev ~1,
+        pick 100 has stdev ~10, which is what real drafts look like.
+    noise_floor : float
+        Minimum gaussian stdev, applied at the top of the draft where
+        `noise_slope * N` would otherwise be tiny. Default 1.0 keeps
+        the math from degenerating without making pick #1 a coin flip.
     my_strategy : str
         One of 'bpa', 'vorp', 'need'.
     """
@@ -501,7 +514,8 @@ class MockDraft:
         *,
         my_pick: int = 1,
         snake: bool = True,
-        noise_sd: float = 8.0,
+        noise_slope: float = 0.1,
+        noise_floor: float = 1.0,
         my_strategy: str = "vorp",
     ) -> None:
         required = {"name", "position", "points_rate", "vorp_per_game", "adp"}
@@ -520,7 +534,8 @@ class MockDraft:
         self.num_teams = num_teams
         self.my_pick = my_pick
         self.snake = snake
-        self.noise_sd = noise_sd
+        self.noise_slope = noise_slope
+        self.noise_floor = noise_floor
         self.my_strategy = my_strategy
 
         spec = _roster_spec_to_dict(roster_spec)
@@ -555,7 +570,7 @@ class MockDraft:
             else:
                 choice = _opponent_pick(
                     available, pick + 1, rosters[owner],
-                    self.noise_sd, rng,
+                    self.noise_slope, self.noise_floor, rng,
                 )
 
             row = available.iloc[choice]
