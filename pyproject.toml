@@ -35,6 +35,8 @@ testpaths = ["tests"]
 py-modules = [
     "backtest",
     "cli",
+    "draft_prep",
+    "draft_tools",
     "email_utils",
     "excel_exporter",
     "fantasy_scoring",
