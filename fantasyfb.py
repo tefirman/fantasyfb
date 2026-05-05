@@ -357,7 +357,7 @@ class League:
             self.players[[
                 "player_id_sr", "player_id", "status", "fantasy_team", "current_team",
                 "position", "string", "until", "bye_week", "pct_rostered", "selected_position"
-            ]].drop_duplicates(),
+            ]].drop_duplicates(subset=["player_id_sr", "position"], keep="last"),
             how="right",
             on=["player_id_sr", "position"],
         )
