@@ -1,354 +1,373 @@
 #!/usr/bin/env python
-# -*-coding:utf-8 -*-
-'''
-@File    :   fantasyfb_draft.py
-@Time    :   2023/08/19 23:09:18
-@Author  :   Taylor Firman
-@Version :   1.0
-@Contact :   tefirman@gmail.com
-@Desc    :   Draft specific application of the Firman Fantasy Football Algorithm.
-'''
+"""Live snake-draft cockpit (redraft, V2).
+
+Wraps the interactive pick loop around draft_cockpit's pure view helpers.
+Replaces the old per-pick possible_adds Monte Carlo (10k full-season sims
+per candidate) with a VORP/tier/ADP board that's instant on the clock.
+
+Removed vs V1:
+    --sfb / --superflex / --bestball          (one-format-at-a-time, simpler;
+                                               re-add as a follow-up)
+    name_corrections.csv HTTP fetch           (Yahoo<->NFL linkage by id
+                                               already happens upstream)
+    bestball / nearestbestball commands       (will return with bestball mode)
+
+New required arg:
+    --adp PATH    FantasyPros-style ADP CSV
+                  (columns Player / POS / Team / AVG, configurable below)
+
+Commands during the draft:
+    <player name>  Mark the player as taken by the active team
+    best           Top-N available per position by VORP
+    nearest        Available players in the next ~2 rounds of ADP, by VORP
+    lookup         Detailed view of a single player
+    exclude        Add a player to the per-session exclude list
+    go back        Revert the previous pick
+    sim            Full season-sim of current rosters
+    roster         My current roster
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from difflib import SequenceMatcher
 
 import pandas as pd
-import optparse
-import fantasyfb as fb
-from difflib import SequenceMatcher
-import sys
-import os
+
+import draft_cockpit as cockpit
+
+
+_PICK_COMMANDS = (
+    "best", "nearest", "lookup", "exclude", "go back", "sim", "roster",
+)
+
 
 def check_pick_value(league, pick):
     pick = str(pick)
     if not pick.strip().isnumeric():
         print("Invalid pick value, must be numeric.")
         return None
-    elif int(pick.strip()) < 1 or int(pick.strip()) > len(league.teams):
-        print("Invalid pick value, must be between 1 and {}.".format(len(league.teams)))
+    if int(pick.strip()) < 1 or int(pick.strip()) > len(league.teams):
+        print(f"Invalid pick value, must be between 1 and {len(league.teams)}.")
         return None
-    else:
-        return int(pick.strip())
+    return int(pick.strip())
 
-def provide_pick_order(league, customize=False, already=[], sfb=False, superflex=False):
+
+def check_pick_name(league, pick_name, exceptions=()):
+    """Resolve a user-typed string against the player pool / command list.
+
+    Returns the canonical player name if it matches an available player,
+    the lower-cased command if it matches one in `exceptions`, or None
+    after printing a fuzzy-match suggestion list.
+    """
+    available = league.players[league.players.fantasy_team.isnull()]
+    taken = league.players[~league.players.fantasy_team.isnull()]
+    lowered = pick_name.lower().strip()
+
+    if pick_name in available.name.tolist():
+        return pick_name
+    if lowered in {e.lower() for e in exceptions}:
+        return lowered
+
+    if pick_name in taken.name.tolist():
+        team = taken.loc[taken.name == pick_name, "fantasy_team"].values[0]
+        print(f"Player has already been taken by {team}.")
+        return None
+
+    options = available.copy()
+    options["similarity"] = options.name.apply(
+        lambda x: SequenceMatcher(None, x, pick_name).ratio()
+    )
+    print("Can't find the player you provided. Closest options:")
+    print(options.sort_values(by="similarity", ascending=False)
+                 .iloc[:3][["name", "position", "current_team"]]
+                 .to_string(index=False))
+    return None
+
+
+def provide_pick_order(league, customize=False, already=()):
+    """Set the draft slot for the user, rename teams in pick order, and
+    seed each fantasy team with synthetic average-position rosters so
+    season_sims has something to work with before real picks come in.
+    """
+    already = list(already)
     if "My Team" in already and len(already) == len(league.teams):
         my_pick = already.index("My Team") + 1
     else:
-        my_pick = check_pick_value(league,input("Which pick are you? "))
+        my_pick = check_pick_value(league, input("Which pick are you? "))
         while my_pick is None:
-            my_pick = check_pick_value(league,input("Which pick are you? "))
-    my_team = [team for team in league.teams if team['name'] == league.name]
-    other_teams = [team for team in league.teams if team['name'] != league.name]
+            my_pick = check_pick_value(league, input("Which pick are you? "))
+
+    my_team = [t for t in league.teams if t["name"] == league.name]
+    other_teams = [t for t in league.teams if t["name"] != league.name]
     league.teams = other_teams[:my_pick - 1] + my_team + other_teams[my_pick - 1:]
-    avg_team = pd.concat(3*[league.players.loc[league.players.player_id_sr.astype(str).str.startswith('avg_')]],ignore_index=True,sort=False)
-    if sfb:
-        avg_team = avg_team.loc[~avg_team.player_id_sr.isin(['avg_QB','avg_TE'])].reset_index(drop=True)
-    elif superflex:
-        avg_team = avg_team.loc[~avg_team.player_id_sr.isin(['avg_QB'])].reset_index(drop=True)
-        league.settings['num_playoff_teams'] = 3
-        league.roster_spots = pd.DataFrame({'position':['QB','RB','WR','TE','W/R/T','W/R/T/Q','K','BN'],'count':[1,2,2,1,1,1,0,12]})
+
+    avg_template = pd.concat(
+        3 * [league.players.loc[
+            league.players.player_id_sr.astype(str).str.startswith("avg_")
+        ]],
+        ignore_index=True, sort=False,
+    )
+
     for pick in range(len(league.teams)):
         if pick + 1 == my_pick:
             pick_name = "My Team"
         elif customize:
-            pick_name = input("Who has pick #{}? ".format(pick + 1))
+            pick_name = input(f"Who has pick #{pick + 1}? ")
         elif len(already) == len(league.teams):
             pick_name = str(already[pick])
         else:
-            pick_name = "Team #" + str(pick + 1)
-        league.schedule.loc[league.schedule.team_1 == league.teams[pick]['name'],'team_1'] = pick_name
-        league.schedule.loc[league.schedule.team_2 == league.teams[pick]['name'],'team_2'] = pick_name
-        league.teams[pick]['name'] = pick_name
-        avg_team['fantasy_team'] = pick_name
-        league.players = pd.concat([league.players,avg_team.copy()],ignore_index=True,sort=False)
+            pick_name = f"Team #{pick + 1}"
+
+        old_name = league.teams[pick]["name"]
+        league.schedule.loc[league.schedule.team_1 == old_name, "team_1"] = pick_name
+        league.schedule.loc[league.schedule.team_2 == old_name, "team_2"] = pick_name
+        league.teams[pick]["name"] = pick_name
+
+        avg_template["fantasy_team"] = pick_name
+        league.players = pd.concat(
+            [league.players, avg_template.copy()],
+            ignore_index=True, sort=False,
+        )
     return league
 
-def check_pick_name(league, pick_name, exceptions=[]):
-    not_picked = league.players.fantasy_team.isnull()
-    available = league.players.loc[not_picked].copy()
-    taken = league.players.loc[~not_picked].copy()
 
-    if pick_name in available.name.tolist() or pick_name.lower() in exceptions:
-        return pick_name
+def snake_pick_slot(pick_index: int, num_teams: int) -> int:
+    """0-indexed team slot owning the given 0-indexed overall pick under
+    standard snake ordering (rounds reverse on odd 1-based round numbers).
+    """
+    rnd = pick_index // num_teams
+    slot = pick_index % num_teams
+    if rnd % 2 == 1:
+        slot = num_teams - 1 - slot
+    return slot
+
+
+def _apply_pick(league, board, name, team_name):
+    """Mark `name` as drafted by `team_name` on both the league projections
+    and the cockpit board so views and sims stay in sync.
+    """
+    league.players.loc[league.players.name == name, "fantasy_team"] = team_name
+    board.loc[board["name"] == name, "fantasy_team"] = team_name
+
+
+def _revert_pick(league, board, name):
+    league.players.loc[league.players.name == name, "fantasy_team"] = None
+    board.loc[board["name"] == name, "fantasy_team"] = pd.NA
+
+
+def parse_payouts(raw, num_teams: int):
+    default = [100 * num_teams * 0.6, 100 * num_teams * 0.3, 100 * num_teams * 0.1]
+    if not raw:
+        return default
+    parts = [p.strip() for p in str(raw).split(",")]
+    if not all(p.replace(".", "", 1).isdigit() for p in parts):
+        print("Weird values provided for payouts... Assuming standard payouts...")
+        return default
+    payouts = [float(p) for p in parts][:3]
+    if len(parts) > 3:
+        print("Too many values provided for payouts... Only using top three...")
+    return payouts
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="snake_draft",
+        description="Interactive snake-draft cockpit (redraft, V2).",
+    )
+    p.add_argument("--teamname", required=True,
+                   help="Yahoo team name to draft for")
+    p.add_argument("--adp", required=True,
+                   help="path to ADP CSV (FantasyPros-style by default)")
+    p.add_argument("--exclude", default=None,
+                   help="comma-separated players to exclude from views")
+    p.add_argument("--inprogress", default=None,
+                   help="path to a DraftProgress.csv from a paused draft")
+    p.add_argument("--output", default=None,
+                   help="where to save draft progress (defaults to "
+                        "--inprogress if provided, else DraftProgress.csv)")
+    p.add_argument("--payouts", default=None,
+                   help="comma-separated 1st,2nd,3rd payouts")
+    p.add_argument("--adp-name-col", default="Player", dest="adp_name_col")
+    p.add_argument("--adp-pos-col", default="POS", dest="adp_pos_col")
+    p.add_argument("--adp-team-col", default="Team", dest="adp_team_col")
+    p.add_argument("--adp-avg-col", default="AVG", dest="adp_avg_col")
+    p.add_argument("--limit-per-position", type=int, default=5,
+                   dest="limit_per_position",
+                   help="rows per position in 'best' view")
+    p.add_argument("--nearest-window", type=int, default=2,
+                   dest="nearest_window",
+                   help="ADP window in rounds for 'nearest' view")
+    return p
+
+
+def _print_df(df: pd.DataFrame, header: str) -> None:
+    print(f"\n{header}")
+    if df.empty:
+        print("(no players)")
     else:
-        if pick_name in taken.name.tolist():
-            team = taken.loc[taken.name == pick_name,'fantasy_team'].values[0]
-            print("Player has already been taken by {}.".format(team))
-        else:
-            available['similarity'] = available.name.apply(lambda x: SequenceMatcher(None, x, pick_name).ratio())
-            print("Can't find the player you provided. Closest options:")
-            print(available.sort_values(by="similarity",ascending=False).iloc[:3][['name','position','current_team']].to_string(index=False))
-        return None
+        print(df.to_string(index=False))
 
-def main():
-    parser = optparse.OptionParser()
-    parser.add_option(
-        "--teamname", action="store", dest="teamname", help="name of the Yahoo team you're drafting"
-    )
-    parser.add_option(
-        "--payouts",
-        action="store",
-        dest="payouts",
-        help="comma separated string containing integer payouts for 1st, 2nd, and 3rd",
-    )
-    parser.add_option(
-        "--exclude",
-        action="store",
-        dest="exclude",
-        help="comma separated string containing players to exclude from consideration",
-    )
-    parser.add_option(
-        "--inprogress",
-        action="store",
-        dest="inprogress",
-        help="location of the csv containing details about a draft already in progress",
-    )
-    parser.add_option(
-        "--output",
-        action="store",
-        dest="output",
-        help="where to save the draft progress csv",
-    )
-    parser.add_option(
-        "--sfb",
-        action="store_true",
-        dest="sfb",
-        help="whether to use SFB scoring/settings throughout the draft",
-    )
-    parser.add_option(
-        "--superflex",
-        action="store_true",
-        dest="superflex",
-        help="whether to use superflex settings throughout the draft",
-    )
-    parser.add_option(
-        "--bestball",
-        action="store",
-        dest="bestball",
-        default="",
-        help="which platform to use if implementing best ball settings/scoring",
-    )
-    options, args = parser.parse_args()
-    # league = fb.League(options.teamname,num_sims=10000,sfb=options.sfb,bestball=options.bestball)
-    league = fb.League(name=options.teamname, num_sims=10000, sfb=options.sfb, bestball=options.bestball)
-    options.bestball = str(options.bestball).lower() in ["dk","draftkings","underdog"]
-    num_spots = league.roster_spots.loc[league.roster_spots.position != 'IR','count'].sum()
+
+def main(argv=None) -> int:
+    args = build_arg_parser().parse_args(argv)
+
+    # Lazy import so `--help` and the helper unit tests work without
+    # Yahoo creds / yahoo_fantasy_api installed.
+    import fantasyfb as fb
+
+    league = fb.League(name=args.teamname, num_sims=10000)
     num_teams = len(league.teams)
-    if (options.sfb or options.bestball) and num_teams != 12:
-        print("SFB14 uses 12 team divisions!!! Pick a different league!!!")
-        sys.exit(0)
+    num_spots = league.roster_spots.loc[
+        league.roster_spots.position != "IR", "count"
+    ].sum()
+    tot_picks = num_teams * num_spots
+    payouts = parse_payouts(args.payouts, num_teams)
+    exclude = [v.strip() for v in args.exclude.split(",")] if args.exclude else []
 
-    # Validating payouts input
-    if options.payouts:
-        options.payouts = options.payouts.split(",")
-        if all([val.isnumeric() for val in options.payouts]):
-            options.payouts = [float(val) for val in options.payouts]
-        else:
-            print("Weird values provided for payouts... Assuming standard payouts...")
-            options.payouts = [
-                100 * len(league.teams) * 0.6,
-                100 * len(league.teams) * 0.3,
-                100 * len(league.teams) * 0.1,
-            ]
-        if len(options.payouts) > 3:
-            print("Too many values provided for payouts... Only using top three...")
-            options.payouts = options.payouts[:3]
-    elif league.name == "The Algorithm":
-        options.payouts = [720, 360, 120]
-    elif league.name == "Toothless Wonders":
-        options.payouts = [350, 100, 50]
-    elif league.name == "The GENIEs":
-        options.payouts = [100, 0, 0]
-    elif league.name == "The Great Gadsby's":
-        options.payouts = [50, 35, 15]
-    else:
-        options.payouts = [
-            100 * len(league.teams) * 0.6,
-            100 * len(league.teams) * 0.3,
-            100 * len(league.teams) * 0.1,
-        ]
+    # Preserve existing fantasy_team values (keepers / restored picks
+    # from --inprogress) before build_board snapshots the pool.
+    league.players["fantasy_team"] = league.players.get("fantasy_team")
 
-    if options.sfb:
-        # # SFB13 ADP Source: https://goingfor2.com/the-best-only-scott-fish-bowl-sfb13-sleeper-adp/
-        # adp = pd.read_csv("SFB13_ADP.csv")
-        # # SFB14 ADP Source: https://goingfor2.com/sfb14adp/
-        # adp = pd.read_csv("SFB14_ADP.csv")
-        # adp['name'] = adp['FIRST NAME'] + ' ' + adp['LAST NAME']
-        # adp = adp.rename(columns={'ADP':'avg_pick','POSITION':'position','TEAM':'Team'})
-        # SFB15 ADP Source: https://www.fantasylife.com/scott-fish-bowl-tool?utm_source=substack&utm_medium=email
-        adp = pd.read_csv("SFB15_ADP.csv")
-        adp = adp.rename(columns={'p_full':'name','adp':'avg_pick','p_pos':'position','p_tm':'Team'})
-
-    elif options.bestball:
-        # Best Ball ADP Source: https://www.fantasypros.com/nfl/adp/best-ball-overall.php
-        # adp = pd.read_csv("FantasyPros_2023_Overall_ADP_Rankings_Bestball.csv")
-        adp = pd.read_csv("FantasyPros_2024_Overall_ADP_Rankings_Bestball.csv")
-        adp = adp.rename(columns={'Player':'name','AVG':'avg_pick','POS':'position'})
-        adp.position = adp.position.str[:2]
-    else:
-        # Redraft ADP Source: https://www.fantasypros.com/nfl/adp/half-point-ppr-overall.php
-        # adp = pd.read_csv("FantasyPros_2023_Overall_ADP_Rankings_Redraft.csv")
-        # adp = pd.read_csv("FantasyPros_2024_Overall_ADP_Rankings_Redraft.csv")
-        adp = pd.read_csv("FantasyPros_2025_Overall_ADP_Rankings_Redraft.csv")
-        adp = adp.rename(columns={'Player':'name','AVG':'avg_pick','POS':'position'})
-        adp.position = adp.position.str[:2]
-    corrections = pd.read_csv("https://raw.githubusercontent.com/tefirman/fantasy-data/main/fantasyfb/name_corrections.csv")
-    adp = pd.merge(left=adp, right=corrections, how="left", on="name")
-    to_fix = ~adp.new_name.isnull()
-    adp.loc[to_fix, "name"] = adp.loc[to_fix, "new_name"]
-    del adp['new_name']
-    missing = ~adp.name.isin(league.players.name.tolist()) & ~adp.position.isin(['DS']) & ~adp.name.isnull()
-    if missing.any():
-        print("Name mismatches in ADP:")
-        print(adp.loc[missing,['name','position','Team']].to_string(index=False))
-    adp['avg_round'] = round(1.0 + adp.avg_pick/num_teams,1)
-    adp['avg_pick'] = round(adp.avg_pick,1)
-    league.players = pd.merge(left=league.players,right=adp[['name','position','avg_pick','avg_round']],how='left',on=['name','position'])
-    league.players['fantasy_team'] = None
-    display_cols = ['player_to_add','position','current_team','WAR','wins_avg','points_avg','playoffs','winner','earnings','avg_pick','avg_round']
-
-    tot_picks = num_teams*num_spots
-    exclude = [val.strip() for val in options.exclude.split(',')] if options.exclude else []
-    if options.sfb or options.bestball:
-        exclude += league.players.loc[league.players.position == 'DEF','name'].tolist()
-    if options.bestball:
-        exclude += league.players.loc[league.players.position == 'K','name'].tolist()
-    if os.path.exists(str(options.inprogress)):
-        progress = pd.read_csv(options.inprogress)
+    if args.inprogress and os.path.exists(args.inprogress):
+        progress = pd.read_csv(args.inprogress)
         pick_num = progress.shape[0]
-        given_order = progress.iloc[:progress.fantasy_team.nunique()].fantasy_team.tolist()
-        league = provide_pick_order(league, already=given_order, sfb=options.sfb, superflex=options.superflex)
-        league.players = pd.merge(left=league.players,right=progress[['player_id_sr','fantasy_team']],how='left',on='player_id_sr',suffixes=('','_prev'))
+        given_order = progress.iloc[:progress.fantasy_team.nunique()] \
+                              .fantasy_team.tolist()
+        league = provide_pick_order(league, already=given_order)
+        league.players = pd.merge(
+            left=league.players,
+            right=progress[["player_id_sr", "fantasy_team"]],
+            how="left", on="player_id_sr", suffixes=("", "_prev"),
+        )
         picked = ~league.players.fantasy_team_prev.isnull()
-        league.players.loc[picked,'fantasy_team'] = league.players.loc[picked,'fantasy_team_prev']
-        del league.players['fantasy_team_prev']
-        if not options.output:
-            options.output = options.inprogress
+        league.players.loc[picked, "fantasy_team"] = (
+            league.players.loc[picked, "fantasy_team_prev"]
+        )
+        del league.players["fantasy_team_prev"]
+        output_path = args.output or args.inprogress
     else:
-        options.output = "DraftProgress.csv"
         custom_order = input("Would you like to provide a custom draft order? ")
-        league = provide_pick_order(league, custom_order.lower() in ["yes","y"], sfb=options.sfb, superflex=options.superflex)
+        league = provide_pick_order(league, custom_order.lower() in ("yes", "y"))
         pick_num = 0
         progress = pd.DataFrame()
+        output_path = args.output or "DraftProgress.csv"
+
+    board = cockpit.build_board(
+        league.players, league.roster_spots, num_teams,
+        adp_csv_path=args.adp,
+        name_col=args.adp_name_col, adp_col=args.adp_avg_col,
+        position_col=args.adp_pos_col, team_col=args.adp_team_col,
+    )
 
     while pick_num < tot_picks:
-        round_num = pick_num//num_teams + 1
-        rel_pick = pick_num%num_teams
-        if options.sfb and ((round_num > 2 and round_num%2 == 1) or round_num == 2): # 3rd round reversal
-            rel_pick = num_teams - rel_pick - 1
-        elif round_num%2 == 0 and not options.sfb:
-            rel_pick = num_teams - rel_pick - 1
-        
-        if round_num > 10 and (options.bestball or options.sfb):
-            # Initially keeping average replacements for more realistic simulations,
-            # but there's no waiver wire in bestball, eliminating averages half way through
-            league.players = league.players.loc[~league.players.player_id_sr.astype(str).str.startswith('avg_')].reset_index(drop=True)
+        round_num = pick_num // num_teams + 1
+        slot = snake_pick_slot(pick_num, num_teams)
+        prompt = (f"Round #{round_num}, Pick #{pick_num + 1}, "
+                  f"{league.teams[slot]['name']}: ")
 
-        pick_deets = 'Round #{}, Pick #{}, {}: '.format(round_num,pick_num + 1,league.teams[rel_pick]['name'])
-        pick_name = check_pick_name(league,input(pick_deets),["best","nearest","bestball","nearestbestball","next","lookup","exclude","go back","sim","roster"])
+        pick_name = check_pick_name(league, input(prompt), _PICK_COMMANDS)
         while pick_name is None:
-            pick_name = check_pick_name(league,input(pick_deets),["best","nearest","bestball","nearestbestball","next","lookup","exclude","go back","sim","roster"])
-        
+            pick_name = check_pick_name(league, input(prompt), _PICK_COMMANDS)
+
         if pick_name in league.players.name.tolist():
-            # What about players with the same name??? Not worrying about it for now...
-            league.players.loc[league.players.name == pick_name,'fantasy_team'] = league.teams[rel_pick]['name']
-            progress = pd.concat([progress,league.players.loc[league.players.name == pick_name]],ignore_index=True,sort=False)
-            progress.to_csv(options.output,index=False)
+            team_name = league.teams[slot]["name"]
+            _apply_pick(league, board, pick_name, team_name)
+            progress = pd.concat(
+                [progress, league.players.loc[league.players.name == pick_name]],
+                ignore_index=True, sort=False,
+            )
+            progress.to_csv(output_path, index=False)
             pick_num += 1
-        elif pick_name.lower() == "best":
-            best = league.move_analyzer.possible_adds([pick_name],exclude,limit_per=5,team_name="My Team",\
-            verbose=False,payouts=options.payouts,bestball=options.bestball)
-            best = pd.merge(left=best,right=adp[['name','position','avg_pick','avg_round']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            best = pd.merge(left=best,right=league.players[['name','position','WAR']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            print("Best players according to the Algorithm:")
-            print(best[display_cols].to_string(index=False))
-        elif pick_name.lower() == "nearest":
-            nearby = league.players.loc[league.players.avg_pick <= pick_num + 2*num_teams,'name'].tolist()
-            nearest = league.move_analyzer.possible_adds(nearby,exclude,limit_per=5,team_name="My Team",\
-            verbose=False,payouts=options.payouts,bestball=options.bestball)
-            nearest = pd.merge(left=nearest,right=adp[['name','position','avg_pick','avg_round']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            nearest = pd.merge(left=nearest,right=league.players[['name','position','WAR']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            print("Best players in terms of ADP:")
-            print(nearest[display_cols].to_string(index=False))
-        elif pick_name.lower() == "bestball":
-            league.num_sims = 1000
-            besties = league.players.loc[~league.players.position.isin(['K','DEF']),'name'].tolist()
-            best = league.move_analyzer.possible_adds(besties,exclude,limit_per=5,team_name="My Team",\
-            verbose=False,payouts=options.payouts,bestball=True)
-            best = pd.merge(left=best,right=adp[['name','position','avg_pick','avg_round']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            best = pd.merge(left=best,right=league.players[['name','position','WAR']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            print("Best players according to the Algorithm:")
-            print(best[display_cols].to_string(index=False))
-            league.num_sims = 10000
-        elif pick_name.lower() == "nearestbestball":
-            league.num_sims = 1000
-            nearby = league.players.loc[(league.players.avg_pick <= pick_num + 2*num_teams) \
-            & ~league.players.position.isin(['K','DEF']),'name'].tolist()
-            nearest = league.move_analyzer.possible_adds(nearby,exclude,limit_per=5,team_name="My Team",\
-            verbose=False,payouts=options.payouts,bestball=True)
-            nearest = pd.merge(left=nearest,right=adp[['name','position','avg_pick','avg_round']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            nearest = pd.merge(left=nearest,right=league.players[['name','position','WAR']]\
-            .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-            print("Best players in terms of ADP:")
-            print(nearest[display_cols].to_string(index=False))
-            league.num_sims = 10000
-        elif pick_name.lower() == "lookup":
-            focus = check_pick_name(league,input("Which player would you like to check? "),["nevermind"])
+
+        elif pick_name == "best":
+            _print_df(
+                cockpit.view_best(board, exclude=exclude,
+                                  limit_per_position=args.limit_per_position),
+                "Best available by VORP (per position):",
+            )
+
+        elif pick_name == "nearest":
+            _print_df(
+                cockpit.view_nearest(
+                    board, pick_overall=pick_num + 1, num_teams=num_teams,
+                    exclude=exclude, window_rounds=args.nearest_window,
+                ),
+                f"Available within next {args.nearest_window} rounds of ADP:",
+            )
+
+        elif pick_name == "lookup":
+            focus = check_pick_name(
+                league, input("Which player would you like to check? "),
+                ("nevermind",),
+            )
             while focus is None:
-                focus = check_pick_name(league,input("Which player would you like to check? "),["nevermind"])
+                focus = check_pick_name(
+                    league, input("Which player would you like to check? "),
+                    ("nevermind",),
+                )
             if focus != "nevermind":
-                lookup = league.move_analyzer.possible_adds([focus],exclude,team_name="My Team",\
-                verbose=False,payouts=options.payouts,bestball=options.bestball)
-                lookup = pd.merge(left=lookup,right=adp[['name','position','avg_pick','avg_round']]\
-                .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-                lookup = pd.merge(left=lookup,right=league.players[['name','position','WAR']]\
-                .rename(columns={'name':'player_to_add'}),how='left',on=['player_to_add','position'])
-                print("Player of interest:")
-                print(lookup[display_cols].to_string(index=False))
-        elif pick_name.lower() == "exclude":
-            ignore = check_pick_name(league,input("Which player would you like to exclude from consideration? "),["nevermind"])
+                _print_df(cockpit.view_lookup(board, focus),
+                          f"Lookup: {focus}")
+
+        elif pick_name == "exclude":
+            ignore = check_pick_name(
+                league,
+                input("Which player would you like to exclude from "
+                      "consideration? "),
+                ("nevermind",),
+            )
             while ignore is None:
-                ignore = check_pick_name(league,input("Which player would you like to exclude from consideration? "),["nevermind"])
+                ignore = check_pick_name(
+                    league,
+                    input("Which player would you like to exclude from "
+                          "consideration? "),
+                    ("nevermind",),
+                )
             if ignore != "nevermind":
                 exclude.append(ignore)
-        elif pick_name.lower() == "go back":
-            league.players.loc[league.players.name == progress.iloc[-1]['name'],'fantasy_team'] = None
-            progress = progress.iloc[:-1].reset_index(drop=True)
-            progress.to_csv(options.output,index=False)
-            pick_num -= 1
-        elif pick_name.lower() == "sim":
-            if options.bestball:
-                standings_sim = league.bestball_sims(payouts=options.payouts)
-            else:
-                standings_sim = league.season_sims(payouts=options.payouts)[1]
-            print(standings_sim[['team','points_avg','wins_avg','playoffs','winner','earnings']].to_string(index=False))
-        elif pick_name.lower() == "roster":
-            print(league.players.loc[league.players.fantasy_team == "My Team",\
-            ['name','position','current_team','points_avg','points_stdev','WAR']].to_string(index=False))
 
-    # Simulate the entire season and print the final results
-    if options.bestball:
-        standings_sim = league.bestball_sims(payouts=options.payouts)
-    else:
-        standings_sim = league.season_sims(payouts=options.payouts)[1]
-    print(standings_sim[['team','points_avg','wins_avg','playoffs','winner','earnings']].to_string(index=False))
-    standings_sim.to_csv('DraftResults.csv',index=False)
-    my_results = standings_sim.reset_index(drop=True).loc[standings_sim.team == 'My Team']
-    if my_results.index[0] < standings_sim.shape[0]/4:
+        elif pick_name == "go back":
+            if progress.empty:
+                print("No picks to revert.")
+                continue
+            last_name = progress.iloc[-1]["name"]
+            _revert_pick(league, board, last_name)
+            progress = progress.iloc[:-1].reset_index(drop=True)
+            progress.to_csv(output_path, index=False)
+            pick_num -= 1
+
+        elif pick_name == "sim":
+            standings = league.season_sims(payouts=payouts)[1]
+            print(standings[["team", "points_avg", "wins_avg",
+                             "playoffs", "winner", "earnings"]]
+                  .to_string(index=False))
+
+        elif pick_name == "roster":
+            _print_df(cockpit.view_roster(board, "My Team"),
+                      "My Team:")
+
+    standings = league.season_sims(payouts=payouts)[1]
+    print(standings[["team", "points_avg", "wins_avg",
+                     "playoffs", "winner", "earnings"]]
+          .to_string(index=False))
+    standings.to_csv("DraftResults.csv", index=False)
+
+    my_results = standings.reset_index(drop=True).loc[standings.team == "My Team"]
+    rank = my_results.index[0]
+    n = standings.shape[0]
+    if rank < n / 4:
         print("You crushed it!!! Way to go!!!")
-    elif my_results.index[0] >= standings_sim.shape[0]/4 \
-    and my_results.index[0] < standings_sim.shape[0]/2:
+    elif rank < n / 2:
         print("Pretty darn good, but we'll see... Good luck!!!")
-    elif my_results.index[0] >= standings_sim.shape[0]/2 \
-    and my_results.index[0] < 3*standings_sim.shape[0]/4:
+    elif rank < 3 * n / 4:
         print("Not great, but you can recover... Hit the waiver wire hard!!!")
     else:
         print("Less than ideal... but you have so many other redeeming qualities!!!")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
