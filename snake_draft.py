@@ -181,6 +181,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="Yahoo team name to draft for")
     p.add_argument("--adp", required=True,
                    help="path to ADP CSV (FantasyPros-style by default)")
+    p.add_argument("--season", type=int, default=None,
+                   help="Yahoo season year to connect to. Defaults to "
+                        "fantasyfb.League's auto-detect, which targets the "
+                        "most recently completed season -- pass the upcoming "
+                        "season explicitly when drafting before the NFL "
+                        "season starts (e.g. --season 2026 in May 2026).")
     p.add_argument("--exclude", default=None,
                    help="comma-separated players to exclude from views")
     p.add_argument("--inprogress", default=None,
@@ -218,7 +224,7 @@ def main(argv=None) -> int:
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
 
-    league = fb.League(name=args.teamname, num_sims=10000)
+    league = fb.League(name=args.teamname, num_sims=10000, season=args.season)
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
         league.roster_spots.position != "IR", "count"

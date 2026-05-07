@@ -71,6 +71,17 @@ class TestArgParser:
         assert args.adp == "ADP.csv"
         assert args.limit_per_position == 5
         assert args.nearest_window == 2
+        assert args.season is None
+
+    def test_season_override(self):
+        """--season threads through to League so pre-draft runs can
+        target the upcoming season instead of the auto-detected
+        most-recently-completed one."""
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--teamname", "X", "--adp", "ADP.csv", "--season", "2026",
+        ])
+        assert args.season == 2026
 
     def test_adp_column_overrides(self):
         parser = build_arg_parser()
