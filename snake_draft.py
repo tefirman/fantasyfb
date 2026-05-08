@@ -289,19 +289,30 @@ def main(argv=None) -> int:
             pick_num += 1
 
         elif pick_name == "best":
+            my_roster = cockpit.build_my_roster(
+                board, "My Team", league.roster_spots,
+            )
             _print_df(
-                cockpit.view_best(board, exclude=exclude,
-                                  limit_per_position=args.limit_per_position),
-                "Best available by VORP (per position):",
+                cockpit.view_best(
+                    board, exclude=exclude,
+                    limit_per_position=args.limit_per_position,
+                    my_roster=my_roster,
+                ),
+                "Best available by need-adjusted VORP:",
             )
 
         elif pick_name == "nearest":
+            my_roster = cockpit.build_my_roster(
+                board, "My Team", league.roster_spots,
+            )
             _print_df(
                 cockpit.view_nearest(
                     board, pick_overall=pick_num + 1, num_teams=num_teams,
                     exclude=exclude, window_rounds=args.nearest_window,
+                    my_roster=my_roster,
                 ),
-                f"Available within next {args.nearest_window} rounds of ADP:",
+                f"Available within next {args.nearest_window} rounds of ADP "
+                f"(need-adjusted):",
             )
 
         elif pick_name == "lookup":

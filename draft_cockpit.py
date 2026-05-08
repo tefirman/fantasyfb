@@ -22,6 +22,7 @@ from typing import Iterable, Optional
 import pandas as pd
 
 from draft_tools import (
+    Roster,
     assign_tiers,
     compute_vorp,
     load_adp_csv,
@@ -32,8 +33,11 @@ from draft_tools import (
 _POSITION_ORDER: tuple[str, ...] = ("QB", "RB", "WR", "TE", "K", "DEF")
 
 
+# `vorp_adjusted` and `need_factor` only appear when a roster is passed
+# to the view, so _ordered_columns drops them otherwise.
 DEFAULT_DISPLAY_COLS: tuple[str, ...] = (
     "name", "position", "current_team", "tier",
+    "vorp_adjusted", "need_factor",
     "vorp_per_game", "points_rate",
     "adp", "adp_round", "adp_value",
 )
@@ -81,6 +85,42 @@ def build_board(
     return merge_adp(tiered, adp, num_teams=num_teams)
 
 
+def build_my_roster(
+    board: pd.DataFrame,
+    team_name: str,
+    roster_spec,
+) -> Roster:
+    """Build a Roster reflecting the picks ``team_name`` already has on
+    the board. Used by the cockpit views to scale VORP by positional need
+    -- a 4th RB after you've filled your starting RB slots is worth less
+    than a starting WR you don't have yet, even if their raw VORPs match.
+
+    Pick order doesn't matter for the resulting need_score: greedy slot
+    allocation (most-specific first, then flex, then bench) yields the
+    same final slot occupancy regardless of the order picks were added.
+    """
+    roster = Roster.from_spec(roster_spec)
+    mine = board[board["fantasy_team"] == team_name]
+    for _, row in mine.iterrows():
+        roster.add({"position": row["position"]})
+    return roster
+
+
+def _apply_need_scaling(
+    avail: pd.DataFrame, my_roster: Optional[Roster],
+) -> tuple[pd.DataFrame, str]:
+    """Add ``need_factor`` and ``vorp_adjusted`` columns when a roster is
+    provided, and return the column to sort by. With no roster, sorts by
+    raw ``vorp_per_game`` -- the original cross-position behavior.
+    """
+    if my_roster is None:
+        return avail, "vorp_per_game"
+    avail = avail.copy()
+    avail["need_factor"] = avail["position"].map(my_roster.need_score)
+    avail["vorp_adjusted"] = avail["vorp_per_game"] * avail["need_factor"]
+    return avail, "vorp_adjusted"
+
+
 def _available(board: pd.DataFrame, exclude: Iterable[str] = ()) -> pd.DataFrame:
     avail = board[board["fantasy_team"].isna()]
     excluded = {n for n in exclude if n}
@@ -106,19 +146,26 @@ def view_best(
     exclude: Iterable[str] = (),
     limit_per_position: int = 5,
     positions: Optional[Iterable[str]] = None,
+    my_roster: Optional[Roster] = None,
 ) -> pd.DataFrame:
-    """Top-N available players per position, ranked by VORP across positions.
+    """Top-N available players per position, ranked by (need-adjusted) VORP.
 
     Per-position cap (``limit_per_position``) keeps a deep WR pool from
-    drowning out other positions, but the final list is ordered by
-    ``vorp_per_game`` regardless of position so the row at the top of the
-    table is the player with the highest cross-position value.
+    drowning out other positions, but the final list is ordered globally
+    so the row at the top is the player with the highest cross-position
+    value.
 
-    Within a position VORP ordering is identical to points_rate ordering
-    by construction (vorp = points_rate - replacement_level[position]) --
-    the cross-position sort is where VORP earns its keep, distinguishing
-    a 25-point QB above a deep replacement level from a 17-point RB just
-    barely above his own.
+    When ``my_roster`` is passed, sort key becomes ``vorp_per_game *
+    need_score(position)`` and the output gains ``need_factor`` and
+    ``vorp_adjusted`` columns. need_score is 1.0 for positions where the
+    user still has a starting slot open, ~0.7 if the position fits an
+    open flex slot, and 0.05-0.2 if the user has only bench room left --
+    so a 4th RB after the starting RBs are filled gets penalized
+    relative to a starting-eligible WR with similar raw VORP.
+
+    Within a position the need_factor is constant, so internal ordering
+    matches raw VORP either way -- the adjustment only changes the
+    cross-position ranking.
 
     Replaces the original possible_adds-backed "best" view that ran a
     10k-sim season per candidate (unusable on the clock).
@@ -126,10 +173,10 @@ def view_best(
     avail = _available(board, exclude)
     if positions is not None:
         avail = avail[avail["position"].isin(set(positions))]
-    # Sort by VORP first; groupby().head() preserves input row order
-    # within each group, so the top-N-per-position slice stays
-    # VORP-sorted overall without a re-sort.
-    avail = avail.sort_values("vorp_per_game", ascending=False, na_position="last")
+    avail, sort_col = _apply_need_scaling(avail, my_roster)
+    # Sort first; groupby().head() preserves input row order within each
+    # group, so the top-N-per-position slice stays globally sorted.
+    avail = avail.sort_values(sort_col, ascending=False, na_position="last")
     top = avail.groupby("position", sort=False).head(limit_per_position)
     return top[_ordered_columns(top, DEFAULT_DISPLAY_COLS)].reset_index(drop=True)
 
@@ -141,19 +188,24 @@ def view_nearest(
     num_teams: int,
     exclude: Iterable[str] = (),
     window_rounds: int = 2,
+    my_roster: Optional[Roster] = None,
 ) -> pd.DataFrame:
     """Available players whose ADP falls within the next ``window_rounds``
-    of the current overall pick number, sorted by VORP descending.
+    of the current overall pick number, sorted by (need-adjusted) VORP.
 
     This is the planning view: "given that the draft will turn around to
-    me in N picks, which players that the market thinks are about to go
-    are worth grabbing now?" Players with no ADP are excluded -- by
+    me in N picks, which players the market thinks are about to go are
+    worth grabbing now?" Players with no ADP are excluded -- by
     definition the market hasn't placed them in any window.
+
+    Same need-scaling behavior as ``view_best`` when ``my_roster`` is
+    passed: the adjusted VORP penalizes positions you've already filled.
     """
     avail = _available(board, exclude)
     cutoff = pick_overall + window_rounds * num_teams
     near = avail[avail["adp"].notna() & (avail["adp"] <= cutoff)]
-    near = near.sort_values("vorp_per_game", ascending=False, na_position="last")
+    near, sort_col = _apply_need_scaling(near, my_roster)
+    near = near.sort_values(sort_col, ascending=False, na_position="last")
     return near[_ordered_columns(near, DEFAULT_DISPLAY_COLS)].reset_index(drop=True)
 
 

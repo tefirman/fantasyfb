@@ -14,6 +14,7 @@ import pytest
 from draft_cockpit import (
     DEFAULT_DISPLAY_COLS,
     build_board,
+    build_my_roster,
     view_best,
     view_lookup,
     view_nearest,
@@ -177,6 +178,14 @@ class TestViewBest:
         for col in out.columns:
             assert col in DEFAULT_DISPLAY_COLS, f"unexpected column {col}"
 
+    def test_no_roster_omits_need_columns(self, board):
+        """Without my_roster, output should not include need_factor or
+        vorp_adjusted -- those are only meaningful when the user's
+        roster state is known."""
+        out = view_best(board, limit_per_position=2)
+        assert "need_factor" not in out.columns
+        assert "vorp_adjusted" not in out.columns
+
 
 # --------------------------------------------------------------------- #
 # view_nearest
@@ -264,3 +273,121 @@ class TestViewRoster:
         out = view_roster(board, "My Team")
         positions_in_order = out["position"].tolist()
         assert positions_in_order == ["QB", "RB", "WR", "TE"]
+
+
+# --------------------------------------------------------------------- #
+# Roster-aware (need-adjusted) views
+# --------------------------------------------------------------------- #
+
+
+class TestBuildMyRoster:
+    def test_empty_when_no_picks(self, board, standard_roster_spec):
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        # Every starting slot still open.
+        assert roster.starting_slots["QB"] == 1
+        assert roster.starting_slots["RB"] == 2
+        assert roster.starting_slots["WR"] == 3
+
+    def test_decrements_starting_slots_for_picks(
+        self, board, standard_roster_spec,
+    ):
+        board.loc[board["name"].isin(["QB00", "RB00", "RB01"]),
+                  "fantasy_team"] = "My Team"
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        assert roster.starting_slots["QB"] == 0
+        assert roster.starting_slots["RB"] == 0
+        assert roster.starting_slots["WR"] == 3
+
+    def test_overflow_picks_consume_flex_then_bench(
+        self, board, standard_roster_spec,
+    ):
+        """Drafting 3 RBs into a 2-RB league: first two fill the RB
+        slots, third falls to the W/R/T flex (eligible for RB)."""
+        board.loc[board["name"].isin(["RB00", "RB01", "RB02"]),
+                  "fantasy_team"] = "My Team"
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        assert roster.starting_slots["RB"] == 0
+        assert roster.starting_slots["W/R/T"] == 0
+
+    def test_only_counts_specified_team(
+        self, board, standard_roster_spec,
+    ):
+        board.loc[board["name"] == "RB00", "fantasy_team"] = "My Team"
+        board.loc[board["name"] == "RB01", "fantasy_team"] = "Other"
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        # Only RB00 (mine) consumed a slot -- RB01 is on someone else.
+        assert roster.starting_slots["RB"] == 1
+
+
+class TestViewBestNeedAdjusted:
+    def test_empty_roster_matches_raw_vorp(
+        self, board, standard_roster_spec,
+    ):
+        """An empty roster has need_factor=1.0 everywhere, so the sort
+        order should match the no-roster path exactly."""
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        with_roster = view_best(board, my_roster=roster, limit_per_position=5)
+        without = view_best(board, limit_per_position=5)
+        # Same set of names in the same order.
+        assert with_roster["name"].tolist() == without["name"].tolist()
+
+    def test_roster_pass_adds_need_columns(
+        self, board, standard_roster_spec,
+    ):
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        out = view_best(board, my_roster=roster, limit_per_position=3)
+        assert "need_factor" in out.columns
+        assert "vorp_adjusted" in out.columns
+        # Empty roster -> all positions still need_factor=1.0.
+        assert (out["need_factor"] == 1.0).all()
+
+    def test_filled_position_demotes_below_open_position(
+        self, board, standard_roster_spec,
+    ):
+        """The point of need adjustment: with WR + flex slots filled, a
+        top WR should fall behind a top RB even though WR has higher raw
+        VORP in this synthetic pool (3 WR starters/team + WRs fill flex
+        push WR replacement level deeper than RB's, so top WR > top RB
+        on raw VORP).
+        """
+        # Sanity: in the no-need view, top of the table is a WR.
+        baseline = view_best(board, limit_per_position=5)
+        assert baseline.iloc[0]["position"] == "WR"
+
+        # Fill all 3 WR slots + 1 W/R/T flex slot (Roster.add greedily
+        # fills WR first, then flex when WR is full).
+        board.loc[board["name"].isin(["WR00", "WR01", "WR02", "WR03"]),
+                  "fantasy_team"] = "My Team"
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        # WR/flex consumed -> need_score(WR) drops to bench-only (~0.2).
+        # RB still has open slots -> need_score(RB) = 1.0.
+        adjusted = view_best(board, my_roster=roster, limit_per_position=5)
+        assert adjusted.iloc[0]["position"] == "RB"
+
+    def test_need_factor_constant_within_position(
+        self, board, standard_roster_spec,
+    ):
+        """need_factor is per-position, so all rows of a given position
+        in the output should share the same need_factor value."""
+        board.loc[board["name"].isin(["RB00", "RB01"]), "fantasy_team"] = "My Team"
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        out = view_best(board, my_roster=roster, limit_per_position=5)
+        for pos, group in out.groupby("position"):
+            assert group["need_factor"].nunique() == 1, (
+                f"{pos} need_factor varies: {group['need_factor'].tolist()}"
+            )
+
+
+class TestViewNearestNeedAdjusted:
+    def test_roster_pass_adds_need_columns(self, board, standard_roster_spec):
+        roster = build_my_roster(board, "My Team", standard_roster_spec)
+        out = view_nearest(board, pick_overall=1, num_teams=12,
+                           my_roster=roster, window_rounds=4)
+        assert "need_factor" in out.columns
+        assert "vorp_adjusted" in out.columns
+
+    def test_no_roster_path_unchanged(self, board):
+        out = view_nearest(board, pick_overall=1, num_teams=12,
+                           window_rounds=4)
+        assert "need_factor" not in out.columns
+        assert "vorp_adjusted" not in out.columns

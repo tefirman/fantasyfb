@@ -16,6 +16,7 @@ Public API:
     assign_tiers(projections, ...)
     load_adp_csv(path, ...)
     merge_adp(projections, adp_df, num_teams)
+    Roster, FLEX_ELIGIBILITY  # roster-state tracking + flex eligibility
     MockDraft(...)  # simulator
 """
 
@@ -35,7 +36,7 @@ _SEASON_GAMES: int = 17
 # Flex slot encoding used by Yahoo league configs throughout the
 # codebase. Each entry maps the slot label to the base positions that
 # can fill it.
-_FLEX_ELIGIBILITY: Dict[str, tuple[str, ...]] = {
+FLEX_ELIGIBILITY: Dict[str, tuple[str, ...]] = {
     "W/T":     ("WR", "TE"),
     "W/R/T":   ("WR", "RB", "TE"),
     "Q/W/R/T": ("QB", "WR", "RB", "TE"),
@@ -70,8 +71,8 @@ def _expected_starters_per_position(
     for slot, count in spec.items():
         if slot in _BASE_POSITIONS:
             starters[slot] += count * num_teams
-        elif slot in _FLEX_ELIGIBILITY:
-            eligible = _FLEX_ELIGIBILITY[slot]
+        elif slot in FLEX_ELIGIBILITY:
+            eligible = FLEX_ELIGIBILITY[slot]
             share = (count * num_teams) / len(eligible)
             for pos in eligible:
                 starters[pos] += share
@@ -351,7 +352,7 @@ def merge_adp(
 
 
 @dataclass
-class _Roster:
+class Roster:
     """Tracks one team's roster during a mock draft.
 
     `slots` mirrors the league roster_spec for starting positions; each
@@ -364,13 +365,28 @@ class _Roster:
     bench_slots: int
     picks: List[dict] = field(default_factory=list)
 
+    @classmethod
+    def from_spec(cls, roster_spec) -> "Roster":
+        """Build an empty Roster from a roster_spec (DataFrame with
+        position/count columns or {slot: count} dict). Bench count comes
+        from the BN row/key if present, 0 otherwise."""
+        spec = _roster_spec_to_dict(roster_spec)
+        bench = 0
+        if isinstance(roster_spec, pd.DataFrame):
+            bench_row = roster_spec[roster_spec["position"] == "BN"]
+            if not bench_row.empty:
+                bench = int(bench_row["count"].iloc[0])
+        elif isinstance(roster_spec, dict):
+            bench = int(roster_spec.get("BN", 0))
+        return cls(starting_slots=dict(spec), bench_slots=bench)
+
     def add(self, pick: dict) -> None:
         self.picks.append(pick)
         pos = pick["position"]
         if self.starting_slots.get(pos, 0) > 0:
             self.starting_slots[pos] -= 1
             return
-        for flex_slot, eligible in _FLEX_ELIGIBILITY.items():
+        for flex_slot, eligible in FLEX_ELIGIBILITY.items():
             if pos in eligible and self.starting_slots.get(flex_slot, 0) > 0:
                 self.starting_slots[flex_slot] -= 1
                 return
@@ -383,24 +399,15 @@ class _Roster:
         """
         if self.starting_slots.get(position, 0) > 0:
             return 1.0
-        for flex_slot, eligible in _FLEX_ELIGIBILITY.items():
+        for flex_slot, eligible in FLEX_ELIGIBILITY.items():
             if (position in eligible
                     and self.starting_slots.get(flex_slot, 0) > 0):
                 return 0.7
         return 0.2 if self.bench_slots > 0 else 0.05
 
 
-def _build_rosters(roster_spec, num_teams: int) -> List[_Roster]:
-    spec = _roster_spec_to_dict(roster_spec)
-    bench = 0
-    if isinstance(roster_spec, pd.DataFrame):
-        bench_row = roster_spec[roster_spec["position"] == "BN"]
-        if not bench_row.empty:
-            bench = int(bench_row["count"].iloc[0])
-    elif isinstance(roster_spec, dict):
-        bench = int(roster_spec.get("BN", 0))
-    return [_Roster(starting_slots=dict(spec), bench_slots=bench)
-            for _ in range(num_teams)]
+def _build_rosters(roster_spec, num_teams: int) -> List[Roster]:
+    return [Roster.from_spec(roster_spec) for _ in range(num_teams)]
 
 
 def _snake_pick_owner(pick_index: int, num_teams: int, snake: bool) -> int:
@@ -415,7 +422,7 @@ def _snake_pick_owner(pick_index: int, num_teams: int, snake: bool) -> int:
 def _opponent_pick(
     available: pd.DataFrame,
     pick_overall: int,
-    roster: _Roster,
+    roster: Roster,
     noise_slope: float,
     noise_floor: float,
     rng: np.random.Generator,
@@ -448,7 +455,7 @@ def _opponent_pick(
 
 def _user_pick(
     available: pd.DataFrame,
-    roster: _Roster,
+    roster: Roster,
     strategy: str,
 ) -> int:
     """Pick the user's player according to the chosen strategy."""
@@ -538,16 +545,11 @@ class MockDraft:
         self.noise_floor = noise_floor
         self.my_strategy = my_strategy
 
-        spec = _roster_spec_to_dict(roster_spec)
-        self.starting_slots_per_team = sum(spec.values())
-        bench = 0
-        if isinstance(roster_spec, pd.DataFrame):
-            bench_row = roster_spec[roster_spec["position"] == "BN"]
-            if not bench_row.empty:
-                bench = int(bench_row["count"].iloc[0])
-        elif isinstance(roster_spec, dict):
-            bench = int(roster_spec.get("BN", 0))
-        self.total_picks = (self.starting_slots_per_team + bench) * num_teams
+        empty = Roster.from_spec(roster_spec)
+        self.starting_slots_per_team = sum(empty.starting_slots.values())
+        self.total_picks = (
+            self.starting_slots_per_team + empty.bench_slots
+        ) * num_teams
 
     def simulate(self, *, seed: Optional[int] = None) -> pd.DataFrame:
         """Run one mock draft. Returns a DataFrame of picks ordered by
