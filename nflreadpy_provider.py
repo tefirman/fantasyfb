@@ -6,6 +6,7 @@ to Pro Football Reference captchas. nflreadpy reads pre-built parquet
 files from the nflverse data releases, so it is fast and unauthenticated.
 """
 
+import warnings
 from typing import Iterable
 
 import nflreadpy as nfl
@@ -13,6 +14,39 @@ import numpy as np
 import pandas as pd
 
 from nfl_data_provider import NFLDataProvider
+
+
+def _clamp_seasons(
+    seasons: list[int], available_max: int, context: str,
+) -> list[int]:
+    """Drop seasons past `available_max` and warn about it.
+
+    Pre-draft callers routinely request the upcoming season before nflverse
+    has uploaded its parquet for it -- e.g. asking for 2026 stats in May
+    2026 when nflreadpy's current_season is still 2025. Without clamping,
+    nflreadpy either 404s on the missing parquet (stats / schedules) or
+    raises ValueError (rosters). Silently dropping the future seasons and
+    returning what's available lets the projection engine work off
+    historical data, which is what it needs anyway.
+
+    Raises ValueError if every requested season is past `available_max` --
+    that would yield an empty result and almost certainly indicates a bug
+    in the caller, not just a pre-release timing issue.
+    """
+    available = [s for s in seasons if s <= available_max]
+    dropped = [s for s in seasons if s > available_max]
+    if not available:
+        raise ValueError(
+            f"No available seasons in requested range for {context}: "
+            f"requested {seasons}, available through {available_max}."
+        )
+    if dropped:
+        warnings.warn(
+            f"Skipping {context} for seasons {dropped}: nflverse data not "
+            f"yet available (current_season={available_max}).",
+            stacklevel=3,
+        )
+    return available
 
 
 # Yahoo's `editorial_team_abbr` -> nflreadpy team code. Yahoo and nflreadpy
@@ -64,7 +98,11 @@ class NflreadpyProvider(NFLDataProvider):
     """Concrete NFLDataProvider backed by the nflreadpy parquet feeds."""
 
     def get_player_stats(self, start: int, finish: int) -> pd.DataFrame:
-        seasons = _years_in_range(start, finish)
+        seasons = _clamp_seasons(
+            _years_in_range(start, finish),
+            nfl.get_current_season(),
+            "player stats",
+        )
         raw = nfl.load_player_stats(seasons=seasons).to_pandas()
 
         # Restrict to regular season; the legacy package never trained on
@@ -190,7 +228,11 @@ class NflreadpyProvider(NFLDataProvider):
         )
 
     def get_schedule(self, start_year: int, end_year: int) -> pd.DataFrame:
-        seasons = list(range(start_year, end_year + 1))
+        seasons = _clamp_seasons(
+            list(range(start_year, end_year + 1)),
+            nfl.get_current_season(),
+            "schedule",
+        )
         raw = nfl.load_schedules(seasons=seasons).to_pandas()
         raw = raw[raw["game_type"] == "REG"].copy()
         raw["date"] = pd.to_datetime(raw["gameday"], errors="coerce")
@@ -252,7 +294,11 @@ class NflreadpyProvider(NFLDataProvider):
         return out.sort_values(["season", "week"], ignore_index=True)
 
     def get_rosters(self, start_year: int, end_year: int) -> pd.DataFrame:
-        seasons = list(range(start_year, end_year + 1))
+        seasons = _clamp_seasons(
+            list(range(start_year, end_year + 1)),
+            nfl.get_current_season(),
+            "rosters",
+        )
         raw = nfl.load_rosters_weekly(seasons=seasons).to_pandas()
 
         # Take the most recent week we have for each (season, player) so
