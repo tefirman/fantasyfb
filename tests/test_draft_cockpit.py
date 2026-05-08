@@ -15,6 +15,7 @@ from draft_cockpit import (
     DEFAULT_DISPLAY_COLS,
     build_board,
     build_my_roster,
+    random_pick,
     view_best,
     view_lookup,
     view_nearest,
@@ -391,3 +392,137 @@ class TestViewNearestNeedAdjusted:
                            window_rounds=4)
         assert "need_factor" not in out.columns
         assert "vorp_adjusted" not in out.columns
+
+
+# --------------------------------------------------------------------- #
+# random_pick
+# --------------------------------------------------------------------- #
+
+
+class TestRandomPick:
+    def test_returns_an_available_player(
+        self, board, standard_roster_spec,
+    ):
+        name = random_pick(
+            board, team_name="My Team", roster_spec=standard_roster_spec,
+            rng=np.random.default_rng(0),
+        )
+        # The returned player must be on the board and not already drafted.
+        row = board[board["name"] == name]
+        assert len(row) == 1
+        assert pd.isna(row.iloc[0]["fantasy_team"])
+
+    def test_excludes_drafted_players(
+        self, board, standard_roster_spec,
+    ):
+        # Mark the entire top of every position as drafted; the auto-pick
+        # has to come from deeper.
+        top_drafted = ["RB00", "RB01", "WR00", "WR01", "QB00", "TE00"]
+        board.loc[board["name"].isin(top_drafted), "fantasy_team"] = "Other"
+        name = random_pick(
+            board, team_name="My Team", roster_spec=standard_roster_spec,
+            rng=np.random.default_rng(1),
+        )
+        assert name not in top_drafted
+
+    def test_respects_explicit_exclude_list(
+        self, board, standard_roster_spec,
+    ):
+        # Even with a tiny pool size, excluded players never get picked.
+        # Run several samples to make sure no seed dodges the exclude check.
+        for seed in range(20):
+            name = random_pick(
+                board, team_name="My Team",
+                roster_spec=standard_roster_spec,
+                exclude=["RB00", "WR00"],
+                pool_size=2,
+                rng=np.random.default_rng(seed),
+            )
+            assert name not in {"RB00", "WR00"}
+
+    def test_seed_is_reproducible(
+        self, board, standard_roster_spec,
+    ):
+        a = random_pick(board, team_name="My Team",
+                        roster_spec=standard_roster_spec,
+                        rng=np.random.default_rng(42))
+        b = random_pick(board, team_name="My Team",
+                        roster_spec=standard_roster_spec,
+                        rng=np.random.default_rng(42))
+        assert a == b
+
+    def test_different_seeds_produce_variety(
+        self, board, standard_roster_spec,
+    ):
+        """Across many seeds, more than one distinct player should be
+        picked -- otherwise the function is deterministic and the
+        feature is broken."""
+        names = {
+            random_pick(board, team_name="My Team",
+                        roster_spec=standard_roster_spec,
+                        rng=np.random.default_rng(seed))
+            for seed in range(50)
+        }
+        assert len(names) >= 2
+
+    def test_filled_position_avoided(
+        self, board, standard_roster_spec,
+    ):
+        """If the team has filled all WR + flex slots, the auto-pick
+        should rarely (ideally never within a small pool) be a WR. With
+        a small pool_size and 30 different seeds, a filled position
+        should drop out of contention almost completely.
+        """
+        board.loc[board["name"].isin(["WR00", "WR01", "WR02", "WR03"]),
+                  "fantasy_team"] = "My Team"
+        positions = [
+            random_pick(
+                board, team_name="My Team",
+                roster_spec=standard_roster_spec,
+                pool_size=4,
+                rng=np.random.default_rng(seed),
+            )
+            for seed in range(30)
+        ]
+        wr_picks = sum(1 for n in positions
+                       if board.loc[board["name"] == n, "position"].iloc[0] == "WR")
+        # With WR fully saturated and a top-4 pool, WR's adjusted VORP
+        # is a fraction of what it would be otherwise -- they should
+        # not dominate the auto-picks.
+        assert wr_picks <= 5, f"WR over-represented: {wr_picks}/30 picks"
+
+    def test_uses_team_name_for_need_scoring(
+        self, board, standard_roster_spec,
+    ):
+        """The auto-pick scores need against the on-the-clock team, not
+        always My Team. If team A has filled WR but team B has not,
+        random_pick(team=A) should avoid WR while random_pick(team=B)
+        shouldn't.
+        """
+        board.loc[board["name"].isin(["WR00", "WR01", "WR02", "WR03"]),
+                  "fantasy_team"] = "Team A"
+        a_positions = []
+        b_positions = []
+        for seed in range(30):
+            a = random_pick(
+                board, team_name="Team A",
+                roster_spec=standard_roster_spec,
+                pool_size=4,
+                rng=np.random.default_rng(seed),
+            )
+            b = random_pick(
+                board, team_name="Team B",
+                roster_spec=standard_roster_spec,
+                pool_size=4,
+                rng=np.random.default_rng(seed),
+            )
+            a_positions.append(
+                board.loc[board["name"] == a, "position"].iloc[0]
+            )
+            b_positions.append(
+                board.loc[board["name"] == b, "position"].iloc[0]
+            )
+        a_wr = sum(p == "WR" for p in a_positions)
+        b_wr = sum(p == "WR" for p in b_positions)
+        # Team B (no WRs yet) should pick WR much more often than A.
+        assert b_wr > a_wr

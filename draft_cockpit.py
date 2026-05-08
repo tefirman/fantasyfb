@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
+import numpy as np
 import pandas as pd
 
 from draft_tools import (
@@ -218,6 +219,59 @@ def view_lookup(board: pd.DataFrame, name: str) -> pd.DataFrame:
     rows = board[board["name"] == name]
     cols = list(DEFAULT_DISPLAY_COLS) + ["fantasy_team"]
     return rows[_ordered_columns(rows, cols)].reset_index(drop=True)
+
+
+def random_pick(
+    board: pd.DataFrame,
+    *,
+    team_name: str,
+    roster_spec,
+    exclude: Iterable[str] = (),
+    pool_size: int = 8,
+    rng: Optional[np.random.Generator] = None,
+) -> str:
+    """Auto-draft a sensible pick for ``team_name`` from the available pool.
+
+    Used by the cockpit's ``random`` command so a user running a mock
+    draft doesn't have to type out names for every opponent (or for
+    their own picks when they're fast-forwarding through "boring"
+    rounds). Returns the picked player's name -- the caller applies the
+    pick the same way it would for a typed name.
+
+    The selection is need-adjusted to avoid pathological auto-picks: the
+    on-the-clock team's roster is rebuilt from the board so positions
+    they've already filled get demoted, then the top ``pool_size``
+    available players by adjusted VORP are sampled with probability
+    proportional to their adjusted VORP. The top option is heavily
+    favored but not deterministic, so re-running the same draft with
+    the auto-pilot produces different (but always plausible) outcomes.
+
+    Negative VORP values are clipped to a small epsilon so a fully-
+    saturated roster (everyone's adjusted VORP near zero) still picks
+    something rather than crashing on a zero-weight sample.
+    """
+    rng = rng if rng is not None else np.random.default_rng()
+    avail = _available(board, exclude)
+    roster = Roster.from_spec(roster_spec)
+    for _, row in board[board["fantasy_team"] == team_name].iterrows():
+        roster.add({"position": row["position"]})
+
+    avail = avail.copy()
+    avail["need_factor"] = avail["position"].map(roster.need_score)
+    avail["vorp_adjusted"] = avail["vorp_per_game"] * avail["need_factor"]
+    avail = avail.sort_values(
+        "vorp_adjusted", ascending=False, na_position="last",
+    )
+
+    pool = avail.head(pool_size)
+    if pool.empty:
+        raise ValueError(
+            f"No available players to auto-pick for {team_name!r}."
+        )
+    weights = pool["vorp_adjusted"].fillna(0).clip(lower=0.01).to_numpy()
+    weights = weights / weights.sum()
+    idx = int(rng.choice(len(pool), p=weights))
+    return str(pool.iloc[idx]["name"])
 
 
 def view_roster(board: pd.DataFrame, team_name: str) -> pd.DataFrame:

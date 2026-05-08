@@ -41,6 +41,7 @@ import draft_cockpit as cockpit
 
 _PICK_COMMANDS = (
     "best", "nearest", "lookup", "exclude", "go back", "sim", "roster",
+    "random",
 )
 
 
@@ -206,6 +207,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--nearest-window", type=int, default=2,
                    dest="nearest_window",
                    help="ADP window in rounds for 'nearest' view")
+    p.add_argument("--random-pool-size", type=int, default=8,
+                   dest="random_pool_size",
+                   help="size of the top-VORP pool the 'random' command "
+                        "samples from (default 8). Smaller = more "
+                        "deterministic auto-picks; larger = more chaos.")
     return p
 
 
@@ -365,6 +371,23 @@ def main(argv=None) -> int:
         elif pick_name == "roster":
             _print_df(cockpit.view_roster(board, "My Team"),
                       "My Team:")
+
+        elif pick_name == "random":
+            team_name = league.teams[slot]["name"]
+            auto_name = cockpit.random_pick(
+                board, team_name=team_name,
+                roster_spec=league.roster_spots,
+                exclude=exclude,
+                pool_size=args.random_pool_size,
+            )
+            print(f"Auto-drafting {auto_name} for {team_name}")
+            _apply_pick(league, board, auto_name, team_name)
+            progress = pd.concat(
+                [progress, league.players.loc[league.players.name == auto_name]],
+                ignore_index=True, sort=False,
+            )
+            progress.to_csv(output_path, index=False)
+            pick_num += 1
 
     standings = league.season_sims(payouts=payouts)[1]
     print(standings[["team", "points_avg", "wins_avg",
