@@ -11,6 +11,8 @@ from __future__ import annotations
 import pytest
 
 from snake_draft import (
+    _HELP_TEXT,
+    _PICK_COMMANDS,
     build_arg_parser,
     parse_payouts,
     snake_pick_slot,
@@ -94,3 +96,19 @@ class TestArgParser:
         assert args.adp_name_col == "FullName"
         assert args.adp_pos_col == "Pos"
         assert args.adp_avg_col == "Avg"
+
+
+class TestPickCommands:
+    def test_known_commands_listed(self):
+        """Sanity check that the in-loop dispatch exception list and the
+        help text stay aligned -- if someone adds a command without
+        wiring it through both, this catches it."""
+        for cmd in ("best", "nearest", "lookup", "exclude", "roster",
+                    "sim", "random", "random_til_me", "go back",
+                    "help", "exit"):
+            assert cmd in _PICK_COMMANDS, f"missing from _PICK_COMMANDS: {cmd}"
+            assert cmd in _HELP_TEXT, f"missing from _HELP_TEXT: {cmd}"
+
+    def test_help_text_is_nonempty(self):
+        assert _HELP_TEXT.strip()
+        assert "Commands during the draft" in _HELP_TEXT

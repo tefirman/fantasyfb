@@ -16,15 +16,19 @@ New required arg:
     --adp PATH    FantasyPros-style ADP CSV
                   (columns Player / POS / Team / AVG, configurable below)
 
-Commands during the draft:
+Commands during the draft (also available via the `help` command):
     <player name>  Mark the player as taken by the active team
-    best           Top-N available per position by VORP
+    best           Top-N available per position by need-adjusted VORP
     nearest        Available players in the next ~2 rounds of ADP, by VORP
     lookup         Detailed view of a single player
     exclude        Add a player to the per-session exclude list
-    go back        Revert the previous pick
-    sim            Full season-sim of current rosters
     roster         My current roster
+    sim            Full season-sim of current rosters
+    random         Auto-pick for the team currently on the clock
+    random_til_me  Auto-pick for every team until your turn
+    go back        Revert the previous pick
+    help           Show the command list
+    exit           Save progress and exit (no final summary)
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ import os
 import sys
 from difflib import SequenceMatcher
 
+import numpy as np
 import pandas as pd
 
 import draft_cockpit as cockpit
@@ -41,8 +46,25 @@ import draft_cockpit as cockpit
 
 _PICK_COMMANDS = (
     "best", "nearest", "lookup", "exclude", "go back", "sim", "roster",
-    "random",
+    "random", "random_til_me", "help", "exit",
 )
+
+
+_HELP_TEXT = """
+Commands during the draft:
+  <player name>  Draft this player for the team on the clock
+  best           Top-N available per position by need-adjusted VORP
+  nearest        Available players within next N rounds of ADP
+  lookup         Detailed view of one player
+  exclude        Add a player to the per-session exclude list
+  roster         Show My Team's current picks
+  sim            Run a full season simulation with current rosters
+  random         Auto-pick for the team currently on the clock
+  random_til_me  Auto-pick for everyone until it's your turn again
+  go back        Revert the previous pick
+  help           Show this command list
+  exit           Save progress and exit the draft (no final summary)
+"""
 
 
 def check_pick_value(league, pick):
@@ -388,6 +410,46 @@ def main(argv=None) -> int:
             )
             progress.to_csv(output_path, index=False)
             pick_num += 1
+
+        elif pick_name == "random_til_me":
+            # Inner loop: auto-pick for every team until "My Team" is on
+            # the clock again (or the draft ends). Single rng so picks
+            # within one burst feel coherent rather than independently
+            # sampled. Outer loop will re-prompt as soon as we break.
+            rng = np.random.default_rng()
+            auto_count = 0
+            while pick_num < tot_picks:
+                next_slot = snake_pick_slot(pick_num, num_teams)
+                next_team = league.teams[next_slot]["name"]
+                if next_team == "My Team":
+                    break
+                auto_name = cockpit.random_pick(
+                    board, team_name=next_team,
+                    roster_spec=league.roster_spots,
+                    exclude=exclude,
+                    pool_size=args.random_pool_size,
+                    rng=rng,
+                )
+                print(f"  Auto-drafting {auto_name} for {next_team}")
+                _apply_pick(league, board, auto_name, next_team)
+                progress = pd.concat(
+                    [progress, league.players.loc[league.players.name == auto_name]],
+                    ignore_index=True, sort=False,
+                )
+                progress.to_csv(output_path, index=False)
+                pick_num += 1
+                auto_count += 1
+            if auto_count == 0:
+                print("It's already your pick.")
+            else:
+                print(f"Auto-drafted {auto_count} picks. You're up.")
+
+        elif pick_name == "help":
+            print(_HELP_TEXT)
+
+        elif pick_name == "exit":
+            print(f"Exiting draft. Progress saved to {output_path}.")
+            return 0
 
     standings = league.season_sims(payouts=payouts)[1]
     print(standings[["team", "points_avg", "wins_avg",
