@@ -107,23 +107,30 @@ def view_best(
     limit_per_position: int = 5,
     positions: Optional[Iterable[str]] = None,
 ) -> pd.DataFrame:
-    """Top-N available players at each position by VORP.
+    """Top-N available players per position, ranked by VORP across positions.
 
-    The original possible_adds-based "best" view ran a 10k-sim season per
-    candidate, which made it unusable on the clock. This view sorts by
-    ``vorp_per_game`` (already replacement-adjusted, already cross-position
-    comparable) and groups per position so QB/TE don't get drowned out by
-    the deep RB/WR pool.
+    Per-position cap (``limit_per_position``) keeps a deep WR pool from
+    drowning out other positions, but the final list is ordered by
+    ``vorp_per_game`` regardless of position so the row at the top of the
+    table is the player with the highest cross-position value.
+
+    Within a position VORP ordering is identical to points_rate ordering
+    by construction (vorp = points_rate - replacement_level[position]) --
+    the cross-position sort is where VORP earns its keep, distinguishing
+    a 25-point QB above a deep replacement level from a 17-point RB just
+    barely above his own.
+
+    Replaces the original possible_adds-backed "best" view that ran a
+    10k-sim season per candidate (unusable on the clock).
     """
     avail = _available(board, exclude)
     if positions is not None:
         avail = avail[avail["position"].isin(set(positions))]
+    # Sort by VORP first; groupby().head() preserves input row order
+    # within each group, so the top-N-per-position slice stays
+    # VORP-sorted overall without a re-sort.
     avail = avail.sort_values("vorp_per_game", ascending=False, na_position="last")
     top = avail.groupby("position", sort=False).head(limit_per_position)
-    top = top.assign(_pos_key=_position_sort_key(top["position"]))
-    top = top.sort_values(
-        ["_pos_key", "vorp_per_game"], ascending=[True, False],
-    ).drop(columns="_pos_key")
     return top[_ordered_columns(top, DEFAULT_DISPLAY_COLS)].reset_index(drop=True)
 
 

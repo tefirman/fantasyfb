@@ -156,17 +156,14 @@ class TestViewBest:
         out = view_best(board, positions=["RB", "WR"], limit_per_position=2)
         assert set(out["position"].unique()) <= {"RB", "WR"}
 
-    def test_position_order_is_conventional(self, board):
-        """QB/RB/WR/TE/K/DEF should appear in that order so the user
-        scans the same way every pick."""
-        out = view_best(board, limit_per_position=2)
-        seen_positions = []
-        for pos in out["position"]:
-            if pos not in seen_positions:
-                seen_positions.append(pos)
-        expected = [p for p in ["QB", "RB", "WR", "TE", "K", "DEF"]
-                    if p in seen_positions]
-        assert seen_positions == expected
+    def test_globally_sorted_by_vorp_descending(self, board):
+        """Final list is VORP-ordered across positions, not grouped by
+        position. The top row is whoever has the highest cross-position
+        value -- typically an RB/WR rather than the top QB, since QBs
+        sit on a deeper replacement level."""
+        out = view_best(board, limit_per_position=5)
+        vorps = out["vorp_per_game"].tolist()
+        assert vorps == sorted(vorps, reverse=True)
 
     def test_within_position_sorted_by_vorp_descending(self, board):
         out = view_best(board, limit_per_position=5)
