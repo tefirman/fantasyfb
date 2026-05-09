@@ -64,6 +64,40 @@ class TestMapPlayerIds:
             yid = int(row["player_id"])
             assert row["player_id_sr"] == expected[yid]
 
+    def test_falls_back_to_name_team_when_yahoo_id_missing(
+        self,
+        manager: PlayerDataManager,
+        rosters: pd.DataFrame,
+        team_aliases: pd.DataFrame,
+    ) -> None:
+        """Regression: nflverse's yahoo_id cross-reference lags real
+        roster additions (~half the 2025 rookie class as of mid-2026
+        had null yahoo_id even though they played a full season). A
+        Yahoo-shaped player whose only link to nflreadpy is name+team
+        should still resolve to the right gsis_id.
+        """
+        yahoo_to_real = team_aliases.set_index("real_abbrev")["yahoo"].to_dict()
+        # Pick a roster row with a populated gsis_id whose yahoo_id we
+        # then null out on the input side, simulating nflverse not
+        # having backfilled this player yet.
+        target = (
+            rosters.dropna(subset=["yahoo_id"])
+            .iloc[0]
+        )
+        assert target["current_team"] in yahoo_to_real
+        players = pd.DataFrame([{
+            # Distinct yahoo player_id that won't match anything in
+            # nflreadpy's yahoo_id column -- forces the fallback path.
+            "player_id": 9999999,
+            "name": target["name"],
+            "position": target["position"],
+            "editorial_team_abbr": yahoo_to_real[target["current_team"]],
+            "status": "",
+            "fantasy_team": None,
+        }])
+        mapped = manager.map_player_ids(players)
+        assert mapped.iloc[0]["player_id_sr"] == target["player_id_sr"]
+
 
 class TestAddByeWeeks:
     def test_every_team_has_bye(

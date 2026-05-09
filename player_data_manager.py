@@ -114,11 +114,31 @@ class PlayerDataManager:
             )
             del players["yahoo_id"]
         else:
-            # Fallback: name + team match.
-            players = players.merge(
-                nfl_rosters[["name", "current_team", "player_id_sr"]].drop_duplicates(),
-                on=["name", "current_team"], how="left",
+            players["player_id_sr"] = pd.NA
+
+        # Name+team fallback for anyone the primary join missed. The
+        # yahoo_id column comes from a static cross-reference inside
+        # nflverse that's not backfilled the moment a rookie hits a
+        # roster -- the 2025 rookie class as of mid-2026, for instance,
+        # is in nflreadpy's roster feed with valid gsis_ids but ~half of
+        # them still have null yahoo_id. Without this fallback those
+        # players fail to link and surface as "needs reconcile" noise on
+        # every pre-draft run.
+        unmapped = players["player_id_sr"].isnull()
+        if unmapped.any():
+            name_join = (
+                nfl_rosters.dropna(subset=["player_id_sr"])
+                .sort_values("season")
+                .drop_duplicates(subset=["name", "current_team"], keep="last")
+                [["name", "current_team", "player_id_sr"]]
+                .rename(columns={"player_id_sr": "_pid_sr_byname"})
             )
+            players = players.merge(
+                name_join, on=["name", "current_team"], how="left",
+            )
+            fill = players["player_id_sr"].isnull() & players["_pid_sr_byname"].notna()
+            players.loc[fill, "player_id_sr"] = players.loc[fill, "_pid_sr_byname"]
+            del players["_pid_sr_byname"]
 
         # Defenses use the team abbreviation as their ID.
         defenses = players["position"].isin(["DEF"])
