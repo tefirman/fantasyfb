@@ -25,7 +25,7 @@ Commands during the draft (also available via the `help` command):
     roster         My current roster
     sim            Full season-sim of current rosters
     random         Auto-pick for the team currently on the clock
-    random_til_me  Auto-pick for every team until your turn
+    random til me  Auto-pick for every team until your turn
     go back        Revert the previous pick
     help           Show the command list
     exit           Save progress and exit (no final summary)
@@ -46,7 +46,7 @@ import draft_cockpit as cockpit
 
 _PICK_COMMANDS = (
     "best", "nearest", "lookup", "exclude", "go back", "sim", "roster",
-    "random", "random_til_me", "help", "exit",
+    "random", "random til me", "help", "exit",
 )
 
 
@@ -60,7 +60,7 @@ Commands during the draft:
   roster         Show My Team's current picks
   sim            Run a full season simulation with current rosters
   random         Auto-pick for the team currently on the clock
-  random_til_me  Auto-pick for everyone until it's your turn again
+  random til me  Auto-pick for everyone until it's your turn again
   go back        Revert the previous pick
   help           Show this command list
   exit           Save progress and exit the draft (no final summary)
@@ -411,7 +411,7 @@ def main(argv=None) -> int:
             progress.to_csv(output_path, index=False)
             pick_num += 1
 
-        elif pick_name == "random_til_me":
+        elif pick_name == "random til me":
             # Inner loop: auto-pick for every team until "My Team" is on
             # the clock again (or the draft ends). Single rng so picks
             # within one burst feel coherent rather than independently

@@ -104,7 +104,7 @@ class TestPickCommands:
         help text stay aligned -- if someone adds a command without
         wiring it through both, this catches it."""
         for cmd in ("best", "nearest", "lookup", "exclude", "roster",
-                    "sim", "random", "random_til_me", "go back",
+                    "sim", "random", "random til me", "go back",
                     "help", "exit"):
             assert cmd in _PICK_COMMANDS, f"missing from _PICK_COMMANDS: {cmd}"
             assert cmd in _HELP_TEXT, f"missing from _HELP_TEXT: {cmd}"
