@@ -41,12 +41,17 @@ class PlayerDataManager:
         
     def apply_name_corrections(self, players: pd.DataFrame, stats: pd.DataFrame) -> pd.DataFrame:
         """
-        Apply name corrections between Pro Football Reference and Yahoo.
-        
+        Apply legacy name corrections between the historical roster feed and Yahoo.
+
+        Largely a no-op since the swap to nflreadpy: Yahoo<->NFL linkage now
+        happens via yahoo_id in map_player_ids, not name matching. The
+        corrections CSV survives to catch any pre-2024 backfills that
+        still reference legacy spellings.
+
         Args:
             players: DataFrame with Yahoo player data
-            stats: DataFrame with Pro Football Reference stats
-            
+            stats: DataFrame with NFL stats from the active provider
+
         Returns:
             DataFrame with corrected player names
         """
@@ -317,7 +322,7 @@ class PlayerDataManager:
             & (~players.fantasy_team.isnull() | (players.pct_rostered > 0.0))
         )
         if not_found.any():
-            print("Need to reconcile player names with Pro Football Reference... " + 
+            print("Need to reconcile player names with nflreadpy... " +
                   ", ".join(players.loc[not_found, "name"]))
         
         return players
@@ -385,7 +390,8 @@ class PlayerDataManager:
         
         Args:
             players: Raw Yahoo player data
-            stats: Pro Football Reference stats for name correction
+            stats: NFL stats from the active provider, used by the
+                   legacy name-correction step
             nfl_schedule: NFL schedule for bye weeks
             lg_id: League ID for roster percentages
             week: Current week being analyzed
