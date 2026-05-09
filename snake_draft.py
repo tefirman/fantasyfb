@@ -86,12 +86,20 @@ def _enable_completion() -> None:
     to empty so player names with spaces ('Justin Jefferson') complete as
     one unit -- the default delimiters include whitespace, which would
     otherwise truncate completion at the first space.
+
+    macOS ships Python linked against libedit rather than GNU readline,
+    and the two use different parse_and_bind syntaxes. Without the libedit
+    detection below, tab on macOS would just insert a literal tab
+    character rather than triggering completion.
     """
     if readline is None:
         return
     readline.set_completer(_completer)
     readline.set_completer_delims("")
-    readline.parse_and_bind("tab: complete")
+    if "libedit" in (readline.__doc__ or ""):
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")
 
 
 def _set_completion_candidates(names: Iterable[str]) -> None:
