@@ -17,7 +17,7 @@ import os
 import pandas as pd
 import pytest
 
-from yahoo_client import YahooFantasyClient
+from fantasyfb.data.yahoo_client import YahooFantasyClient
 
 
 pytestmark = pytest.mark.skipif(

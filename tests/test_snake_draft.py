@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from snake_draft import (
+from fantasyfb.drafts.snake import (
     _HELP_TEXT,
     _PICK_COMMANDS,
     _completer,

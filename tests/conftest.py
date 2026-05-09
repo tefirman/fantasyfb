@@ -16,13 +16,14 @@ import pytest
 
 warnings.filterwarnings("ignore")
 
-# Make the package modules importable when running `pytest` from the repo
-# root without an editable install.
+# Make the package importable when running `pytest` from the repo root
+# without an editable install (src layout, so add `src/` to sys.path).
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+_SRC_DIR = os.path.join(_REPO_ROOT, "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
 
-from nflreadpy_provider import NflreadpyProvider  # noqa: E402
+from fantasyfb.data.nflreadpy_provider import NflreadpyProvider  # noqa: E402
 
 
 @pytest.fixture(scope="session")

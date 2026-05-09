@@ -50,7 +50,7 @@ try:
 except ImportError:  # pragma: no cover -- Windows-only fallback
     readline = None
 
-import draft_cockpit as cockpit
+from . import snake_cockpit as cockpit
 
 
 _PICK_COMMANDS = (

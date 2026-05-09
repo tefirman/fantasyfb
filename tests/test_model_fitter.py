@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from matchup_model import _DEFAULT_WEIGHTS, _PositionWeights
-from model_fitter import build_training_set, fit_matchup_weights
+from fantasyfb.scoring.matchup_model import _DEFAULT_WEIGHTS, _PositionWeights
+from fantasyfb.projections.model_fitter import build_training_set, fit_matchup_weights
 
 
 def _synthetic_training(
@@ -103,8 +103,8 @@ class TestBuildTrainingSet:
     def test_produces_expected_columns_on_real_data(
         self, provider, schedule
     ) -> None:
-        from fantasy_scoring import FantasyScorer
-        from league_configs import apply_default_scoring_categories
+        from fantasyfb.scoring.fantasy_scoring import FantasyScorer
+        from fantasyfb.configs import apply_default_scoring_categories
 
         scoring = apply_default_scoring_categories({
             "Pass Yds": 0.04, "Pass TD": 4, "Int Thrown": -1,
@@ -136,9 +136,9 @@ class TestBuildTrainingSet:
         # high opp_implied_total = bad day for the defense. The fitter
         # should produce a negative alpha for DEF whether or not the
         # ridge prior agrees.
-        from fantasy_scoring import FantasyScorer
-        from league_configs import apply_default_scoring_categories
-        from model_fitter import fit_from_history
+        from fantasyfb.scoring.fantasy_scoring import FantasyScorer
+        from fantasyfb.configs import apply_default_scoring_categories
+        from fantasyfb.projections.model_fitter import fit_from_history
 
         scoring = apply_default_scoring_categories({
             "Pass Yds": 0.04, "Pass TD": 4, "Int Thrown": -1,

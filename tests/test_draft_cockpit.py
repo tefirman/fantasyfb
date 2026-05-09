@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from draft_cockpit import (
+from fantasyfb.drafts.snake_cockpit import (
     DEFAULT_DISPLAY_COLS,
     build_board,
     build_my_roster,

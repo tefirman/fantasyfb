@@ -13,7 +13,7 @@ import os
 import pandas as pd
 import numpy as np
 import optparse
-import fantasyfb as fb
+from .. import league as fb
 from difflib import SequenceMatcher
 
 def best_combos(positions, budget, league, limit=500, fixed="", exclude=[]):

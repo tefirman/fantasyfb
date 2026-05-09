@@ -30,9 +30,9 @@ from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 
-from matchup_model import MatchupModel, _DEFAULT_WEIGHTS, _PositionWeights
-from projection_engine import ProjectionEngine as ProjectionEngineV1
-from projection_engine_v2 import ProjectionEngineV2
+from ..scoring.matchup_model import MatchupModel, _DEFAULT_WEIGHTS, _PositionWeights
+from ..projections.engine import ProjectionEngine as ProjectionEngineV1
+from ..projections.engine_v2 import ProjectionEngineV2
 
 
 _FANTASY_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]

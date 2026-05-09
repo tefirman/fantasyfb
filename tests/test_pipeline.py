@@ -11,9 +11,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from fantasy_scoring import FantasyScorer
-from league_configs import apply_default_scoring_categories
-from projection_engine_v2 import ProjectionEngineV2
+from fantasyfb.scoring.fantasy_scoring import FantasyScorer
+from fantasyfb.configs import apply_default_scoring_categories
+from fantasyfb.projections.engine_v2 import ProjectionEngineV2
 
 
 PPR_HALF_SCORING = apply_default_scoring_categories({
