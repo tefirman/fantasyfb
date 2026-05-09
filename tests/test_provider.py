@@ -11,6 +11,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from nflreadpy_provider import _clamp_seasons
+
 
 REQUIRED_STAT_COLS = {
     "player_id_sr", "name", "position", "team", "opponent",
@@ -169,3 +171,30 @@ class TestDraft:
     def test_first_overall_pick(self, provider) -> None:
         draft = provider.get_draft(2024)
         assert "Caleb Williams" in draft["name"].tolist()
+
+
+class TestClampSeasons:
+    """Pre-draft callers ask for an upcoming season before nflverse has
+    uploaded its parquet for it. _clamp_seasons silently drops the
+    unavailable years (with a warning) and only fails when the entire
+    requested range is past the cutoff.
+    """
+
+    def test_passes_through_when_all_available(self):
+        out = _clamp_seasons([2023, 2024, 2025], available_max=2025,
+                             context="stats")
+        assert out == [2023, 2024, 2025]
+
+    def test_drops_future_seasons_with_warning(self):
+        with pytest.warns(UserWarning, match="2026"):
+            out = _clamp_seasons([2024, 2025, 2026], available_max=2025,
+                                 context="stats")
+        assert out == [2024, 2025]
+
+    def test_raises_when_no_seasons_available(self):
+        with pytest.raises(ValueError, match="No available seasons"):
+            _clamp_seasons([2026, 2027], available_max=2025, context="stats")
+
+    def test_no_warning_when_nothing_dropped(self, recwarn):
+        _clamp_seasons([2024], available_max=2025, context="stats")
+        assert len(recwarn) == 0
