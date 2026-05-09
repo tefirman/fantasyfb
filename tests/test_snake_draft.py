@@ -13,6 +13,8 @@ import pytest
 from snake_draft import (
     _HELP_TEXT,
     _PICK_COMMANDS,
+    _completer,
+    _set_completion_candidates,
     build_arg_parser,
     parse_payouts,
     snake_pick_slot,
@@ -112,3 +114,52 @@ class TestPickCommands:
     def test_help_text_is_nonempty(self):
         assert _HELP_TEXT.strip()
         assert "Commands during the draft" in _HELP_TEXT
+
+
+class TestCompletion:
+    """Sanity checks on the readline completer hook. The hook itself
+    can't be exercised in pytest (no terminal), but the candidate-pool
+    logic and the completer's prefix matching are pure functions."""
+
+    def test_returns_unique_sorted_candidates(self):
+        _set_completion_candidates(["Joe Burrow", "Joe Burrow", "Saquon Barkley"])
+        # state=0 returns first match; subsequent states walk forward.
+        assert _completer("Joe", 0) == "Joe Burrow"
+        # Dedupe: second 'Joe' wasn't kept.
+        assert _completer("Joe", 1) is None
+
+    def test_case_insensitive_prefix_match(self):
+        _set_completion_candidates(["Justin Jefferson", "Cooper Kupp"])
+        assert _completer("just", 0) == "Justin Jefferson"
+        assert _completer("JUST", 0) == "Justin Jefferson"
+
+    def test_no_match_returns_none(self):
+        _set_completion_candidates(["best", "nearest"])
+        assert _completer("zzz", 0) is None
+
+    def test_walks_through_all_matches(self):
+        _set_completion_candidates(["random", "random til me"])
+        results = []
+        state = 0
+        while True:
+            r = _completer("ra", state)
+            if r is None:
+                break
+            results.append(r)
+            state += 1
+        assert results == ["random", "random til me"]
+
+    def test_drops_falsy_candidates(self):
+        """None / empty-string entries shouldn't crash the completer --
+        league.players.name can carry NaN for synthetic average rows."""
+        _set_completion_candidates(["Joe Burrow", None, "", "Saquon Barkley"])
+        # Only the two real names should be in the pool.
+        all_matches = []
+        state = 0
+        while True:
+            r = _completer("", state)
+            if r is None:
+                break
+            all_matches.append(r)
+            state += 1
+        assert all_matches == ["Joe Burrow", "Saquon Barkley"]

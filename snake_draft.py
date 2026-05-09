@@ -37,9 +37,18 @@ import argparse
 import os
 import sys
 from difflib import SequenceMatcher
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
+
+# readline gives input() history (up/down arrows, Ctrl-R) and tab-completion
+# for free. Unix-only; on Windows the import fails and we just lose the
+# polish without breaking the cockpit.
+try:
+    import readline
+except ImportError:  # pragma: no cover -- Windows-only fallback
+    readline = None
 
 import draft_cockpit as cockpit
 
@@ -48,6 +57,47 @@ _PICK_COMMANDS = (
     "best", "nearest", "lookup", "exclude", "go back", "sim", "roster",
     "random", "random til me", "help", "exit",
 )
+
+
+# Completion pool for the next input() call. Mutable module-level state
+# because readline's completer hook can't take extra args -- the cockpit
+# updates this list before each prompt to reflect what's reasonable to
+# type at that moment.
+_completion_candidates: list[str] = []
+
+
+def _completer(text: str, state: int) -> "str | None":
+    """readline completer hook: return the `state`-th match for `text`.
+
+    Case-insensitive prefix match against ``_completion_candidates``.
+    Returning None signals "no more matches", which is how readline
+    knows when to stop calling.
+    """
+    lowered = text.lower()
+    matches = [c for c in _completion_candidates
+               if c.lower().startswith(lowered)]
+    if state < len(matches):
+        return matches[state]
+    return None
+
+
+def _enable_completion() -> None:
+    """Wire up the completer hook once at startup. Setting completer_delims
+    to empty so player names with spaces ('Justin Jefferson') complete as
+    one unit -- the default delimiters include whitespace, which would
+    otherwise truncate completion at the first space.
+    """
+    if readline is None:
+        return
+    readline.set_completer(_completer)
+    readline.set_completer_delims("")
+    readline.parse_and_bind("tab: complete")
+
+
+def _set_completion_candidates(names: Iterable[str]) -> None:
+    """Replace the completion pool used by the next input() prompt."""
+    global _completion_candidates
+    _completion_candidates = sorted({str(n) for n in names if n})
 
 
 _HELP_TEXT = """
@@ -296,11 +346,21 @@ def main(argv=None) -> int:
         position_col=args.adp_pos_col, team_col=args.adp_team_col,
     )
 
+    _enable_completion()
+
     while pick_num < tot_picks:
         round_num = pick_num // num_teams + 1
         slot = snake_pick_slot(pick_num, num_teams)
         prompt = (f"Round #{round_num}, Pick #{pick_num + 1}, "
                   f"{league.teams[slot]['name']}: ")
+
+        # Refresh completion candidates: only-still-available players plus
+        # the in-draft commands. Drafted players drop off automatically as
+        # the user picks them.
+        available_names = league.players.loc[
+            league.players.fantasy_team.isnull(), "name"
+        ].dropna().tolist()
+        _set_completion_candidates(list(_PICK_COMMANDS) + available_names)
 
         pick_name = check_pick_name(league, input(prompt), _PICK_COMMANDS)
         while pick_name is None:
@@ -344,6 +404,12 @@ def main(argv=None) -> int:
             )
 
         elif pick_name == "lookup":
+            # Lookup completion includes drafted players too -- the
+            # cockpit happily shows you who already owns them.
+            _set_completion_candidates(
+                ["nevermind"]
+                + league.players["name"].dropna().tolist()
+            )
             focus = check_pick_name(
                 league, input("Which player would you like to check? "),
                 ("nevermind",),
@@ -358,6 +424,11 @@ def main(argv=None) -> int:
                           f"Lookup: {focus}")
 
         elif pick_name == "exclude":
+            # Exclude only makes sense for available players.
+            available_names = league.players.loc[
+                league.players.fantasy_team.isnull(), "name"
+            ].dropna().tolist()
+            _set_completion_candidates(["nevermind"] + available_names)
             ignore = check_pick_name(
                 league,
                 input("Which player would you like to exclude from "
