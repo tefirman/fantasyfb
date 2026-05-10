@@ -84,15 +84,15 @@ class FantasyExcelExporter:
     def export_rosters(self, rosters_df: pd.DataFrame):
         """Export rosters with WAR conditional formatting."""
         columns = [
-            "name", "position", "current_team", "points_avg", "points_stdev", 
-            "WAR", "fantasy_team", "num_games", "game_factor", "opp_factor", 
-            "string_factor", "status", "bye_week", "until", "starter", 
+            "name", "position", "current_team", "points_avg", "points_stdev",
+            "WAR", "fantasy_team", "num_games", "matchup_factor",
+            "status", "bye_week", "until", "starter",
             "injured", "pct_rostered"
         ]
-        
+
         # Round numeric columns
         df = rosters_df.copy()
-        for col in ["points_avg", "points_stdev", "WAR", "game_factor", "opp_factor", "string_factor"]:
+        for col in ["points_avg", "points_stdev", "WAR", "matchup_factor"]:
             if col in df.columns:
                 df[col] = round(df[col].astype(float), 3)
         
@@ -115,13 +115,13 @@ class FantasyExcelExporter:
         """Export available players with WAR conditional formatting."""
         columns = [
             "name", "position", "current_team", "points_avg", "points_stdev",
-            "WAR", "num_games", "game_factor", "opp_factor", "string_factor",
+            "WAR", "num_games", "matchup_factor",
             "status", "bye_week", "until", "pct_rostered"
         ]
-        
+
         # Round numeric columns
         df = available_df.copy()
-        for col in ["points_avg", "points_stdev", "WAR", "game_factor", "opp_factor", "string_factor"]:
+        for col in ["points_avg", "points_stdev", "WAR", "matchup_factor"]:
             if col in df.columns:
                 df[col] = round(df[col].astype(float), 3)
         

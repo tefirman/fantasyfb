@@ -349,7 +349,7 @@ class PlayerDataManager:
 
     def add_depth_charts(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
         """
-        Pull current team depth charts from ESPN and merge into players DataFrame.
+        Pull current team depth charts from nflreadpy and merge into players DataFrame.
         
         Args:
             players: DataFrame with player data
@@ -394,7 +394,7 @@ class PlayerDataManager:
                 & players.until.isnull()
             )
             if missing.any():
-                print("Need to reconcile player names with ESPN... " +
+                print("Need to reconcile player names with nflreadpy depth charts... " +
                       ", ".join(players.loc[missing, "name"]))
 
         # Set defaults
