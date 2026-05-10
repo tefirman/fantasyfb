@@ -62,8 +62,8 @@ class FantasyExcelExporter:
             elif col.replace("my_", "").replace("their_", "").replace("_delta", "").replace(
                 "_1", ""
             ).replace("_2", "") in [
-                "playoffs", "playoff_bye", "winner", "runner_up", "third", 
-                "many_mile", "pct_rostered"
+                "playoffs", "playoff_bye", "winner", "runner_up", "third",
+                "pct_rostered"
             ]:
                 worksheet.set_column(idx, idx, max_len, self.percent_format)
             else:
@@ -163,24 +163,20 @@ class FantasyExcelExporter:
             },
         )
     
-    def export_standings(self, standings_df: pd.DataFrame, has_many_mile: bool = False):
+    def export_standings(self, standings_df: pd.DataFrame):
         """Export standings with playoff probability formatting."""
         columns = [
             "team", "wins_avg", "wins_stdev", "points_avg", "points_stdev",
-            "per_game_avg", "per_game_stdev", "per_game_fano", "playoffs", 
+            "per_game_avg", "per_game_stdev", "per_game_fano", "playoffs",
             "playoff_bye", "winner", "runner_up", "third", "earnings"
         ]
-        
-        if has_many_mile:
-            columns.append("many_mile")
-        
+
         df = standings_df[columns].copy()
         df.to_excel(self.writer, sheet_name="Standings", index=False)
         self._autofit_sheet(df, "Standings")
-        
+
         worksheet = self.writer.sheets["Standings"]
-        
-        # Playoff probabilities formatting
+
         worksheet.conditional_format(
             "I2:M" + str(len(df) + 1),
             {
@@ -190,43 +186,29 @@ class FantasyExcelExporter:
                 "max_color": "#3CB371",
             },
         )
-        
-        # Earnings formatting
+
         worksheet.conditional_format(
             "N2:N" + str(len(df) + 1),
             {
                 "type": "3_color_scale",
                 "min_color": "#FF6347",
-                "mid_color": "#FFD700", 
+                "mid_color": "#FFD700",
                 "max_color": "#3CB371",
             },
         )
-        
-        # Many Mile formatting (reversed colors)
-        if has_many_mile:
-            worksheet.conditional_format(
-                "O2:O" + str(len(df) + 1),
-                {
-                    "type": "3_color_scale",
-                    "max_color": "#FF6347",
-                    "mid_color": "#FFD700",
-                    "min_color": "#3CB371",
-                },
-            )
-    
-    def export_analysis(self, data_df: pd.DataFrame, sheet_name: str, 
-                       freeze_cols: int = 1, has_many_mile: bool = False):
+
+    def export_analysis(self, data_df: pd.DataFrame, sheet_name: str,
+                       freeze_cols: int = 1):
         """Export analysis results (pickups, adds, drops, trades)."""
         df = data_df.copy()
         df.to_excel(self.writer, sheet_name=sheet_name, index=False)
         self._autofit_sheet(df, sheet_name, freeze_cols)
-        
+
         worksheet = self.writer.sheets[sheet_name]
-        
-        # Playoff probability formatting
+
         playoff_start_col = "J" if sheet_name == "Trades" else "I" if sheet_name in ["Pickups", "Adds"] else "H"
         playoff_end_col = "N" if sheet_name == "Trades" else "M" if sheet_name in ["Pickups", "Adds"] else "L"
-        
+
         worksheet.conditional_format(
             f"{playoff_start_col}2:{playoff_end_col}" + str(len(df) + 1),
             {
@@ -236,8 +218,7 @@ class FantasyExcelExporter:
                 "max_color": "#3CB371",
             },
         )
-        
-        # Earnings formatting
+
         earnings_col = "O" if sheet_name == "Trades" else "N" if sheet_name in ["Pickups", "Adds"] else "M"
         worksheet.conditional_format(
             f"{earnings_col}2:{earnings_col}" + str(len(df) + 1),
@@ -248,19 +229,6 @@ class FantasyExcelExporter:
                 "max_color": "#3CB371",
             },
         )
-        
-        # Many Mile formatting if applicable
-        if has_many_mile:
-            many_mile_col = "P" if sheet_name == "Trades" else "O" if sheet_name in ["Pickups", "Adds"] else "N"
-            worksheet.conditional_format(
-                f"{many_mile_col}2:{many_mile_col}" + str(len(df) + 1),
-                {
-                    "type": "3_color_scale",
-                    "max_color": "#FF6347",
-                    "mid_color": "#FFD700",
-                    "min_color": "#3CB371",
-                },
-            )
     
     def export_deltas(self, deltas_df: pd.DataFrame):
         """Export per-game deltas with full conditional formatting."""

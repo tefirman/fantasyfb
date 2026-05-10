@@ -752,12 +752,10 @@ def main():
                     "winner",
                     "earnings",
                 ]
-                + (["many_mile"] if league.name == "The Algorithm" else [])
             ].to_string(index=False)
         )
         exporter.export_schedule(schedule_sim)
-    has_many_mile = league.name == "The Algorithm" and not options.bestball
-    exporter.export_standings(standings_sim, has_many_mile)
+    exporter.export_standings(standings_sim)
 
     if options.pickups:
         pickups = league.possible_pickups(
@@ -769,7 +767,7 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(pickups, "Pickups", freeze_cols=2, has_many_mile=has_many_mile)
+        exporter.export_analysis(pickups, "Pickups", freeze_cols=2)
 
     if options.adds:
         adds = league.possible_adds(
@@ -778,14 +776,14 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(adds, "Adds", has_many_mile=has_many_mile)
+        exporter.export_analysis(adds, "Adds")
 
     if options.drops:
         drops = league.possible_drops(
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(drops, "Drops", has_many_mile=has_many_mile)
+        exporter.export_analysis(drops, "Drops")
 
     if options.trades or options.given:
         if not options.trades:
@@ -800,7 +798,7 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(trades, "Trades", freeze_cols=3, has_many_mile=False)
+        exporter.export_analysis(trades, "Trades", freeze_cols=3)
 
     if options.deltas:
         deltas = league.perGameDelta(payouts=options.payouts)

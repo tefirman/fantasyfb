@@ -1,11 +1,9 @@
 """
 Fantasy league schedule management.
 
-This module handles fetching fantasy schedules, processing Many Mile postseason logic,
-and preparing schedule data for simulations.
+Handles fetching fantasy schedules and preparing schedule data for simulations.
 """
 
-import os
 import pandas as pd
 
 
@@ -47,16 +45,10 @@ class ScheduleManager:
         """
         as_of = season * 100 + week
         self.yahoo_client.refresh_oauth()
-        
-        # Pull basic schedule
+
         schedule = self._pull_basic_schedule(as_of)
-        
-        # Handle Many Mile postseason if applicable
-        schedule = self._handle_many_mile_postseason(schedule, as_of, current_week)
-        
-        # Clean and format schedule
         schedule = self._clean_schedule(schedule, as_of, current_week, team_key)
-        
+
         return schedule
     
     def _pull_basic_schedule(self, as_of):
@@ -100,67 +92,6 @@ class ScheduleManager:
         schedule.score_2 = schedule.score_2.astype(float)
         
         return schedule
-    
-    def _handle_many_mile_postseason(self, schedule, as_of, current_week):
-        """Handle Many Mile postseason logic."""
-        # Load Many Mile schedule if it exists
-        if os.path.exists("res/football/many_mile.csv"):
-            many_mile_sched = pd.read_csv("res/football/many_mile.csv")
-        else:
-            many_mile_sched = pd.DataFrame(columns=["season", "week"])
-        
-        # Check if "The Algorithm" team exists (indicates Many Mile league)
-        algo = (
-            schedule.team_1.isin(["The Algorithm"]).any()
-            or schedule.team_2.isin(["The Algorithm"]).any()
-        )
-        
-        if as_of % 100 >= self.settings["playoff_start_week"] and algo:
-            many_mile_sched = many_mile_sched.loc[
-                (many_mile_sched.season == as_of // 100)
-                & (many_mile_sched.week <= as_of % 100)
-            ]
-            del many_mile_sched["season"]
-            
-            if as_of < (as_of // 100) * 100 + current_week:
-                many_mile_sched.loc[many_mile_sched.week == as_of % 100, "score_1"] = 0.0
-                many_mile_sched.loc[many_mile_sched.week == as_of % 100, "score_2"] = 0.0
-            
-            # Calculate regular season standings
-            standings = self._calculate_regular_season_standings(schedule)
-            consolation = standings.team.tolist()[6:]  # Bottom 6 teams
-            
-            # Remove consolation teams from main playoffs
-            schedule = schedule.loc[
-                (schedule.week < self.settings["playoff_start_week"])
-                | ~schedule.team_1.isin(consolation)
-            ].reset_index(drop=True)
-            
-            # Add Many Mile schedule
-            schedule = pd.concat([schedule, many_mile_sched], ignore_index=True, sort=False)
-        
-        return schedule
-    
-    def _calculate_regular_season_standings(self, schedule):
-        """Calculate regular season standings for Many Mile logic."""
-        standings = schedule.loc[
-            schedule.week < self.settings["playoff_start_week"]
-        ].reset_index(drop=True)
-        
-        standings["win_1"] = (standings.score_1 > standings.score_2).astype(int)
-        standings["win_2"] = 1 - standings.win_1
-        
-        standings = pd.concat([
-            standings.rename(columns={col: col.replace("_1", "") for col in standings.columns}),
-            standings.rename(columns={col: col.replace("_2", "") for col in standings.columns})
-        ], ignore_index=True, sort=False)
-        
-        standings = standings.groupby("team").sum().reset_index()
-        standings = standings.sort_values(
-            by=["win", "score"], ascending=False, ignore_index=True
-        )
-        
-        return standings
     
     def _clean_schedule(self, schedule, as_of, current_week, team_key):
         """Clean and format the schedule DataFrame."""

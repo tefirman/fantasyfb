@@ -74,12 +74,6 @@ class MoveAnalyzer:
             ]
             + (
                 ["winner", "runner_up", "third", "earnings"]
-                + (
-                    ["many_mile"]
-                    if (self.league.schedule.team_1.isin(["The Algorithm"]).any()
-                    or self.league.schedule.team_2.isin(["The Algorithm"]).any()) \
-                    and not bestball else []
-                )
                 if postseason
                 else []
             )
@@ -170,12 +164,6 @@ class MoveAnalyzer:
                 "playoff_bye",
             ] + (
                 ["winner", "runner_up", "third", "earnings"]
-                + (
-                    ["many_mile"]
-                    if (self.league.schedule.team_1.isin(["The Algorithm"]).any()
-                    or self.league.schedule.team_2.isin(["The Algorithm"]).any()) \
-                    and not bestball else []
-                )
                 if postseason
                 else []
             ):
@@ -238,12 +226,6 @@ class MoveAnalyzer:
             ]
             + (
                 ["winner", "runner_up", "third", "earnings"]
-                + (
-                    ["many_mile"]
-                    if (self.league.schedule.team_1.isin(["The Algorithm"]).any()
-                    or self.league.schedule.team_2.isin(["The Algorithm"]).any()) \
-                    and not bestball else []
-                )
                 if postseason
                 else []
             )
@@ -296,12 +278,6 @@ class MoveAnalyzer:
                 "playoff_bye",
             ] + (
                 ["winner", "runner_up", "third", "earnings"]
-                + (
-                    ["many_mile"]
-                    if (self.league.schedule.team_1.isin(["The Algorithm"]).any()
-                    or self.league.schedule.team_2.isin(["The Algorithm"]).any()) \
-                    and not bestball else []
-                )
                 if postseason
                 else []
             ):
@@ -366,12 +342,6 @@ class MoveAnalyzer:
             ]
             + (
                 ["winner", "runner_up", "third", "earnings"]
-                + (
-                    ["many_mile"]
-                    if (self.league.schedule.team_1.isin(["The Algorithm"]).any()
-                    or self.league.schedule.team_2.isin(["The Algorithm"]).any()) \
-                    and not bestball else []
-                )
                 if postseason
                 else []
             )
@@ -410,12 +380,6 @@ class MoveAnalyzer:
                 "playoff_bye",
             ] + (
                 ["winner", "runner_up", "third", "earnings"]
-                + (
-                    ["many_mile"]
-                    if (self.league.schedule.team_1.isin(["The Algorithm"]).any()
-                    or self.league.schedule.team_2.isin(["The Algorithm"]).any()) \
-                    and not bestball else []
-                )
                 if postseason
                 else []
             ):
