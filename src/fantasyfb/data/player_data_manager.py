@@ -13,7 +13,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from nfl_data_provider import NFLDataProvider
+from .nfl_provider import NFLDataProvider
 
 
 class PlayerDataManager:

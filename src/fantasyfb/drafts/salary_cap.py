@@ -13,7 +13,7 @@ import os
 import pandas as pd
 import numpy as np
 import optparse
-import fantasyfb as fb
+from .. import league as fb
 from difflib import SequenceMatcher
 
 def best_combos(positions, budget, league, limit=500, fixed="", exclude=[]):
@@ -78,7 +78,7 @@ def check_pick_name(league, pick_name, exceptions=[]):
 def main():
     parser = optparse.OptionParser()
     parser.add_option(
-        "--teamname", action="store", dest="teamname", help="name of the Yahoo team you're drafting"
+        "--team", action="store", dest="team", help="name of the Yahoo team you're drafting"
     )
     parser.add_option(
         "--budget",
@@ -130,7 +130,7 @@ def main():
     )
     options, args = parser.parse_args()
 
-    league = fb.League(name=options.teamname)
+    league = fb.League(name=options.team)
 
     # # Redraft Prices Source: https://football.fantasysports.yahoo.com/f1/53063/draftanalysis?type=salcap
     # adp = pd.read_csv("Yahoo_2023_Overall_SalaryCap_Rankings_Redraft.csv")

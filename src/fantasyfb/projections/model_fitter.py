@@ -25,8 +25,8 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from matchup_model import MatchupModel, _DEFAULT_WEIGHTS, _PositionWeights
-from projection_engine_v2 import ProjectionEngineV2
+from ..scoring.matchup_model import MatchupModel, _DEFAULT_WEIGHTS, _PositionWeights
+from .engine_v2 import ProjectionEngineV2
 
 
 _FANTASY_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]

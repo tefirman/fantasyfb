@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from matchup_model import MatchupModel, _PositionWeights
+from fantasyfb.scoring.matchup_model import MatchupModel, _PositionWeights
 
 
 @pytest.fixture(scope="module")
@@ -217,8 +217,8 @@ class TestRealData2024:
     def test_high_total_game_lifts_qb_factor(
         self, provider, schedule
     ) -> None:
-        from fantasy_scoring import FantasyScorer
-        from league_configs import apply_default_scoring_categories
+        from fantasyfb.scoring.fantasy_scoring import FantasyScorer
+        from fantasyfb.configs import apply_default_scoring_categories
 
         scoring = apply_default_scoring_categories({
             "Pass Yds": 0.04, "Pass TD": 4, "Int Thrown": -1,

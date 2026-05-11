@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from draft_tools import (
+from fantasyfb.drafts.tools import (
     MockDraft,
     assign_tiers,
     compute_replacement_levels,

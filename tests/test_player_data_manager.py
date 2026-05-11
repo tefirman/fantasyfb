@@ -10,7 +10,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from player_data_manager import PlayerDataManager
+from fantasyfb.data.player_data_manager import PlayerDataManager
 
 
 @pytest.fixture

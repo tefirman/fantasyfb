@@ -199,3 +199,6 @@ cache/
 
 # Local data storage
 *.csv
+
+# personal notes/documentation
+notes/

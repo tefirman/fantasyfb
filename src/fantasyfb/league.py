@@ -13,22 +13,21 @@ import pandas as pd
 import os
 import numpy as np
 import datetime
-from fantasy_scoring import FantasyScorer
-from league_configs import get_league_config, apply_default_scoring_categories
-from schedule_manager import ScheduleManager
-from projection_engine_v2 import ProjectionEngineV2
-from matchup_model import MatchupModel
-from season_simulator import SeasonSimulator
-from yahoo_client import YahooFantasyClient
-from excel_exporter import FantasyExcelExporter
-from war_calculator import WARCalculator
-from player_data_manager import PlayerDataManager
-from lineup_optimizer import LineupOptimizer
-from move_analyzer import MoveAnalyzer
-from email_utils import send_email
-from cli import initialize_inputs
-from nfl_data_provider import NFLDataProvider
-from nflreadpy_provider import NflreadpyProvider
+from .scoring.fantasy_scoring import FantasyScorer
+from .configs import get_league_config, apply_default_scoring_categories
+from .sim.schedule_manager import ScheduleManager
+from .projections.engine_v2 import ProjectionEngineV2
+from .scoring.matchup_model import MatchupModel
+from .sim.season_simulator import SeasonSimulator
+from .data.yahoo_client import YahooFantasyClient
+from .io.excel_exporter import FantasyExcelExporter
+from .analysis.war_calculator import WARCalculator
+from .data.player_data_manager import PlayerDataManager
+from .scoring.lineup_optimizer import LineupOptimizer
+from .analysis.move_analyzer import MoveAnalyzer
+from .cli import initialize_inputs
+from .data.nfl_provider import NFLDataProvider
+from .data.nflreadpy_provider import NflreadpyProvider
 
 class League:
     """
@@ -333,7 +332,7 @@ class League:
         running when you want the small extra accuracy that comes from
         empirically fitting alpha and beta against your own scoring rules.
         """
-        from model_fitter import fit_from_history
+        from .projections.model_fitter import fit_from_history
 
         seasons = training_seasons or [self.season - 1]
         fitted = fit_from_history(self.stats, self.nfl_schedule, seasons)
@@ -708,7 +707,7 @@ class League:
 def main():
     options = initialize_inputs()
     league = League(
-        name=options.name,
+        name=options.team,
         season=options.season,
         week=options.week,
         injurytries=options.injurytries,
@@ -825,25 +824,6 @@ def main():
             "/".join(options.output.split("/")[:-2]),
         )
     )
-    if options.email:
-        try:
-            send_email(
-                "Fantasy Football Projections for " + options.name,
-                "Best of luck to you this fantasy football season!!!",
-                options.email,
-                options.output
-                + "FantasyFootballProjections_{}Week{}.xlsx".format(
-                    datetime.datetime.now().strftime("%A"), league.week
-                ),
-            )
-        except:
-            print(
-                "Couldn't email results, maybe no wifi...\nResults saved to "
-                + options.output
-                + "FantasyFootballProjections_{}Week{}.xlsx".format(
-                    datetime.datetime.now().strftime("%A"), league.week
-                )
-            )
 
 
 if __name__ == "__main__":

@@ -16,9 +16,9 @@ real roster_spots and scoring rules. That requires Yahoo creds the
 same way the existing draft scripts do.
 
 Examples:
-    python draft_prep.py tiers --league "My Team"
-    python draft_prep.py values --league "My Team" --adp ADP.csv --top 40
-    python draft_prep.py mock --league "My Team" --adp ADP.csv \
+    draft-prep tiers --team "My Team"
+    draft-prep values --team "My Team" --adp ADP.csv --top 40
+    draft-prep mock --team "My Team" --adp ADP.csv \
         --my-pick 7 --strategy vorp --sims 50
 """
 
@@ -30,7 +30,7 @@ from typing import Optional
 
 import pandas as pd
 
-from draft_tools import (
+from .tools import (
     MockDraft,
     assign_tiers,
     compute_vorp,
@@ -45,7 +45,7 @@ def _build_league(args: argparse.Namespace):
     Imported lazily so `--help` works without Yahoo deps installed.
     """
     import fantasyfb as fb
-    return fb.League(name=args.league)
+    return fb.League(name=args.team)
 
 
 def _maybe_save(df: pd.DataFrame, path: Optional[str]) -> None:
@@ -216,7 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Shared args -- attached individually so each subcommand's --help
     # is self-contained.
     def add_common(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--league", required=True,
+        p.add_argument("--team", required=True,
                        help="Yahoo team name (passed to fantasyfb.League)")
         p.add_argument("--output", default=None,
                        help="optional CSV path to save the result")

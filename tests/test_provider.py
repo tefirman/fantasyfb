@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from nflreadpy_provider import _clamp_seasons
+from fantasyfb.data.nflreadpy_provider import _clamp_seasons
 
 
 REQUIRED_STAT_COLS = {

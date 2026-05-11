@@ -13,7 +13,7 @@ import nflreadpy as nfl
 import numpy as np
 import pandas as pd
 
-from nfl_data_provider import NFLDataProvider
+from .nfl_provider import NFLDataProvider
 
 
 def _clamp_seasons(

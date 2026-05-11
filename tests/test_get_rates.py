@@ -18,9 +18,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from fantasy_scoring import FantasyScorer
 from fantasyfb import League
-from league_configs import apply_default_scoring_categories
+from fantasyfb.scoring.fantasy_scoring import FantasyScorer
+from fantasyfb.configs import apply_default_scoring_categories
 
 
 SCORING = apply_default_scoring_categories({

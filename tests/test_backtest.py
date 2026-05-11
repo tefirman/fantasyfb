@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backtest import evaluate, run_backtest
+from fantasyfb.sim.backtest import evaluate, run_backtest
 
 
 class TestEvaluate:
@@ -53,8 +53,8 @@ class TestRunBacktest:
 
     @pytest.fixture(scope="class")
     def predictions(self, provider):
-        from fantasy_scoring import FantasyScorer
-        from league_configs import apply_default_scoring_categories
+        from fantasyfb.scoring.fantasy_scoring import FantasyScorer
+        from fantasyfb.configs import apply_default_scoring_categories
 
         scoring = apply_default_scoring_categories({
             "Pass Yds": 0.04, "Pass TD": 4, "Int Thrown": -1,
