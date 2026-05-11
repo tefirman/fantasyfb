@@ -64,6 +64,10 @@ class ScheduleManager:
                 if as_of
                 else self.settings["playoff_start_week"]
             )
+            # Cap at the league's end_week + 1 so --week N > end_week
+            # doesn't infinite-retry pulling matchups for a week that
+            # doesn't exist in Yahoo.
+            limit = min(limit, self.settings["end_week"] + 1)
             
             for week in range(1, limit):
                 while True:

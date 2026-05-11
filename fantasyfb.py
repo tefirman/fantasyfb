@@ -110,7 +110,11 @@ class League:
         self.load_nfl_abbrevs()
         self.load_nfl_schedule()
         self.players = self.yahoo_client.get_all_players(injurytries)
-        selected = self.yahoo_client.get_team_rosters(self.teams, self.week)
+        # Yahoo only has rosters for weeks within the season; clamp the
+        # fetch so that --week N > end_week (e.g. "show final standings")
+        # doesn't infinite-retry against a nonexistent week.
+        roster_week = min(self.week, self.settings["end_week"])
+        selected = self.yahoo_client.get_team_rosters(self.teams, roster_week)
         self.players = pd.merge(
             left=self.players, 
             right=selected, 
@@ -164,6 +168,16 @@ class League:
         self.settings = settings_json["fantasy_content"]["league"][1]["settings"][0]
         self.settings["playoff_start_week"] = int(self.settings["playoff_start_week"])
         self.settings["num_playoff_teams"] = int(self.settings["num_playoff_teams"])
+        # Last playable week of the season: championship week. Used to clamp
+        # Yahoo API calls when callers pass --week beyond the season end (to
+        # view "everything locked" final state — see PR #17).
+        if "end_week" in self.settings:
+            self.settings["end_week"] = int(self.settings["end_week"])
+        else:
+            self.settings["end_week"] = (
+                self.settings["playoff_start_week"]
+                + (2 if self.settings["num_playoff_teams"] == 6 else 1)
+            )
         self.roster_spots = pd.DataFrame([pos["roster_position"] for pos in self.settings["roster_positions"]])
         self.roster_spots['count'] = self.roster_spots['count'].astype(int)
         categories = pd.DataFrame(
