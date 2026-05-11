@@ -31,15 +31,17 @@ class ScheduleManager:
     
     def get_schedule(self, season, week, current_week, team_key=None):
         """
-        Pulls the fantasy schedule for the season in question as well as 
+        Pulls the fantasy schedule for the season in question as well as
         scores for all matchups up to the week in question.
-        
+
         Args:
             season: Season year
             week: Current week
-            current_week: The actual current week of the season
+            current_week: Retained for API compatibility; no longer used
+                (schedule treats the as_of week as "start of week N" for any
+                value of `week`).
             team_key: Team key for identifying "me" column
-            
+
         Returns:
             DataFrame with fantasy schedule
         """
@@ -47,7 +49,7 @@ class ScheduleManager:
         self.yahoo_client.refresh_oauth()
 
         schedule = self._pull_basic_schedule(as_of)
-        schedule = self._clean_schedule(schedule, as_of, current_week, team_key)
+        schedule = self._clean_schedule(schedule, as_of, team_key)
 
         return schedule
     
@@ -93,7 +95,7 @@ class ScheduleManager:
         
         return schedule
     
-    def _clean_schedule(self, schedule, as_of, current_week, team_key):
+    def _clean_schedule(self, schedule, as_of, team_key):
         """Clean and format the schedule DataFrame."""
         # Standardize team order (alphabetical)
         switch = schedule.team_1 > schedule.team_2
@@ -125,17 +127,12 @@ class ScheduleManager:
                     schedule["team_2"] == team_name
                 )
         
-        # Zero out future scores
+        # Treat the as_of week (and anything after) as not-yet-played.
+        # `--week N` consistently means "start of week N"; the simulator
+        # locks in any prior weeks' real scores. To see end-of-season
+        # state, pass a week past the championship (e.g. --week 18).
         if as_of:
-            schedule.loc[schedule.week > as_of % 100, "score_1"] = 0.0
-            schedule.loc[schedule.week > as_of % 100, "score_2"] = 0.0
-            
-            # Zero out current week if it's in the past or current
-            if (
-                self.latest_season > as_of // 100
-                or as_of % 100 < current_week
-            ):
-                schedule.loc[schedule.week == as_of % 100, "score_1"] = 0.0
-                schedule.loc[schedule.week == as_of % 100, "score_2"] = 0.0
-        
+            schedule.loc[schedule.week >= as_of % 100, "score_1"] = 0.0
+            schedule.loc[schedule.week >= as_of % 100, "score_2"] = 0.0
+
         return schedule
