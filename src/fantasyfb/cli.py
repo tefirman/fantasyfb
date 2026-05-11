@@ -123,13 +123,7 @@ def initialize_inputs():
         dest="output",
         help="where to save the final projections spreadsheet",
     )
-    parser.add_option(
-        "--email",
-        action="store",
-        dest="email",
-        help="where to send the final projections spreadsheet",
-    )
-    
+
     options, args = parser.parse_args()
     
     # Apply default values and validation

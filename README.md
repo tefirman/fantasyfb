@@ -95,7 +95,7 @@ from fantasyfb.io.excel_exporter import FantasyExcelExporter
 | `fantasyfb.projections` | V1 / V2 projection engines, fitter         |
 | `fantasyfb.sim`         | Season simulation, backtests, schedule     |
 | `fantasyfb.analysis`    | WAR, move analysis                         |
-| `fantasyfb.io`          | Excel export, email                        |
+| `fantasyfb.io`          | Excel export                               |
 
 ## Development
 

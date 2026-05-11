@@ -25,7 +25,6 @@ from .analysis.war_calculator import WARCalculator
 from .data.player_data_manager import PlayerDataManager
 from .scoring.lineup_optimizer import LineupOptimizer
 from .analysis.move_analyzer import MoveAnalyzer
-from .io.email_utils import send_email
 from .cli import initialize_inputs
 from .data.nfl_provider import NFLDataProvider
 from .data.nflreadpy_provider import NflreadpyProvider
@@ -825,25 +824,6 @@ def main():
             "/".join(options.output.split("/")[:-2]),
         )
     )
-    if options.email:
-        try:
-            send_email(
-                "Fantasy Football Projections for " + options.name,
-                "Best of luck to you this fantasy football season!!!",
-                options.email,
-                options.output
-                + "FantasyFootballProjections_{}Week{}.xlsx".format(
-                    datetime.datetime.now().strftime("%A"), league.week
-                ),
-            )
-        except:
-            print(
-                "Couldn't email results, maybe no wifi...\nResults saved to "
-                + options.output
-                + "FantasyFootballProjections_{}Week{}.xlsx".format(
-                    datetime.datetime.now().strftime("%A"), league.week
-                )
-            )
 
 
 if __name__ == "__main__":
