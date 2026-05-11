@@ -258,7 +258,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         prog="snake_draft",
         description="Interactive snake-draft cockpit (redraft, V2).",
     )
-    p.add_argument("--teamname", required=True,
+    p.add_argument("--team", required=True,
                    help="Yahoo team name to draft for")
     p.add_argument("--adp", required=True,
                    help="path to ADP CSV (FantasyPros-style by default)")
@@ -310,7 +310,7 @@ def main(argv=None) -> int:
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
 
-    league = fb.League(name=args.teamname, num_sims=10000, season=args.season)
+    league = fb.League(name=args.team, num_sims=10000, season=args.season)
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
         league.roster_spots.position != "IR", "count"

@@ -707,7 +707,7 @@ class League:
 def main():
     options = initialize_inputs()
     league = League(
-        name=options.name,
+        name=options.team,
         season=options.season,
         week=options.week,
         injurytries=options.injurytries,

@@ -66,12 +66,12 @@ class TestArgParser:
         with pytest.raises(SystemExit):
             parser.parse_args([])
         with pytest.raises(SystemExit):
-            parser.parse_args(["--teamname", "X"])
+            parser.parse_args(["--team", "X"])
 
     def test_minimal_args_succeed(self):
         parser = build_arg_parser()
-        args = parser.parse_args(["--teamname", "X", "--adp", "ADP.csv"])
-        assert args.teamname == "X"
+        args = parser.parse_args(["--team", "X", "--adp", "ADP.csv"])
+        assert args.team == "X"
         assert args.adp == "ADP.csv"
         assert args.limit_per_position == 5
         assert args.nearest_window == 2
@@ -83,14 +83,14 @@ class TestArgParser:
         most-recently-completed one."""
         parser = build_arg_parser()
         args = parser.parse_args([
-            "--teamname", "X", "--adp", "ADP.csv", "--season", "2026",
+            "--team", "X", "--adp", "ADP.csv", "--season", "2026",
         ])
         assert args.season == 2026
 
     def test_adp_column_overrides(self):
         parser = build_arg_parser()
         args = parser.parse_args([
-            "--teamname", "X", "--adp", "ADP.csv",
+            "--team", "X", "--adp", "ADP.csv",
             "--adp-name-col", "FullName",
             "--adp-pos-col", "Pos",
             "--adp-avg-col", "Avg",

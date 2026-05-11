@@ -50,15 +50,15 @@ After install, four entry points are on your PATH:
 
 ```bash
 # Weekly run for a team
-fantasyfb --name "My Team" --sims 1000 --adds --drops
+fantasyfb --team "My Team" --sims 1000 --adds --drops
 
 # Pre-draft analytics
-draft-prep tiers --league "My Team"
-draft-prep mock --league "My Team" --adp ADP.csv --my-pick 7 --sims 50
+draft-prep tiers --team "My Team"
+draft-prep mock --team "My Team" --adp ADP.csv --my-pick 7 --sims 50
 
 # Draft-day cockpit
-snake-draft --league "My Team" --adp ADP.csv
-salary-cap-draft --teamname "My Team"
+snake-draft --team "My Team" --adp ADP.csv
+salary-cap-draft --team "My Team"
 ```
 
 Run any command with `--help` for the full option list.

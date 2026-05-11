@@ -33,9 +33,9 @@ def initialize_inputs():
         help="week to project the season from"
     )
     parser.add_option(
-        "--name",
+        "--team",
         action="store",
-        dest="name",
+        dest="team",
         help="name of team to analyze in the case of multiple teams in a single season",
     )
     parser.add_option(
@@ -155,13 +155,13 @@ def _apply_defaults(options):
         else:
             print("Weird values provided for payouts... Assuming standard payouts...")
             options.payouts = [60.0, 30.0, 10.0]
-    elif options.name == "The Algorithm":
+    elif options.team == "The Algorithm":
         options.payouts = [720, 360, 120]
-    elif options.name == "Toothless Wonders":
+    elif options.team == "Toothless Wonders":
         options.payouts = [350, 100, 50]
-    elif options.name == "The GENIEs":
+    elif options.team == "The GENIEs":
         options.payouts = [120, 0, 0]
-    elif options.name == "The Great Gadsby's":
+    elif options.team == "The Great Gadsby's":
         options.payouts = [50, 35, 15]
     else:
         options.payouts = [60.0, 30.0, 10.0]
@@ -179,22 +179,22 @@ def _validate_inputs(options):
         )
         
         # Create team directory if it doesn't exist
-        if options.name and not os.path.exists(options.output + options.name.replace(" ", "")):
-            os.mkdir(options.output + options.name.replace(" ", ""))
+        if options.team and not os.path.exists(options.output + options.team.replace(" ", "")):
+            os.mkdir(options.output + options.team.replace(" ", ""))
         
         # Create season directory if it doesn't exist
-        if options.name and not os.path.exists(
-            options.output + options.name.replace(" ", "") + "/" + str(options.season)
+        if options.team and not os.path.exists(
+            options.output + options.team.replace(" ", "") + "/" + str(options.season)
         ):
             os.mkdir(
                 options.output
-                + options.name.replace(" ", "")
+                + options.team.replace(" ", "")
                 + "/"
                 + str(options.season)
             )
         
-        if options.name:
-            options.output += options.name.replace(" ", "") + "/" + str(options.season)
+        if options.team:
+            options.output += options.team.replace(" ", "") + "/" + str(options.season)
     
     if options.output[-1] != "/":
         options.output += "/"
