@@ -58,26 +58,24 @@ class MoveAnalyzer:
             orig_standings = self.league.bestball_sims(payouts)
         else:
             orig_standings = self.league.season_sims(postseason, payouts)[1]
-        added_value = pd.DataFrame(
-            columns=[
-                "player_to_drop",
-                "player_to_add",
-                "wins_avg",
-                "wins_stdev",
-                "points_avg",
-                "points_stdev",
-                "per_game_avg",
-                "per_game_stdev",
-                "per_game_fano",
-                "playoffs",
-                "playoff_bye",
-            ]
-            + (
-                ["winner", "runner_up", "third", "earnings"]
-                if postseason
-                else []
-            )
+        base_cols = [
+            "player_to_drop",
+            "player_to_add",
+            "wins_avg",
+            "wins_stdev",
+            "points_avg",
+            "points_stdev",
+            "per_game_avg",
+            "per_game_stdev",
+            "per_game_fano",
+            "playoffs",
+            "playoff_bye",
+        ] + (
+            ["winner", "runner_up", "third", "earnings"]
+            if postseason
+            else []
         )
+        rows = []
         if not team_name:
             team_name = [
                 team["name"]
@@ -120,6 +118,7 @@ class MoveAnalyzer:
                 print(my_player + ": " + str(possible.shape[0]) + " better players")
                 print(datetime.datetime.now())
             possible = possible.groupby("position").head(limit_per)
+            batch_start = len(rows)
             for free_agent in possible.name:
                 self.league.players.loc[self.league.players.name == my_player, "fantasy_team"] = None
                 self.league.players.loc[
@@ -129,31 +128,35 @@ class MoveAnalyzer:
                     new_standings = self.league.bestball_sims(payouts)
                 else:
                     new_standings = self.league.season_sims(postseason, payouts)[1]
-                added_value = pd.concat([added_value,
-                    new_standings.loc[new_standings.team == team_name]],
-                    ignore_index=True,
-                    sort=False,
-                )
-                added_value.loc[added_value.shape[0] - 1, "player_to_drop"] = my_player
-                added_value.loc[added_value.shape[0] - 1, "player_to_add"] = free_agent
+                row = new_standings.loc[new_standings.team == team_name].copy()
+                row["player_to_drop"] = my_player
+                row["player_to_add"] = free_agent
+                rows.append(row)
                 self.league.players.loc[
                     self.league.players.name == my_player, "fantasy_team"
                 ] = team_name
                 self.league.players.loc[self.league.players.name == free_agent, "fantasy_team"] = None
             if verbose:
-                temp = added_value.iloc[-1 * possible.shape[0] :][
-                    ["player_to_drop", "player_to_add", "earnings"]
-                ]
-                temp["earnings"] -= orig_standings.loc[
-                    orig_standings.team == team_name, "earnings"
-                ].values[0]
-                if temp.shape[0] > 0:
+                batch = rows[batch_start:]
+                if batch:
+                    temp = pd.concat(batch, ignore_index=True)[
+                        ["player_to_drop", "player_to_add", "earnings"]
+                    ]
+                    temp["earnings"] -= orig_standings.loc[
+                        orig_standings.team == team_name, "earnings"
+                    ].values[0]
                     print(
                         temp.sort_values(by="earnings", ascending=False).to_string(
                             index=False
                         )
                     )
-                del temp
+                    del temp
+        if rows:
+            added_value = pd.concat(rows, ignore_index=True)
+            extra_cols = [c for c in added_value.columns if c not in base_cols]
+            added_value = added_value.reindex(columns=base_cols + extra_cols)
+        else:
+            added_value = pd.DataFrame(columns=base_cols)
         if added_value.shape[0] > 0:
             for col in [
                 "wins_avg",
@@ -211,25 +214,23 @@ class MoveAnalyzer:
             orig_standings = self.league.bestball_sims(payouts)
         else:
             orig_standings = self.league.season_sims(postseason, payouts)[1]
-        added_value = pd.DataFrame(
-            columns=[
-                "player_to_add",
-                "wins_avg",
-                "wins_stdev",
-                "points_avg",
-                "points_stdev",
-                "per_game_avg",
-                "per_game_stdev",
-                "per_game_fano",
-                "playoffs",
-                "playoff_bye",
-            ]
-            + (
-                ["winner", "runner_up", "third", "earnings"]
-                if postseason
-                else []
-            )
+        base_cols = [
+            "player_to_add",
+            "wins_avg",
+            "wins_stdev",
+            "points_avg",
+            "points_stdev",
+            "per_game_avg",
+            "per_game_stdev",
+            "per_game_fano",
+            "playoffs",
+            "playoff_bye",
+        ] + (
+            ["winner", "runner_up", "third", "earnings"]
+            if postseason
+            else []
         )
+        rows = []
         if not team_name:
             team_name = [
                 team["name"]
@@ -255,19 +256,22 @@ class MoveAnalyzer:
                 new_standings = self.league.bestball_sims(payouts)
             else:
                 new_standings = self.league.season_sims(postseason, payouts)[1]
-            added_value = pd.concat([added_value,
-                new_standings.loc[new_standings.team == team_name]],
-                ignore_index=True,
-                sort=False,
-            )
-            added_value.loc[added_value.shape[0] - 1, "player_to_add"] = free_agent
-            added_value.loc[added_value.shape[0] - 1, "position"] = possible.loc[
+            row = new_standings.loc[new_standings.team == team_name].copy()
+            row["player_to_add"] = free_agent
+            row["position"] = possible.loc[
                 possible.name == free_agent, "position"
             ].values[0]
-            added_value.loc[added_value.shape[0] - 1, "current_team"] = possible.loc[
+            row["current_team"] = possible.loc[
                 possible.name == free_agent, "current_team"
             ].values[0]
+            rows.append(row)
             self.league.players.loc[self.league.players.name == free_agent, "fantasy_team"] = None
+        if rows:
+            added_value = pd.concat(rows, ignore_index=True)
+            extra_cols = [c for c in added_value.columns if c not in base_cols]
+            added_value = added_value.reindex(columns=base_cols + extra_cols)
+        else:
+            added_value = pd.DataFrame(columns=base_cols)
         if added_value.shape[0] > 0:
             for col in [
                 "wins_avg",
@@ -327,25 +331,23 @@ class MoveAnalyzer:
             orig_standings = self.league.bestball_sims(payouts)
         else:
             orig_standings = self.league.season_sims(postseason, payouts)[1]
-        reduced_value = pd.DataFrame(
-            columns=[
-                "player_to_drop",
-                "wins_avg",
-                "wins_stdev",
-                "points_avg",
-                "points_stdev",
-                "per_game_avg",
-                "per_game_stdev",
-                "per_game_fano",
-                "playoffs",
-                "playoff_bye",
-            ]
-            + (
-                ["winner", "runner_up", "third", "earnings"]
-                if postseason
-                else []
-            )
+        base_cols = [
+            "player_to_drop",
+            "wins_avg",
+            "wins_stdev",
+            "points_avg",
+            "points_stdev",
+            "per_game_avg",
+            "per_game_stdev",
+            "per_game_fano",
+            "playoffs",
+            "playoff_bye",
+        ] + (
+            ["winner", "runner_up", "third", "earnings"]
+            if postseason
+            else []
         )
+        rows = []
         if not team_name:
             team_name = [
                 team["name"]
@@ -363,13 +365,16 @@ class MoveAnalyzer:
                 new_standings = self.league.bestball_sims(payouts)
             else:
                 new_standings = self.league.season_sims(postseason, payouts)[1]
-            reduced_value = pd.concat([reduced_value,
-                new_standings.loc[new_standings.team == team_name]],
-                ignore_index=True,
-                sort=False,
-            )
-            reduced_value.loc[reduced_value.shape[0] - 1, "player_to_drop"] = my_player
+            row = new_standings.loc[new_standings.team == team_name].copy()
+            row["player_to_drop"] = my_player
+            rows.append(row)
             self.league.players.loc[self.league.players.name == my_player, "fantasy_team"] = team_name
+        if rows:
+            reduced_value = pd.concat(rows, ignore_index=True)
+            extra_cols = [c for c in reduced_value.columns if c not in base_cols]
+            reduced_value = reduced_value.reindex(columns=base_cols + extra_cols)
+        else:
+            reduced_value = pd.DataFrame(columns=base_cols)
         if reduced_value.shape[0] > 0:
             for col in [
                 "wins_avg",
@@ -484,8 +489,8 @@ class MoveAnalyzer:
             their_players["WAR"] = 0.0
         # Make sure there are two teams and narrow down to that teams!!!
 
-        my_added_value = pd.DataFrame()
-        their_added_value = pd.DataFrame()
+        my_rows = []
+        their_rows = []
         for my_player in my_players.name:
             self.league.yahoo_client.refresh_oauth(55)
             if their_players.name.isin(focus_on).any():
@@ -503,6 +508,7 @@ class MoveAnalyzer:
                 print(my_player + ": " + str(possible.shape[0]) + " comparable players")
                 print(datetime.datetime.now())
             possible = possible.groupby("position").head(limit_per)
+            batch_start = len(my_rows)
             for their_player in possible.name:
                 their_team = self.league.players.loc[
                     self.league.players.name == their_player, "fantasy_team"
@@ -525,19 +531,13 @@ class MoveAnalyzer:
                 ] = their_team
                 new_standings["player_to_trade_away"] = my_player
                 new_standings["player_to_trade_for"] = their_player
-                my_added_value = pd.concat([my_added_value,
-                    new_standings.loc[new_standings.team == team_name]],
-                    ignore_index=True,
-                )
-                their_added_value = pd.concat([their_added_value,
-                    new_standings.loc[new_standings.team == their_team]],
-                    ignore_index=True,
-                )
+                my_rows.append(new_standings.loc[new_standings.team == team_name].copy())
+                their_rows.append(new_standings.loc[new_standings.team == their_team].copy())
             if verbose and possible.shape[0] > 0:
-                me = my_added_value.iloc[-1 * possible.shape[0] :][
+                me = pd.concat(my_rows[batch_start:], ignore_index=True)[
                     ["player_to_trade_away", "player_to_trade_for", "earnings"]
                 ].rename(columns={"earnings": "my_earnings"})
-                them = their_added_value.iloc[-1 * possible.shape[0] :][
+                them = pd.concat(their_rows[batch_start:], ignore_index=True)[
                     ["player_to_trade_away", "player_to_trade_for", "team", "earnings"]
                 ].rename(columns={"earnings": "their_earnings"})
                 me["my_earnings"] -= orig_standings.loc[
@@ -564,6 +564,9 @@ class MoveAnalyzer:
                         )
                     )
                 del me, them, temp, their_team
+
+        my_added_value = pd.concat(my_rows, ignore_index=True) if my_rows else pd.DataFrame()
+        their_added_value = pd.concat(their_rows, ignore_index=True) if their_rows else pd.DataFrame()
 
         if given_check:
             mine = [player for player in given if my_players.name.isin([player]).any()]
