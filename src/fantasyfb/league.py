@@ -532,9 +532,13 @@ class League:
         standings = pd.merge(left=standings,right=standings_sims.groupby('fantasy_team').points_sim.std()\
         .reset_index().rename(columns={'points_sim':'points_stdev'}),how='inner',on='fantasy_team')
         standings = standings.rename(columns={'fantasy_team':'team','points_sim':'points_avg','place':'avg_place'})
-        standings = standings.sort_values(by='playoffs',ascending=False,ignore_index=True)
         del standings['num_sim']
         standings[["wins_avg","wins_stdev","playoff_bye"]] = 0.0
+        standings = standings.sort_values(
+            by=['earnings', 'wins_avg', 'points_avg'],
+            ascending=[False, False, False],
+            ignore_index=True,
+        )
         return standings
 
     def season_sims(

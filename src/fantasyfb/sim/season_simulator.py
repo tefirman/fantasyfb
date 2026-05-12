@@ -461,8 +461,10 @@ class SeasonSimulator:
             standings['third'] = 0.0
             standings['earnings'] = 0.0
 
-        sort_col = 'winner' if playoff_results else 'playoffs'
-        standings = standings.sort_values(sort_col, ascending=False)
+        standings = standings.sort_values(
+            ['earnings', 'wins_avg', 'points_avg'],
+            ascending=[False, False, False],
+        )
 
         return standings
 
