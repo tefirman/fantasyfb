@@ -394,8 +394,8 @@ class TestPickCommands:
         _PICK_COMMANDS and _HELP_TEXT, this catches it before
         draft night."""
         for cmd in ("best", "nominate", "whatif", "lookup", "roster",
-                    "budgets", "exclude", "sim", "go back",
-                    "help", "exit"):
+                    "budgets", "exclude", "sim", "random",
+                    "random til full", "go back", "help", "exit"):
             assert cmd in _PICK_COMMANDS, f"missing from _PICK_COMMANDS: {cmd}"
             assert cmd in _HELP_TEXT, f"missing from _HELP_TEXT: {cmd}"
 
