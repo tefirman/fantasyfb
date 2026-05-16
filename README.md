@@ -5,6 +5,8 @@ projections from [nflverse](https://github.com/nflverse) data, syncs
 roster state from a Yahoo Fantasy league, and runs Monte Carlo season
 simulations to value pickups, trades, and draft picks.
 
+**Docs:** <https://tefirman.github.io/fantasyfb/>
+
 ## Install
 
 ```bash
