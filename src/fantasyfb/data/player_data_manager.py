@@ -153,7 +153,7 @@ class PlayerDataManager:
         # Final fallback: anyone we still couldn't link gets their Yahoo ID
         # so downstream joins on player_id_sr don't drop them entirely.
         still_missing = players["player_id_sr"].isnull()
-        players.loc[still_missing, "player_id_sr"] = players.loc[still_missing, "player_id"]
+        players.loc[still_missing, "player_id_sr"] = players.loc[still_missing, "player_id"].astype(str)
 
         return players
 
