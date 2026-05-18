@@ -13,6 +13,8 @@ without Yahoo creds.
 Public API:
     compute_replacement_levels(projections, roster_spec, num_teams)
     compute_vorp(projections, roster_spec, num_teams)
+    compute_salary_values(projections, roster_spec, num_teams, salary_cap=...)
+    max_bid(remaining_budget, open_slots)
     assign_tiers(projections, ...)
     load_adp_csv(path, ...)
     merge_adp(projections, adp_df, num_teams)
@@ -140,6 +142,113 @@ def compute_vorp(
     out["vorp_per_game"] = out["points_rate"] - out["replacement_rate"]
     out["vorp_season"] = out["vorp_per_game"] * season_games
     return out
+
+
+def _total_roster_size(spec: Dict[str, int], bench_slots: int) -> int:
+    """Starting slots + bench. Used by salary value math to count the
+    total picks each team will make."""
+    return sum(spec.values()) + bench_slots
+
+
+def _bench_slots_from_spec(roster_spec) -> int:
+    if isinstance(roster_spec, pd.DataFrame):
+        bench_row = roster_spec[roster_spec["position"] == "BN"]
+        return int(bench_row["count"].iloc[0]) if not bench_row.empty else 0
+    if isinstance(roster_spec, dict):
+        return int(roster_spec.get("BN", 0))
+    return 0
+
+
+def compute_salary_values(
+    projections: pd.DataFrame,
+    roster_spec,
+    num_teams: int,
+    *,
+    salary_cap: int,
+    min_bid: int = 1,
+) -> pd.DataFrame:
+    """Convert season VORP into per-player salary cap dollar values.
+
+    Standard valuation: the league has `num_teams * salary_cap` total
+    dollars to distribute across `num_teams * roster_size` picks. Every
+    pick reserves `min_bid` (so a $1 minimum is always honored), and the
+    remaining "above-min" pool is allocated among the top-N starter
+    pool (N = num_teams * starting_slots_per_team) proportionally to
+    each player's positive season VORP. Players outside the starter
+    pool or with non-positive VORP get `min_bid`.
+
+    Why VORP-proportional rather than raw-points-proportional: the
+    market sets prices based on edge over replacement, not absolute
+    output. A QB1 outscores an RB1 in raw points but the QB1's *edge*
+    over a free-agent QB is much smaller than the RB1's edge over a
+    free-agent RB, so the RB1 commands more dollars. VORP already
+    encodes that asymmetry.
+
+    Requires `vorp_season` on the input (run `compute_vorp` first).
+    Returns a copy with a new `salary_value` float column.
+
+    Raises ValueError if the salary cap is too small to reserve
+    `min_bid` for every pick.
+    """
+    if "vorp_season" not in projections.columns:
+        raise ValueError(
+            "projections is missing required column 'vorp_season'. "
+            "Run compute_vorp() first."
+        )
+
+    spec = _roster_spec_to_dict(roster_spec)
+    bench = _bench_slots_from_spec(roster_spec)
+    starting_slots_per_team = sum(spec.values())
+    roster_size = _total_roster_size(spec, bench)
+
+    total_pool = num_teams * salary_cap
+    total_picks = num_teams * roster_size
+    above_min_pool = total_pool - total_picks * min_bid
+    if above_min_pool < 0:
+        raise ValueError(
+            f"salary_cap={salary_cap} is too small to honor "
+            f"min_bid={min_bid} across {roster_size} roster slots."
+        )
+
+    out = projections.copy()
+    out["salary_value"] = float(min_bid)
+
+    pool_mask = ~out["player_id_sr"].astype(str).str.startswith("avg_")
+    eligible = out.loc[pool_mask].sort_values("vorp_season", ascending=False)
+    starter_cohort = eligible.head(num_teams * starting_slots_per_team)
+    positive = starter_cohort.loc[starter_cohort["vorp_season"] > 0]
+
+    total_positive_vorp = float(positive["vorp_season"].sum())
+    if total_positive_vorp > 0 and above_min_pool > 0:
+        share = positive["vorp_season"] / total_positive_vorp
+        out.loc[positive.index, "salary_value"] = (
+            min_bid + share * above_min_pool
+        ).astype(float)
+
+    return out
+
+
+def max_bid(
+    remaining_budget: int,
+    open_slots: int,
+    *,
+    min_bid: int = 1,
+) -> int:
+    """Maximum legal bid given remaining budget and open roster slots.
+
+    `max_bid = remaining_budget - (open_slots - 1) * min_bid`
+
+    This is the standard salary cap constraint: after winning one
+    player at this bid, every remaining slot must still be fillable at
+    `min_bid` each. Assumes `open_slots` includes the slot we'd fill
+    by winning this bid (i.e. it's the count *before* the win).
+
+    Returns 0 if the roster is already full or the budget can't even
+    cover `min_bid` for the current slot.
+    """
+    if open_slots <= 0:
+        return 0
+    return max(0, remaining_budget - (open_slots - 1) * min_bid)
 
 
 def _enforce_max_per_tier(

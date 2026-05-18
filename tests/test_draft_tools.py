@@ -19,8 +19,10 @@ from fantasyfb.drafts.tools import (
     MockDraft,
     assign_tiers,
     compute_replacement_levels,
+    compute_salary_values,
     compute_vorp,
     load_adp_csv,
+    max_bid,
     merge_adp,
 )
 
@@ -151,6 +153,157 @@ class TestVORP:
         out = compute_vorp(small_pool, standard_roster_spec, 12)
         worst_qb = out.loc[out["name"] == "QB23"].iloc[0]
         assert worst_qb["vorp_per_game"] < 0
+
+
+# --------------------------------------------------------------------- #
+# Salary cap values
+# --------------------------------------------------------------------- #
+
+
+class TestSalaryValues:
+    def test_money_conserved_across_drafted_picks(
+        self, small_pool, standard_roster_spec,
+    ):
+        """Money conservation: summing salary_value across the top
+        `num_teams * roster_size` players (the ones that will actually
+        get drafted) should equal `num_teams * salary_cap`. This is the
+        defining property of the valuation formula."""
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+        )
+        # 16 roster slots per team (1+2+3+1+1+1+1 starters + 6 bench) * 12 teams.
+        drafted = valued.sort_values("salary_value", ascending=False).head(16 * 12)
+        assert drafted["salary_value"].sum() == pytest.approx(12 * 200)
+
+    def test_top_player_has_highest_value(
+        self, small_pool, standard_roster_spec,
+    ):
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+        )
+        # RB00 has the highest VORP in this pool (top RB, low RB
+        # replacement level) so it should also get the highest value.
+        top_by_vorp = valued.sort_values("vorp_season", ascending=False).iloc[0]
+        top_by_value = valued.sort_values("salary_value", ascending=False).iloc[0]
+        assert top_by_value["name"] == top_by_vorp["name"]
+
+    def test_below_replacement_gets_min_bid(
+        self, small_pool, standard_roster_spec,
+    ):
+        """Players with non-positive VORP fall outside the starter
+        cohort and get exactly the min bid."""
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec,
+            num_teams=12, salary_cap=200, min_bid=1,
+        )
+        worst_qb = valued.loc[valued["name"] == "QB23"].iloc[0]
+        assert worst_qb["salary_value"] == 1.0
+
+    def test_synthetic_avg_rows_excluded(self, standard_roster_spec):
+        """avg_ synthetic rows should never receive an above-min value;
+        they aren't real draftable players."""
+        rows = []
+        for i in range(20):
+            rows.append(_make_projection(f"RB{i:02d}", "RB", 20 - i * 0.5))
+        # Two synthetic average rows that would otherwise dominate VORP.
+        rows.append(_make_projection("avg starter", "RB", 100,
+                                     player_id_sr="avg_rb_starter"))
+        rows.append(_make_projection("avg bench", "RB", 50,
+                                     player_id_sr="avg_rb_bench"))
+        df = pd.DataFrame(rows)
+        with_vorp = compute_vorp(df, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+        )
+        synthetic = valued[valued["player_id_sr"].str.startswith("avg_")]
+        assert (synthetic["salary_value"] == 1.0).all()
+
+    def test_too_small_cap_raises(self, small_pool, standard_roster_spec):
+        """A cap that can't even cover min_bid * roster_size is a
+        configuration error."""
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        with pytest.raises(ValueError, match="too small"):
+            compute_salary_values(
+                with_vorp, standard_roster_spec,
+                num_teams=12, salary_cap=10, min_bid=1,
+            )
+
+    def test_missing_vorp_raises(self, small_pool, standard_roster_spec):
+        with pytest.raises(ValueError, match="vorp_season"):
+            compute_salary_values(
+                small_pool, standard_roster_spec,
+                num_teams=12, salary_cap=200,
+            )
+
+    def test_accepts_dict_roster_spec(self, small_pool):
+        """Dict and DataFrame roster_spec forms produce identical values."""
+        spec_df = pd.DataFrame({
+            "position": ["QB", "RB", "WR", "TE", "K", "DEF", "BN"],
+            "count":    [1,    2,    3,    1,    1,    1,     6],
+        })
+        spec_dict = {"QB": 1, "RB": 2, "WR": 3, "TE": 1,
+                     "K": 1, "DEF": 1, "BN": 6}
+        a = compute_salary_values(
+            compute_vorp(small_pool, spec_df, 12),
+            spec_df, num_teams=12, salary_cap=200,
+        )
+        b = compute_salary_values(
+            compute_vorp(small_pool, spec_dict, 12),
+            spec_dict, num_teams=12, salary_cap=200,
+        )
+        assert (a["salary_value"].to_numpy()
+                == b["salary_value"].to_numpy()).all()
+
+    def test_all_negative_vorp_collapses_to_min_bid(self, standard_roster_spec):
+        """If nobody has positive VORP (degenerate pool below replacement
+        level), every player gets exactly min_bid -- no division by zero,
+        no negative values."""
+        rows = [_make_projection(f"WR{i:02d}", "WR", 1.0) for i in range(50)]
+        df = pd.DataFrame(rows)
+        with_vorp = compute_vorp(df, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec,
+            num_teams=12, salary_cap=200, min_bid=1,
+        )
+        assert (valued["salary_value"] == 1.0).all()
+
+
+# --------------------------------------------------------------------- #
+# Max bid
+# --------------------------------------------------------------------- #
+
+
+class TestMaxBid:
+    def test_full_budget_full_roster(self):
+        """$200 cap, 16 slots, $1 min bid: max bid = $200 - 15 = $185."""
+        assert max_bid(200, 16) == 185
+
+    def test_last_slot_uses_full_remaining_budget(self):
+        """With one slot left, max bid is the entire remaining budget --
+        no reserve needed for future picks."""
+        assert max_bid(47, 1) == 47
+
+    def test_zero_open_slots_returns_zero(self):
+        """A full roster can't bid on anyone."""
+        assert max_bid(50, 0) == 0
+
+    def test_under_water_budget_returns_zero(self):
+        """If the budget can't even cover min_bid for every remaining
+        slot, the function caps at 0 rather than going negative."""
+        assert max_bid(5, 10) == 0
+
+    def test_custom_min_bid(self):
+        """A $2 minimum reserves twice as much per remaining slot."""
+        assert max_bid(200, 16, min_bid=2) == 200 - 15 * 2
+
+    def test_exact_reserve_leaves_one_min_bid(self):
+        """Edge case: budget equals exactly what's needed to bid min on
+        each slot. Max bid is min_bid (we can bid the minimum on this
+        slot and still cover the rest)."""
+        assert max_bid(16, 16, min_bid=1) == 1
 
 
 # --------------------------------------------------------------------- #
