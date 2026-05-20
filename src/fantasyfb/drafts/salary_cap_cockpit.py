@@ -266,13 +266,56 @@ def view_what_if(
     )
 
 
-def view_lookup(board: pd.DataFrame, name: str) -> pd.DataFrame:
+def view_lookup(
+    board: pd.DataFrame,
+    name: str,
+    *,
+    my_team: str | None = None,
+    salary_cap: int | None = None,
+    num_teams: int | None = None,
+    roster_spec=None,
+    min_bid: int = 1,
+) -> pd.DataFrame:
     """Row(s) for a single player, drafted or not.
 
     Includes ``fantasy_team`` and ``winning_bid`` so the user can see
-    who paid what if the player is off the board.
+    who paid what if the player is off the board. When ``my_team`` and
+    the league shape (``salary_cap``, ``num_teams``, ``roster_spec``)
+    are supplied, also computes ``inflated_value`` (market price after
+    accounting for inflation) and ``max_my_bid`` (the user's spending
+    ceiling on this player given their remaining budget and open
+    slots) — useful before deciding what to bid.
     """
-    rows = board[board["name"] == name]
+    rows = board[board["name"] == name].copy()
+    if rows.empty:
+        cols = list(DEFAULT_DISPLAY_COLS) + ["fantasy_team", "winning_bid"]
+        return rows[_ordered_columns(rows, cols)].reset_index(drop=True)
+
+    have_budget_ctx = (
+        my_team is not None
+        and salary_cap is not None
+        and num_teams is not None
+        and roster_spec is not None
+    )
+    if have_budget_ctx:
+        spec = _roster_spec_to_dict(roster_spec)
+        bench = _bench_slots_from_spec(roster_spec)
+        roster_size = sum(spec.values()) + bench
+        remaining_budget, open_slots = _team_remaining(
+            board, my_team, salary_cap, roster_size,
+        )
+        user_max_bid = max_bid(remaining_budget, open_slots, min_bid=min_bid)
+        inflation = compute_inflation(board, salary_cap, num_teams)
+        if "salary_value" in rows.columns:
+            rows["inflated_value"] = rows["salary_value"] * inflation
+            rows["max_my_bid"] = np.minimum(rows["inflated_value"], user_max_bid)
+            # A drafted player isn't biddable, so suppress max_my_bid for
+            # them — the winning_bid column is what the user wants to see
+            # in that case.
+            if "winning_bid" in rows.columns:
+                drafted = rows["winning_bid"].notna()
+                rows.loc[drafted, "max_my_bid"] = np.nan
+
     cols = list(DEFAULT_DISPLAY_COLS) + ["fantasy_team", "winning_bid"]
     return rows[_ordered_columns(rows, cols)].reset_index(drop=True)
 
