@@ -443,7 +443,15 @@ def main(argv=None) -> int:
                     league, input("Which player? "), ("nevermind",),
                 )
             if focus != "nevermind":
-                _print_df(cockpit.view_lookup(board, focus), f"Lookup: {focus}")
+                _print_df(
+                    cockpit.view_lookup(
+                        board, focus,
+                        my_team="My Team", salary_cap=args.salary_cap,
+                        num_teams=num_teams, roster_spec=league.roster_spots,
+                        min_bid=args.min_bid,
+                    ),
+                    f"Lookup: {focus}",
+                )
 
         elif pick_name == "roster":
             _print_df(cockpit.view_roster(board, "My Team"), "My Team:")
@@ -496,8 +504,15 @@ def main(argv=None) -> int:
         elif pick_name in league.players.name.tolist():
             # Real nomination: show the player's full context, then
             # collect winning team + winning bid and apply the pick.
-            _print_df(cockpit.view_lookup(board, pick_name),
-                      f"Lookup: {pick_name}")
+            _print_df(
+                cockpit.view_lookup(
+                    board, pick_name,
+                    my_team="My Team", salary_cap=args.salary_cap,
+                    num_teams=num_teams, roster_spec=league.roster_spots,
+                    min_bid=args.min_bid,
+                ),
+                f"Lookup: {pick_name}",
+            )
 
             _set_completion_candidates(_team_names(league))
             winner = check_team_name(league, input("Who picked them? "))
