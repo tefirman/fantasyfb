@@ -287,6 +287,8 @@ class TestLoadPandasFallback:
     ) -> None:
         from contextlib import contextmanager
 
+        import pyarrow as pa
+
         from fantasyfb.data import nflreadpy_provider as mod
 
         @contextmanager
@@ -297,14 +299,20 @@ class TestLoadPandasFallback:
                     return b"<bytes>"
             yield _Resp()
 
-        class _Table:
-            @staticmethod
-            def to_pandas():
-                return pd.DataFrame({"season": [2024], "x": [1]})
+        # Build an Arrow table whose string column carries a raw 0xE2
+        # byte that Python can't decode as UTF-8 -- mirrors the
+        # `Levi's<bad byte> Stadium` value nflverse ships. Without the
+        # sanitize step, .to_pandas() raises on Python 3.10.
+        bad_string = pa.array(
+            [b"Levi's\xe2 Stadium"], type=pa.binary(),
+        ).cast(pa.string(), safe=False)
+        table = pa.table({"season": pa.array([2024]), "stadium": bad_string})
 
         monkeypatch.setattr(mod.urllib.request, "urlopen", fake_urlopen)
-        monkeypatch.setattr(mod.pq, "read_table", lambda _bio: _Table())
+        monkeypatch.setattr(mod.pq, "read_table", lambda _bio: table)
 
         with pytest.warns(UserWarning, match="invalid UTF-8"):
             out = mod._pyarrow_fallback("https://example.test/games.parquet")
-        assert out["x"].tolist() == [1]
+        assert out["season"].tolist() == [2024]
+        # The bad byte should have been replaced with U+FFFD, not raised.
+        assert "�" in out["stadium"].iloc[0]

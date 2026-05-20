@@ -15,6 +15,7 @@ from typing import Any, Callable, Iterable
 import nflreadpy as nfl
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .nfl_provider import NFLDataProvider
@@ -44,6 +45,32 @@ def _is_polars_utf8_error(exc: BaseException) -> str | None:
     return match.group(1) if match else None
 
 
+def _sanitize_string_columns(table: pa.Table) -> pa.Table:
+    """Replace invalid UTF-8 bytes in string columns with U+FFFD.
+
+    On Python 3.10 pyarrow's `.to_pandas()` raises when converting an
+    Arrow string array that contains bytes Python's str constructor
+    can't decode (e.g. the `Levi's<bad byte> Stadium` value nflverse
+    currently ships). Newer pyarrow + Python versions are more
+    permissive. We cast to binary and decode in Python with
+    errors="replace" so the bad bytes become the Unicode replacement
+    character and `to_pandas()` succeeds everywhere.
+    """
+    new_columns = []
+    for name in table.column_names:
+        col = table.column(name)
+        if pa.types.is_string(col.type) or pa.types.is_large_string(col.type):
+            binary = col.combine_chunks().cast(pa.binary())
+            decoded = [
+                None if v is None else v.decode("utf-8", errors="replace")
+                for v in binary.to_pylist()
+            ]
+            new_columns.append(pa.array(decoded, type=pa.string()))
+        else:
+            new_columns.append(col)
+    return pa.table(new_columns, names=table.column_names)
+
+
 def _pyarrow_fallback(url: str) -> pd.DataFrame:
     """Download `url` directly and parse with pyarrow, returning pandas."""
     warnings.warn(
@@ -52,7 +79,8 @@ def _pyarrow_fallback(url: str) -> pd.DataFrame:
     )
     with urllib.request.urlopen(url) as resp:  # noqa: S310 - nflverse URL
         content = resp.read()
-    return pq.read_table(io.BytesIO(content)).to_pandas()
+    table = pq.read_table(io.BytesIO(content))
+    return _sanitize_string_columns(table).to_pandas()
 
 
 def _load_pandas(
