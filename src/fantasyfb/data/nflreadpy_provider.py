@@ -6,14 +6,101 @@ to Pro Football Reference captchas. nflreadpy reads pre-built parquet
 files from the nflverse data releases, so it is fast and unauthenticated.
 """
 
+import io
+import re
+import urllib.request
 import warnings
-from typing import Iterable
+from typing import Any, Callable, Iterable
 
 import nflreadpy as nfl
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 from .nfl_provider import NFLDataProvider
+
+
+# nflreadpy uses polars to parse the parquet files it downloads from
+# nflverse. Polars' UTF-8 validation is stricter than pyarrow's, and the
+# nflverse parquet exports periodically contain a stray non-UTF-8 byte in
+# a string column (e.g. mojibake in a stadium name). Polars rejects the
+# whole file; pyarrow reads it without complaint. nflreadpy re-raises the
+# polars error as ValueError("Failed to parse data from {url}: ...
+# parquet: File out of specification: String data contained invalid
+# UTF-8"). When we see that exact signature, fall back to downloading the
+# same URL ourselves and parsing with pyarrow.
+_POLARS_UTF8_SIGNATURE = "String data contained invalid UTF-8"
+_NFLREADPY_PARSE_URL_RE = re.compile(r"Failed to parse data from (\S+):")
+
+
+def _is_polars_utf8_error(exc: BaseException) -> str | None:
+    """Return the upstream URL if `exc` is the polars UTF-8 parquet error."""
+    if not isinstance(exc, ValueError):
+        return None
+    msg = str(exc)
+    if _POLARS_UTF8_SIGNATURE not in msg:
+        return None
+    match = _NFLREADPY_PARSE_URL_RE.search(msg)
+    return match.group(1) if match else None
+
+
+def _pyarrow_fallback(url: str) -> pd.DataFrame:
+    """Download `url` directly and parse with pyarrow, returning pandas."""
+    warnings.warn(
+        f"polars rejected {url} as invalid UTF-8; falling back to pyarrow.",
+        stacklevel=3,
+    )
+    with urllib.request.urlopen(url) as resp:  # noqa: S310 - nflverse URL
+        content = resp.read()
+    return pq.read_table(io.BytesIO(content)).to_pandas()
+
+
+def _load_pandas(
+    loader: Callable[..., Any],
+    *,
+    per_season: bool = False,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """Call an nflreadpy loader and return a pandas DataFrame.
+
+    Falls back to pyarrow if polars rejects the upstream parquet for
+    invalid UTF-8 (see module-level comment).
+
+    `per_season=True` is for loaders that download one parquet per
+    season and concatenate (load_player_stats, load_rosters_weekly,
+    load_depth_charts, load_draft_picks). When set, on first failure we
+    retry season-by-season so a single bad season doesn't lose the
+    others. `per_season=False` is for single-file loaders
+    (load_schedules) where one URL covers all seasons; we just download
+    that URL and apply the season filter ourselves.
+    """
+    try:
+        return loader(**kwargs).to_pandas()
+    except ValueError as exc:
+        url = _is_polars_utf8_error(exc)
+        if url is None:
+            raise
+        if not per_season:
+            df = _pyarrow_fallback(url)
+            seasons = kwargs.get("seasons")
+            if isinstance(seasons, list) and "season" in df.columns:
+                df = df[df["season"].isin(seasons)].reset_index(drop=True)
+            return df
+        seasons = kwargs.get("seasons") or []
+        if not isinstance(seasons, list) or len(seasons) <= 1:
+            return _pyarrow_fallback(url)
+        # Retry per-season, falling back individually for the broken one.
+        frames: list[pd.DataFrame] = []
+        for season in seasons:
+            single = {**kwargs, "seasons": [season]}
+            try:
+                frames.append(loader(**single).to_pandas())
+            except ValueError as inner:
+                inner_url = _is_polars_utf8_error(inner)
+                if inner_url is None:
+                    raise
+                frames.append(_pyarrow_fallback(inner_url))
+        return pd.concat(frames, ignore_index=True)
 
 
 def _clamp_seasons(
@@ -103,7 +190,7 @@ class NflreadpyProvider(NFLDataProvider):
             nfl.get_current_season(),
             "player stats",
         )
-        raw = nfl.load_player_stats(seasons=seasons).to_pandas()
+        raw = _load_pandas(nfl.load_player_stats, per_season=True, seasons=seasons)
 
         # Restrict to regular season; the legacy package never trained on
         # postseason games either.
@@ -190,7 +277,7 @@ class NflreadpyProvider(NFLDataProvider):
         team_def["fumbles_rec_td"] = 0
 
         # points_allowed comes from the schedule, not the stats feed.
-        sched = nfl.load_schedules(seasons=list(seasons)).to_pandas()
+        sched = _load_pandas(nfl.load_schedules, seasons=list(seasons))
         sched = sched[sched["game_type"] == "REG"]
         pts = pd.concat([
             sched[["season", "week", "home_team", "away_score"]].rename(
@@ -233,7 +320,7 @@ class NflreadpyProvider(NFLDataProvider):
             nfl.get_current_season(),
             "schedule",
         )
-        raw = nfl.load_schedules(seasons=seasons).to_pandas()
+        raw = _load_pandas(nfl.load_schedules, seasons=seasons)
         raw = raw[raw["game_type"] == "REG"].copy()
         raw["date"] = pd.to_datetime(raw["gameday"], errors="coerce")
 
@@ -299,7 +386,7 @@ class NflreadpyProvider(NFLDataProvider):
             nfl.get_current_season(),
             "rosters",
         )
-        raw = nfl.load_rosters_weekly(seasons=seasons).to_pandas()
+        raw = _load_pandas(nfl.load_rosters_weekly, per_season=True, seasons=seasons)
 
         # Take the most recent week we have for each (season, player) so
         # `current_team` reflects late-season trades and call-ups rather
@@ -323,9 +410,9 @@ class NflreadpyProvider(NFLDataProvider):
         # support both because mid-package upgrades shouldn't trip up
         # users still pulling historical seasons.
         latest = pd.Timestamp.now(tz="UTC").year
-        raw = nfl.load_depth_charts(seasons=[latest]).to_pandas()
+        raw = _load_pandas(nfl.load_depth_charts, per_season=True, seasons=[latest])
         if raw.empty and latest > 1999:
-            raw = nfl.load_depth_charts(seasons=[latest - 1]).to_pandas()
+            raw = _load_pandas(nfl.load_depth_charts, per_season=True, seasons=[latest - 1])
         if raw.empty:
             return pd.DataFrame(columns=["name", "current_team", "position", "string", "player_id_sr"])
 
@@ -353,7 +440,7 @@ class NflreadpyProvider(NFLDataProvider):
         return out[["name", "current_team", "position", "string", "player_id_sr"]].reset_index(drop=True)
 
     def get_draft(self, year: int) -> pd.DataFrame:
-        raw = nfl.load_draft_picks(seasons=[year]).to_pandas()
+        raw = _load_pandas(nfl.load_draft_picks, seasons=[year])
         out = raw.rename(columns={
             "gsis_id": "player_id_sr",
             "pfr_player_name": "name",

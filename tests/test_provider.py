@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from fantasyfb.data.nflreadpy_provider import _clamp_seasons
+from fantasyfb.data.nflreadpy_provider import _clamp_seasons, _load_pandas
 
 
 REQUIRED_STAT_COLS = {
@@ -198,3 +198,113 @@ class TestClampSeasons:
     def test_no_warning_when_nothing_dropped(self, recwarn):
         _clamp_seasons([2024], available_max=2025, context="stats")
         assert len(recwarn) == 0
+
+
+class TestLoadPandasFallback:
+    """`_load_pandas` shields callers from the polars-strict UTF-8 error
+    nflverse intermittently triggers (see provider module-level comment).
+    These tests stub the loader and the network so the helper logic can
+    be exercised hermetically.
+    """
+
+    _PARSE_ERR = (
+        "Failed to parse data from https://example.test/games.parquet: "
+        "parquet: File out of specification: String data contained invalid UTF-8"
+    )
+
+    def test_passthrough_when_loader_succeeds(self) -> None:
+        def loader(**kwargs):
+            class _Frame:
+                @staticmethod
+                def to_pandas():
+                    return pd.DataFrame({"season": [2024], "x": [1]})
+            return _Frame()
+        out = _load_pandas(loader, seasons=[2024])
+        assert out["x"].tolist() == [1]
+
+    def test_unrelated_value_error_propagates(self) -> None:
+        def loader(**kwargs):
+            raise ValueError("some other failure")
+        with pytest.raises(ValueError, match="some other failure"):
+            _load_pandas(loader, seasons=[2024])
+
+    def test_single_file_fallback_applies_season_filter(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        full = pd.DataFrame({"season": [2022, 2023, 2024], "x": [1, 2, 3]})
+        called = {}
+
+        def fake_fallback(url: str) -> pd.DataFrame:
+            called["url"] = url
+            return full
+
+        monkeypatch.setattr(
+            "fantasyfb.data.nflreadpy_provider._pyarrow_fallback", fake_fallback,
+        )
+
+        def loader(**kwargs):
+            raise ValueError(self._PARSE_ERR)
+
+        out = _load_pandas(loader, seasons=[2023, 2024])
+        assert called["url"] == "https://example.test/games.parquet"
+        assert out["season"].tolist() == [2023, 2024]
+
+    def test_per_season_fallback_only_replaces_broken_year(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        good_years = {2022, 2023}
+        broken_year = 2024
+
+        def fake_fallback(url: str) -> pd.DataFrame:
+            return pd.DataFrame({"season": [broken_year], "x": [99]})
+
+        monkeypatch.setattr(
+            "fantasyfb.data.nflreadpy_provider._pyarrow_fallback", fake_fallback,
+        )
+
+        def loader(**kwargs):
+            seasons = kwargs["seasons"]
+            # The multi-season call mimics nflreadpy bailing on the broken
+            # year mid-loop. The per-season retries succeed for the good
+            # years and fail (triggering fallback) for the broken one.
+            if len(seasons) > 1 or seasons[0] == broken_year:
+                raise ValueError(self._PARSE_ERR)
+            season = seasons[0]
+            assert season in good_years
+            class _Frame:
+                def to_pandas(self):
+                    return pd.DataFrame({"season": [season], "x": [season]})
+            return _Frame()
+
+        out = _load_pandas(
+            loader, per_season=True, seasons=[2022, 2023, broken_year],
+        )
+        assert sorted(out["season"].tolist()) == [2022, 2023, 2024]
+        assert out.loc[out.season == broken_year, "x"].iloc[0] == 99
+
+    def test_pyarrow_fallback_emits_warning_and_returns_pandas(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from contextlib import contextmanager
+
+        from fantasyfb.data import nflreadpy_provider as mod
+
+        @contextmanager
+        def fake_urlopen(url):
+            class _Resp:
+                @staticmethod
+                def read():
+                    return b"<bytes>"
+            yield _Resp()
+
+        class _Table:
+            @staticmethod
+            def to_pandas():
+                return pd.DataFrame({"season": [2024], "x": [1]})
+
+        monkeypatch.setattr(mod.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(mod.pq, "read_table", lambda _bio: _Table())
+
+        with pytest.warns(UserWarning, match="invalid UTF-8"):
+            out = mod._pyarrow_fallback("https://example.test/games.parquet")
+        assert out["x"].tolist() == [1]
