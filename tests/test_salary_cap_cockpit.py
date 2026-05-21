@@ -14,6 +14,7 @@ import pytest
 from fantasyfb.drafts.salary_cap_cockpit import (
     build_board,
     compute_inflation,
+    simulate_nomination,
     view_best,
     view_budget_status,
     view_lookup,
@@ -455,3 +456,84 @@ class TestBudgetStatus:
         assert row["remaining"] == 100
         assert row["slots_filled"] == 2
         assert row["slots_open"] == 14
+
+
+# --------------------------------------------------------------------- #
+# simulate_nomination
+# --------------------------------------------------------------------- #
+
+
+class TestSimulateNomination:
+    def test_returns_valid_tuple(self, board, standard_roster_spec):
+        name, winner, bid = simulate_nomination(
+            board, team_names=["My Team", "B", "C"],
+            salary_cap=200, roster_spec=standard_roster_spec,
+            rng=np.random.default_rng(42),
+        )
+        assert isinstance(name, str)
+        assert winner in {"My Team", "B", "C"}
+        assert bid >= 1
+        # Player must exist on the board.
+        assert name in set(board["name"])
+
+    def test_winner_must_have_open_slots(self, board, standard_roster_spec):
+        """Even with the user picking aggressively, simulate_nomination
+        must not award the player to a team with a full roster."""
+        b = board.copy()
+        # Pretend team B already filled their 16-slot roster.
+        spec = standard_roster_spec
+        roster_size = int(spec.loc[spec["position"] != "IR", "count"].sum())
+        # Use 16 distinct existing players for the synthetic fills.
+        fillers = b[b["fantasy_team"].isna()]["name"].head(roster_size).tolist()
+        for n in fillers:
+            b.loc[b["name"] == n, "fantasy_team"] = "B"
+            b.loc[b["name"] == n, "winning_bid"] = 1
+        name, winner, bid = simulate_nomination(
+            b, team_names=["My Team", "B"],
+            salary_cap=200, roster_spec=standard_roster_spec,
+            rng=np.random.default_rng(1),
+        )
+        assert winner != "B"
+
+    def test_bid_respects_min_and_max(self, board, standard_roster_spec):
+        """The winning bid must be at least min_bid and never exceed
+        the winner's max_bid (cap minus reserve for open slots)."""
+        name, winner, bid = simulate_nomination(
+            board, team_names=["My Team", "B", "C"],
+            salary_cap=200, roster_spec=standard_roster_spec,
+            min_bid=1, rng=np.random.default_rng(99),
+        )
+        assert bid >= 1
+        # Fresh teams (no picks yet): max_bid = 200 - 15*1 = 185.
+        assert bid <= 185
+
+    def test_raises_when_all_rosters_full(self, board, standard_roster_spec):
+        """If every team's roster is already full, no nomination is
+        possible. The CLI catches this to end the auto-pilot loop."""
+        b = board.copy()
+        spec = standard_roster_spec
+        roster_size = int(spec.loc[spec["position"] != "IR", "count"].sum())
+        fillers = b[b["fantasy_team"].isna()]["name"].head(
+            2 * roster_size,
+        ).tolist()
+        for i, n in enumerate(fillers):
+            b.loc[b["name"] == n, "fantasy_team"] = ["My Team", "B"][i % 2]
+            b.loc[b["name"] == n, "winning_bid"] = 1
+        with pytest.raises(ValueError, match="full rosters"):
+            simulate_nomination(
+                b, team_names=["My Team", "B"],
+                salary_cap=200, roster_spec=standard_roster_spec,
+            )
+
+    def test_reproducible_with_seed(self, board, standard_roster_spec):
+        a = simulate_nomination(
+            board, team_names=["My Team", "B", "C"],
+            salary_cap=200, roster_spec=standard_roster_spec,
+            rng=np.random.default_rng(42),
+        )
+        b = simulate_nomination(
+            board, team_names=["My Team", "B", "C"],
+            salary_cap=200, roster_spec=standard_roster_spec,
+            rng=np.random.default_rng(42),
+        )
+        assert a == b

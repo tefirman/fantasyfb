@@ -17,7 +17,9 @@ import pytest
 
 from fantasyfb.drafts.tools import (
     MockDraft,
+    MockSalaryCapDraft,
     assign_tiers,
+    backtest_salary_values,
     compute_replacement_levels,
     compute_salary_values,
     compute_vorp,
@@ -638,3 +640,211 @@ class TestMockDraft:
         assert (always_taken_early["available_pct"] < 0.2).all()
         late = avail[avail["avg_pick_taken"] > 100]
         assert (late["available_pct"] > 0.8).all()
+
+
+# --------------------------------------------------------------------- #
+# Salary cap mock auction simulator
+# --------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def salary_ready_pool(small_pool, standard_roster_spec) -> pd.DataFrame:
+    """Pool with VORP + salary_value attached -- the input contract
+    for MockSalaryCapDraft."""
+    with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+    return compute_salary_values(
+        with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+    )
+
+
+class TestMockSalaryCapDraft:
+    def test_missing_columns_raises(self, small_pool, standard_roster_spec):
+        with pytest.raises(ValueError, match="missing required columns"):
+            MockSalaryCapDraft(small_pool, standard_roster_spec, num_teams=12)
+
+    def test_invalid_my_team_idx_raises(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        with pytest.raises(ValueError, match="my_team_idx"):
+            MockSalaryCapDraft(
+                salary_ready_pool, standard_roster_spec,
+                num_teams=12, my_team_idx=99,
+            )
+
+    def test_unknown_strategy_raises(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        with pytest.raises(ValueError, match="my_strategy"):
+            MockSalaryCapDraft(
+                salary_ready_pool, standard_roster_spec,
+                num_teams=12, my_strategy="wild",
+            )
+
+    def test_fills_every_roster(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """A successful simulation drafts every team to a full roster
+        -- 16 picks per team * 12 teams = 192 picks total."""
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        result = sim.simulate(seed=7)
+        assert len(result) == 16 * 12
+        assert (result["team"].value_counts() == 16).all()
+
+    def test_no_player_drafted_twice(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        result = sim.simulate(seed=3)
+        assert result["name"].is_unique
+
+    def test_no_team_exceeds_cap(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """The Vickrey resolution + max_bid clipping must keep every
+        team's total spend at or below the cap."""
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200,
+        )
+        result = sim.simulate(seed=11)
+        per_team = result.groupby("team")["winning_bid"].sum()
+        assert (per_team <= 200).all()
+
+    def test_every_bid_at_least_min(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            min_bid=1,
+        )
+        result = sim.simulate(seed=5)
+        assert (result["winning_bid"] >= 1).all()
+
+    def test_reproducible_with_seed(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        a = sim.simulate(seed=42)
+        b = sim.simulate(seed=42)
+        pd.testing.assert_frame_equal(a, b)
+
+    def test_aggressive_strategy_spends_more_than_conservative(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """Across many sims the user's spend should track their
+        strategy multiplier -- aggressive bidders end up paying more
+        than conservative bidders for the same role players."""
+        agg = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            my_team_idx=1, my_strategy="aggressive",
+        ).simulate_many(8, seed=1)
+        con = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            my_team_idx=1, my_strategy="conservative",
+        ).simulate_many(8, seed=1)
+        agg_spend = agg.loc[agg["is_user"]].groupby("sim")["winning_bid"].sum().mean()
+        con_spend = con.loc[con["is_user"]].groupby("sim")["winning_bid"].sum().mean()
+        assert agg_spend > con_spend
+
+    def test_simulate_many_seeds_are_reproducible(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        a = sim.simulate_many(3, seed=99)
+        b = sim.simulate_many(3, seed=99)
+        pd.testing.assert_frame_equal(a, b)
+        assert a["sim"].nunique() == 3
+
+
+# --------------------------------------------------------------------- #
+# Backtest harness
+# --------------------------------------------------------------------- #
+
+
+class TestBacktestSalaryValues:
+    def test_per_team_totals(self):
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "T1", "winning_bid": 50},
+            {"name": "B", "fantasy_team": "T1", "winning_bid": 30},
+            {"name": "C", "fantasy_team": "T2", "winning_bid": 40},
+        ])
+        values = pd.DataFrame([
+            {"name": "A", "salary_value": 45},
+            {"name": "B", "salary_value": 35},
+            {"name": "C", "salary_value": 30},
+        ])
+        out = backtest_salary_values(history, values)
+        t1 = out[out["team"] == "T1"].iloc[0]
+        assert t1["total_spent"] == 80
+        assert t1["total_value"] == 80
+        # Surplus = total_value - total_spent; T1 broke even.
+        assert t1["surplus"] == 0
+        t2 = out[out["team"] == "T2"].iloc[0]
+        # T2 paid $40 for a $30-valued player; surplus = -10.
+        assert t2["surplus"] == -10
+
+    def test_sorted_by_surplus_desc(self):
+        """The team that got the best deals (highest surplus) should
+        sit at the top."""
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "Bargain", "winning_bid": 10},
+            {"name": "B", "fantasy_team": "Overpay", "winning_bid": 80},
+        ])
+        values = pd.DataFrame([
+            {"name": "A", "salary_value": 50},
+            {"name": "B", "salary_value": 40},
+        ])
+        out = backtest_salary_values(history, values)
+        assert out.iloc[0]["team"] == "Bargain"
+        assert out.iloc[-1]["team"] == "Overpay"
+
+    def test_overpay_pct_signals_systematic_bias(self):
+        """A team that overpays on every pick by ~50% should have
+        avg_overpay_pct ~ 0.5."""
+        history = pd.DataFrame([
+            {"name": n, "fantasy_team": "Big Spender", "winning_bid": 30}
+            for n in ["A", "B", "C"]
+        ])
+        values = pd.DataFrame([
+            {"name": "A", "salary_value": 20},
+            {"name": "B", "salary_value": 20},
+            {"name": "C", "salary_value": 20},
+        ])
+        out = backtest_salary_values(history, values)
+        assert out.iloc[0]["avg_overpay_pct"] == pytest.approx(0.5)
+
+    def test_missing_value_falls_back_to_median(self):
+        """Players the valuation engine didn't price get the median
+        value of the cohort, so a single coverage gap doesn't
+        artificially inflate surplus."""
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "T1", "winning_bid": 50},
+            {"name": "Mystery", "fantasy_team": "T1", "winning_bid": 20},
+        ])
+        values = pd.DataFrame([{"name": "A", "salary_value": 40}])
+        out = backtest_salary_values(history, values)
+        t1 = out.iloc[0]
+        # Median of {40} = 40, so Mystery gets value 40.
+        assert t1["total_value"] == 80
+        assert t1["total_spent"] == 70
+
+    def test_missing_columns_raises(self):
+        with pytest.raises(ValueError, match="name"):
+            backtest_salary_values(
+                pd.DataFrame({"fantasy_team": ["T1"], "winning_bid": [10]}),
+                pd.DataFrame({"name": ["A"], "salary_value": [10]}),
+            )
+        with pytest.raises(ValueError, match="winning_bid"):
+            backtest_salary_values(
+                pd.DataFrame({"name": ["A"], "fantasy_team": ["T1"]}),
+                pd.DataFrame({"name": ["A"], "salary_value": [10]}),
+            )
+

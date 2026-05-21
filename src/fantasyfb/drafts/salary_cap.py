@@ -66,24 +66,27 @@ from .tools import (
 
 _PICK_COMMANDS = (
     "best", "nominate", "whatif", "lookup", "roster", "budgets",
-    "exclude", "sim", "go back", "help", "exit",
+    "exclude", "sim", "random", "random til full", "go back",
+    "help", "exit",
 )
 
 
 _HELP_TEXT = """
 Commands at the 'Player Up For Grabs' prompt:
-  <player name>  Start a nomination for that player
-  best           Top-N available per position with $ recommendations
-  nominate       Drain-score ranking (who to nominate to drain opponents)
-  whatif         Re-rank targets after a hypothetical bid
-  lookup         Detailed view of a single player (drafted or available)
-  roster         Show My Team's picks with bids paid
-  budgets        Per-team budget status snapshot
-  exclude        Add a player to the per-session exclude list
-  sim            Run a season simulation with current rosters
-  go back        Revert the previous pick
-  help           Show this command list
-  exit           Save progress and exit (no final summary)
+  <player name>     Start a nomination for that player
+  best              Top-N available per position with $ recommendations
+  nominate          Drain-score ranking (who to nominate to drain opponents)
+  whatif            Re-rank targets after a hypothetical bid
+  lookup            Detailed view of a single player (drafted or available)
+  roster            Show My Team's picks with bids paid
+  budgets           Per-team budget status snapshot
+  exclude           Add a player to the per-session exclude list
+  sim               Run a season simulation with current rosters
+  random            Auto-simulate one nomination + bidding round
+  random til full   Auto-simulate the rest of the draft to completion
+  go back           Revert the previous pick
+  help              Show this command list
+  exit              Save progress and exit (no final summary)
 """
 
 
@@ -478,6 +481,49 @@ def main(argv=None) -> int:
                 )
             if ignore != "nevermind":
                 exclude.append(ignore)
+
+        elif pick_name == "random":
+            try:
+                name, winner, price = cockpit.simulate_nomination(
+                    board, team_names=_team_names(league),
+                    salary_cap=args.salary_cap,
+                    roster_spec=league.roster_spots,
+                    min_bid=args.min_bid,
+                )
+            except ValueError as exc:
+                print(str(exc))
+                continue
+            print(f"Auto-pick: {winner} wins {name} for ${price}")
+            _apply_pick(league, board, name, winner, price)
+            progress = pd.concat([progress, pd.DataFrame([{
+                "name": name, "fantasy_team": winner, "winning_bid": price,
+            }])], ignore_index=True)
+            _save_progress(progress, output_path)
+
+        elif pick_name == "random til full":
+            # Single RNG so the burst feels coherent (the seeds in
+            # individual auctions are correlated rather than independent
+            # restarts). Outer loop terminates when the board fills up.
+            rng = np.random.default_rng()
+            auto_count = 0
+            while not all_rosters_full(board, num_teams, roster_size):
+                try:
+                    name, winner, price = cockpit.simulate_nomination(
+                        board, team_names=_team_names(league),
+                        salary_cap=args.salary_cap,
+                        roster_spec=league.roster_spots,
+                        min_bid=args.min_bid, rng=rng,
+                    )
+                except ValueError as exc:
+                    print(str(exc))
+                    break
+                _apply_pick(league, board, name, winner, price)
+                progress = pd.concat([progress, pd.DataFrame([{
+                    "name": name, "fantasy_team": winner, "winning_bid": price,
+                }])], ignore_index=True)
+                auto_count += 1
+            _save_progress(progress, output_path)
+            print(f"Auto-simulated {auto_count} nominations.")
 
         elif pick_name == "go back":
             if progress.empty:

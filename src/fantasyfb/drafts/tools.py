@@ -19,7 +19,9 @@ Public API:
     load_adp_csv(path, ...)
     merge_adp(projections, adp_df, num_teams)
     Roster, FLEX_ELIGIBILITY  # roster-state tracking + flex eligibility
-    MockDraft(...)  # simulator
+    MockDraft(...)  # snake-draft simulator
+    MockSalaryCapDraft(...)  # salary cap auction simulator
+    backtest_salary_values(...)  # historical auction evaluation
 """
 
 from __future__ import annotations
@@ -745,3 +747,408 @@ class MockDraft:
             (agg["avail_when_taken"] + (n_sims - agg["n_sims_taken"])) / n_sims
         )
         return agg.sort_values("avg_pick_taken").reset_index(drop=True)
+
+
+# --------------------------------------------------------------------- #
+# Salary cap mock auction simulator
+# --------------------------------------------------------------------- #
+
+
+def _open_slots(roster: "Roster") -> int:
+    return sum(roster.starting_slots.values()) + roster.bench_slots
+
+
+def _can_fit(roster: "Roster", position: str) -> bool:
+    """Whether ``position`` can be added to ``roster`` -- a base-position
+    slot is open, a flex slot is open and the position is eligible for
+    it, or the bench has room. False means a pick at this position
+    would be a no-op on the roster (slots stay full), so the simulator
+    should not let the team bid on it.
+    """
+    if roster.starting_slots.get(position, 0) > 0:
+        return True
+    for flex_slot, eligible in FLEX_ELIGIBILITY.items():
+        if position in eligible and roster.starting_slots.get(flex_slot, 0) > 0:
+            return True
+    return roster.bench_slots > 0
+
+
+# Strategy multipliers for the user's reservation bid. Opponents always
+# use 1.0 (neutral) with noise; the user can sandbox different stances.
+_USER_STRATEGY_MULT: Dict[str, float] = {
+    "value": 1.0,
+    "aggressive": 1.15,
+    "conservative": 0.85,
+}
+
+
+class MockSalaryCapDraft:
+    """Simulate full salary cap mock auctions for strategy testing.
+
+    Mechanics: round-robin nominations -- each team in turn nominates
+    the highest-`salary_value` player they can still afford to bid
+    `min_bid` on. Every team then privately computes a reservation
+    bid for the nominated player: ``need_factor * salary_value``
+    (scaled by ``my_strategy`` for the user's team) plus gaussian
+    noise, then clipped to their ``max_bid`` budget constraint.
+
+    The winner is the highest reservation; the price is the
+    second-highest reservation + ``min_bid``, which mirrors the
+    English-auction dynamic where bids tick up by the minimum
+    increment until only one bidder remains.
+
+    Parameters
+    ----------
+    projections : pd.DataFrame
+        Must contain ``name``, ``position``, ``salary_value``, and
+        ``vorp_per_game``. Run ``compute_vorp`` then
+        ``compute_salary_values`` first.
+    roster_spec : DataFrame or dict
+        Same shape as everywhere else in the module.
+    num_teams : int
+    salary_cap : int
+        Per-team budget (default 200).
+    min_bid : int
+        Minimum bid per player (default 1).
+    my_team_idx : int
+        1-indexed slot for the user's team. Mostly cosmetic since
+        salary cap has no fixed turn order, but it labels which team
+        gets the ``my_strategy`` reservation multiplier.
+    noise_floor : float
+        Minimum stdev for the gaussian noise applied to opponent
+        reservations. Default 2.0 means even cheap players have at
+        least $2 of bid-to-bid variation.
+    noise_slope : float
+        Per-dollar growth rate of the reservation noise. Effective
+        stdev for a $X-value player is
+        ``max(noise_floor, noise_slope * X)``. Default 0.1: a
+        $50 player has stdev ~$5, a $5 player has stdev ~$2 (floored).
+    my_strategy : str
+        One of ``'value'``, ``'aggressive'``, ``'conservative'``.
+    """
+
+    def __init__(
+        self,
+        projections: pd.DataFrame,
+        roster_spec,
+        num_teams: int,
+        *,
+        salary_cap: int = 200,
+        min_bid: int = 1,
+        my_team_idx: int = 1,
+        noise_floor: float = 2.0,
+        noise_slope: float = 0.1,
+        my_strategy: str = "value",
+    ) -> None:
+        required = {"name", "position", "salary_value", "vorp_per_game"}
+        missing = required - set(projections.columns)
+        if missing:
+            raise ValueError(
+                f"projections is missing required columns: {sorted(missing)}. "
+                "Run compute_vorp() and compute_salary_values() first."
+            )
+        if not 1 <= my_team_idx <= num_teams:
+            raise ValueError(
+                f"my_team_idx must be in 1..{num_teams}, got {my_team_idx}"
+            )
+        if my_strategy not in _USER_STRATEGY_MULT:
+            raise ValueError(
+                f"Unknown my_strategy: {my_strategy!r}. "
+                f"Choose one of {sorted(_USER_STRATEGY_MULT)}."
+            )
+
+        self.projections = projections.reset_index(drop=True)
+        self.roster_spec = roster_spec
+        self.num_teams = num_teams
+        self.salary_cap = salary_cap
+        self.min_bid = min_bid
+        self.my_team_idx = my_team_idx
+        self.noise_floor = noise_floor
+        self.noise_slope = noise_slope
+        self.my_strategy = my_strategy
+
+        empty = Roster.from_spec(roster_spec)
+        self.starting_slots_per_team = sum(empty.starting_slots.values())
+        self.total_picks = (
+            self.starting_slots_per_team + empty.bench_slots
+        ) * num_teams
+
+    def _reservation(
+        self,
+        team_idx: int,
+        roster: "Roster",
+        budget: int,
+        player: pd.Series,
+        rng: np.random.Generator,
+        position_scarce: bool = False,
+    ) -> int:
+        """A team's max willingness-to-pay for ``player`` given current
+        state. Need-adjusted salary value plus gaussian noise, clipped
+        to the team's ``max_bid`` budget constraint. Returns ``-1`` if
+        the team won't actively bid (no open slots or budget too tight)
+        so the caller can distinguish a non-bidder from a $0 bidder.
+        """
+        open_slots = _open_slots(roster)
+        if open_slots <= 0:
+            return -1
+        if not _can_fit(roster, player["position"]):
+            # No legal slot for this position -- a 4th TE when only
+            # DEF is open shouldn't get a bid even if budget allows.
+            return -1
+        their_max = max_bid(budget, open_slots, min_bid=self.min_bid)
+        if their_max < self.min_bid:
+            return -1
+        nf = roster.need_score(player["position"])
+        salary = float(player["salary_value"])
+        # Bench-only fits (nf <= 0.2) don't compete with starters.
+        # If the position is scarce -- the remaining pool can only
+        # barely cover starting slots league-wide -- bench bidders
+        # step out entirely. Otherwise their effective salary caps
+        # at min_bid * 2 so they place token bids without pushing
+        # the price up. Matches the real-auction dynamic where
+        # nobody fights to put a backup K on their bench.
+        if nf <= 0.2:
+            if position_scarce:
+                return -1
+        effective_salary = salary if nf > 0.2 else min(salary, self.min_bid * 2.0)
+        mult = (_USER_STRATEGY_MULT[self.my_strategy]
+                if team_idx == self.my_team_idx - 1 else 1.0)
+        base = nf * effective_salary * mult
+        sd = max(self.noise_floor, self.noise_slope * effective_salary)
+        noisy = base + rng.normal(0, sd)
+        return int(max(0, min(their_max, round(noisy))))
+
+    def _resolve_auction(
+        self,
+        nominator: int,
+        reservations: np.ndarray,
+    ) -> tuple[int, int]:
+        """Vickrey-style resolution: winner pays one min_bid increment
+        over the second-highest active bidder. If only the nominator
+        is willing to bid, they win at min_bid.
+        """
+        active_mask = reservations >= self.min_bid
+        if not active_mask.any():
+            return nominator, self.min_bid
+
+        order = np.argsort(reservations)[::-1]
+        winner = int(order[0])
+        # Second-highest reservation among bidders willing to pay
+        # at least min_bid. If the winner is the only active bidder,
+        # they get the player at min_bid (no one to push the price up).
+        second = self.min_bid - 1
+        for idx in order[1:]:
+            if active_mask[idx]:
+                second = int(reservations[idx])
+                break
+        price = int(min(reservations[winner], max(self.min_bid, second + self.min_bid)))
+        return winner, price
+
+    def simulate(self, *, seed: Optional[int] = None) -> pd.DataFrame:
+        """Run one mock auction. Returns a DataFrame of picks in
+        nomination order, with columns: nomination, nominator, team,
+        is_user, name, position, salary_value, vorp_per_game,
+        winning_bid.
+        """
+        rng = np.random.default_rng(seed)
+        rosters = _build_rosters(self.roster_spec, self.num_teams)
+        budgets = [self.salary_cap] * self.num_teams
+        available = self.projections.copy().reset_index(drop=True)
+        picks: List[dict] = []
+        my_idx = self.my_team_idx - 1
+
+        nominator = 0
+        nomination = 0
+        # Bound the loop: in the worst case every team nominates once
+        # per pick and a few teams are skipped, but total_picks * 2
+        # is a generous ceiling. Termination conditions inside the
+        # loop normally fire well before this.
+        max_iterations = self.total_picks * 2 + self.num_teams
+        for _ in range(max_iterations):
+            if available.empty:
+                break
+            if all(_open_slots(r) == 0 for r in rosters):
+                break
+
+            # Skip nominators whose roster is full.
+            skips = 0
+            while _open_slots(rosters[nominator]) == 0 and skips < self.num_teams:
+                nominator = (nominator + 1) % self.num_teams
+                skips += 1
+            if skips >= self.num_teams:
+                break
+
+            # Nominator picks the highest need-weighted value player
+            # they can fit AND afford. Need weighting matters: a team
+            # with only DEF open shouldn't nominate the top remaining
+            # WR -- they'd never want to win it. The salary_value tie
+            # breaker preserves the early-auction "elites get nominated
+            # first" dynamic when all positions are equally needed.
+            nom_max = max_bid(
+                budgets[nominator], _open_slots(rosters[nominator]),
+                min_bid=self.min_bid,
+            )
+            fits_nominator = available["position"].apply(
+                lambda p: _can_fit(rosters[nominator], p),
+            )
+            fittable = available[fits_nominator]
+            if fittable.empty:
+                # Nominator has slots open but nothing on the board
+                # fits them (e.g. DEF slot open but no DEFs left).
+                # Skip their turn rather than force an illegal pick
+                # that Roster.add silently drops.
+                nominator = (nominator + 1) % self.num_teams
+                continue
+            affordable = fittable[
+                fittable["salary_value"] <= max(nom_max, self.min_bid)
+            ]
+            if affordable.empty:
+                affordable = fittable.nsmallest(1, "salary_value")
+            scored = affordable.assign(
+                _nom_score=affordable["salary_value"]
+                * affordable["position"].apply(rosters[nominator].need_score),
+            )
+            nominated = scored.sort_values(
+                "_nom_score", ascending=False,
+            ).iloc[0]
+
+            # Scarcity check: if the remaining pool at the nominated
+            # position can barely cover the league's open starting
+            # slots there, bench-only bidders should step out.
+            starters_open = sum(
+                r.starting_slots.get(nominated["position"], 0)
+                for r in rosters
+            )
+            remaining_at_pos = int(
+                (available["position"] == nominated["position"]).sum()
+            )
+            position_scarce = remaining_at_pos <= starters_open
+
+            reservations = np.array([
+                self._reservation(
+                    i, rosters[i], budgets[i], nominated, rng,
+                    position_scarce=position_scarce,
+                )
+                for i in range(self.num_teams)
+            ])
+            winner, price = self._resolve_auction(nominator, reservations)
+
+            pick = {
+                "nomination": nomination + 1,
+                "nominator": nominator + 1,
+                "team": winner + 1,
+                "is_user": winner == my_idx,
+                "name": nominated["name"],
+                "position": nominated["position"],
+                "salary_value": float(nominated["salary_value"]),
+                "vorp_per_game": float(nominated.get("vorp_per_game", np.nan)),
+                "winning_bid": price,
+            }
+            rosters[winner].add(pick)
+            budgets[winner] -= price
+            picks.append(pick)
+            available = available[available["name"] != nominated["name"]].reset_index(drop=True)
+            nomination += 1
+            nominator = (nominator + 1) % self.num_teams
+
+        return pd.DataFrame(picks)
+
+    def simulate_many(
+        self,
+        n: int,
+        *,
+        seed: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """Run ``n`` mock auctions; return a tall DataFrame with a
+        ``sim`` column identifying each. Useful for measuring how
+        often a player goes for X dollars or which strategies tend
+        to land which tiers.
+        """
+        rng = np.random.default_rng(seed)
+        frames = []
+        for s in range(n):
+            child_seed = int(rng.integers(0, 2**31 - 1))
+            df = self.simulate(seed=child_seed)
+            df.insert(0, "sim", s)
+            frames.append(df)
+        return pd.concat(frames, ignore_index=True)
+
+
+# --------------------------------------------------------------------- #
+# Backtest harness
+# --------------------------------------------------------------------- #
+
+
+def backtest_salary_values(
+    history: pd.DataFrame,
+    values: pd.DataFrame,
+    *,
+    value_col: str = "salary_value",
+    bid_col: str = "winning_bid",
+) -> pd.DataFrame:
+    """Compare a salary valuation engine's outputs to a real auction
+    history, returning per-team metrics.
+
+    `history` is the realized auction: one row per pick with
+    ``name``, ``fantasy_team``, and the ``bid_col`` paid. `values` is
+    the engine's pre-draft valuation: one row per player with
+    ``name`` and the ``value_col`` it would have recommended. The
+    function joins them and computes:
+
+    - ``total_spent``: what the team actually paid across all picks
+    - ``total_value``: what the engine said those picks were worth
+    - ``surplus``: ``total_value - total_spent`` (positive = bought
+      below engine valuation, negative = overpaid)
+    - ``picks_overpaid``, ``picks_value``: counts on each side
+    - ``avg_overpay_pct``: mean of ``(bid - value) / max(value, 1)``
+      across picks, useful for spotting systematic over/under-pricing
+      by the engine relative to the market
+
+    Sorted by surplus descending so the teams the engine thinks "got
+    the best deals" sit at the top. Run on V1 and V2 valuations side
+    by side to see which engine's surplus rankings better predict
+    actual season finish.
+    """
+    if "name" not in history.columns:
+        raise ValueError("history must have a 'name' column")
+    if bid_col not in history.columns:
+        raise ValueError(f"history must have a {bid_col!r} column")
+    if "fantasy_team" not in history.columns:
+        raise ValueError("history must have a 'fantasy_team' column")
+    if "name" not in values.columns:
+        raise ValueError("values must have a 'name' column")
+    if value_col not in values.columns:
+        raise ValueError(f"values must have a {value_col!r} column")
+
+    merged = history.merge(
+        values[["name", value_col]].drop_duplicates(subset=["name"]),
+        on="name", how="left",
+    )
+    # Players the valuation engine didn't price get the median value
+    # of the cohort -- avoids inflating "surplus" just because the
+    # engine had a coverage gap.
+    fallback = float(merged[value_col].median(skipna=True) or 0.0)
+    merged[value_col] = merged[value_col].fillna(fallback)
+
+    merged["overpay"] = merged[bid_col] - merged[value_col]
+    merged["overpay_pct"] = merged["overpay"] / merged[value_col].clip(lower=1.0)
+
+    rows = []
+    for team, group in merged.groupby("fantasy_team"):
+        total_spent = float(group[bid_col].sum())
+        total_value = float(group[value_col].sum())
+        rows.append({
+            "team": team,
+            "picks": int(len(group)),
+            "total_spent": total_spent,
+            "total_value": total_value,
+            "surplus": total_value - total_spent,
+            "picks_overpaid": int((group["overpay"] > 0).sum()),
+            "picks_value": int((group["overpay"] < 0).sum()),
+            "avg_overpay_pct": float(group["overpay_pct"].mean()),
+        })
+    return (
+        pd.DataFrame(rows)
+        .sort_values("surplus", ascending=False)
+        .reset_index(drop=True)
+    )

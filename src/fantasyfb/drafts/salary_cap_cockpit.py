@@ -25,6 +25,7 @@ Public API:
     view_lookup(board, name)
     view_roster(board, team_name, ...)
     view_budget_status(board, team_names, salary_cap, roster_spec)
+    simulate_nomination(board, ...)  # auto-pick for the 'random' command
     DEFAULT_DISPLAY_COLS
 """
 
@@ -43,6 +44,7 @@ from .snake_cockpit import (
 )
 from .tools import (
     Roster,
+    _USER_STRATEGY_MULT,
     _bench_slots_from_spec,
     _roster_spec_to_dict,
     assign_tiers,
@@ -336,6 +338,107 @@ def view_roster(board: pd.DataFrame, team_name: str) -> pd.DataFrame:
         ["_pos_key", "vorp_per_game"], ascending=[True, False],
     ).drop(columns="_pos_key")
     return mine[_ordered_columns(mine, cols)].reset_index(drop=True)
+
+
+def _build_team_roster(board: pd.DataFrame, team_name: str, roster_spec) -> Roster:
+    """Reconstruct a ``Roster`` from a team's picks on the board so
+    we can score positional need without an external state dict."""
+    roster = Roster.from_spec(roster_spec)
+    for _, row in board[board["fantasy_team"] == team_name].iterrows():
+        roster.add({"position": row["position"]})
+    return roster
+
+
+def simulate_nomination(
+    board: pd.DataFrame,
+    *,
+    team_names: Iterable[str],
+    salary_cap: int,
+    roster_spec,
+    min_bid: int = 1,
+    noise_floor: float = 2.0,
+    noise_slope: float = 0.1,
+    user_team: str = "My Team",
+    user_strategy: str = "value",
+    rng: Optional[np.random.Generator] = None,
+) -> tuple[str, str, int]:
+    """Auto-simulate one nomination + Vickrey auction on the current
+    board. Returns ``(player_name, winning_team, winning_bid)``.
+
+    A random team with open slots nominates the highest-`salary_value`
+    player they can still afford. Every team then privately computes a
+    reservation = ``need_factor * salary_value + N(0, sd)``, scaled by
+    ``_USER_STRATEGY_MULT[user_strategy]`` for the user's team and
+    clipped to ``max_bid`` for each team. The winner is the highest
+    reservation; the price is the second-highest reservation +
+    ``min_bid`` (the English-auction floor when bids tick up by the
+    minimum increment).
+
+    If no team is willing to bid at least ``min_bid``, the nominator
+    is forced to take the player at ``min_bid`` -- a degenerate case
+    that only happens late in the draft when budgets are exhausted.
+
+    Raises ``ValueError`` if every team has a full roster or no
+    undrafted players remain.
+    """
+    rng = rng if rng is not None else np.random.default_rng()
+
+    spec = _roster_spec_to_dict(roster_spec)
+    bench = _bench_slots_from_spec(roster_spec)
+    roster_size = sum(spec.values()) + bench
+    team_names = list(team_names)
+
+    def team_state(team: str) -> tuple[int, int, int]:
+        remaining, open_slots = _team_remaining(
+            board, team, salary_cap, roster_size,
+        )
+        return open_slots, remaining, max_bid(remaining, open_slots, min_bid=min_bid)
+
+    eligible = [t for t in team_names if team_state(t)[0] > 0]
+    if not eligible:
+        raise ValueError("All teams have full rosters; no nomination possible.")
+
+    available = board[board["fantasy_team"].isna()]
+    if available.empty:
+        raise ValueError("No undrafted players remain on the board.")
+
+    nominator = str(rng.choice(eligible))
+    _, _, nom_max = team_state(nominator)
+    affordable = available[available["salary_value"] <= max(nom_max, min_bid)]
+    if affordable.empty:
+        # Nominator's max-bid is below every remaining player's
+        # listed value, but they still have to pick something to
+        # honor the min bid floor. Grab the cheapest.
+        affordable = available.nsmallest(1, "salary_value")
+    nominated = affordable.sort_values(
+        "salary_value", ascending=False,
+    ).iloc[0]
+
+    reservations: dict[str, int] = {}
+    for team in team_names:
+        open_slots, _, team_max = team_state(team)
+        if open_slots <= 0 or team_max < min_bid:
+            continue
+        roster = _build_team_roster(board, team, roster_spec)
+        nf = roster.need_score(nominated["position"])
+        salary = float(nominated["salary_value"])
+        mult = _USER_STRATEGY_MULT[user_strategy] if team == user_team else 1.0
+        base = nf * salary * mult
+        sd = max(noise_floor, noise_slope * salary)
+        noisy = base + float(rng.normal(0, sd))
+        reservations[team] = int(max(0, min(team_max, round(noisy))))
+
+    sorted_bids = sorted(reservations.items(), key=lambda x: x[1], reverse=True)
+    if not sorted_bids or sorted_bids[0][1] < min_bid:
+        return str(nominated["name"]), nominator, min_bid
+
+    winner = sorted_bids[0][0]
+    second = sorted_bids[1][1] if len(sorted_bids) > 1 else (min_bid - 1)
+    price = int(min(
+        sorted_bids[0][1],
+        max(min_bid, second + min_bid),
+    ))
+    return str(nominated["name"]), winner, price
 
 
 def view_budget_status(
