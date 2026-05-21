@@ -98,7 +98,14 @@ ipython_config.py
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
-#uv.lock
+uv.lock
+
+# Claude Code
+#   Keep .claude/ tracked so project-scoped settings.json, skills/, agents/,
+#   and commands/ can be committed. Ignore the runtime lock file and the
+#   per-machine local-settings override.
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.

@@ -326,6 +326,46 @@ class TestViewLookup:
         assert out.iloc[0]["fantasy_team"] == "opponent"
         assert out.iloc[0]["winning_bid"] == 55
 
+    def test_omits_inflated_value_and_max_my_bid_without_context(self, board):
+        out = view_lookup(board, "RB00")
+        assert "inflated_value" not in out.columns
+        assert "max_my_bid" not in out.columns
+
+    def test_computes_max_my_bid_when_context_supplied(
+        self, board, standard_roster_spec,
+    ):
+        out = view_lookup(
+            board, "RB00",
+            my_team="My Team", salary_cap=200, num_teams=12,
+            roster_spec=standard_roster_spec,
+        )
+        assert "inflated_value" in out.columns
+        assert "max_my_bid" in out.columns
+        # Pre-draft, inflation ≈ 1.0 (small drift from avg_ pseudo-rows
+        # and rounding in compute_salary_values), so inflated_value
+        # should hug salary_value.
+        sv = out.iloc[0]["salary_value"]
+        iv = out.iloc[0]["inflated_value"]
+        assert abs(iv - sv) / sv < 0.01
+        # And max_my_bid is clipped by the user's overall cap, which on
+        # an empty roster is salary_cap - (roster_size - 1) * min_bid.
+        assert out.iloc[0]["max_my_bid"] > 0
+        assert out.iloc[0]["max_my_bid"] <= 200
+
+    def test_max_my_bid_is_blank_for_already_drafted_player(
+        self, board, standard_roster_spec,
+    ):
+        b = board.copy()
+        mask = b["name"] == "RB00"
+        b.loc[mask, "fantasy_team"] = "opponent"
+        b.loc[mask, "winning_bid"] = 55
+        out = view_lookup(
+            b, "RB00",
+            my_team="My Team", salary_cap=200, num_teams=12,
+            roster_spec=standard_roster_spec,
+        )
+        assert pd.isna(out.iloc[0]["max_my_bid"])
+
 
 class TestViewRoster:
     def test_empty_for_unrostered_team(self, board):
