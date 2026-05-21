@@ -23,7 +23,7 @@ from .data.nfl_provider import NFLDataProvider
 from .data.nflreadpy_provider import NflreadpyProvider
 from .configs import get_league_config, apply_default_scoring_categories
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "League",
