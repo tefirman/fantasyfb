@@ -763,6 +763,58 @@ class TestMockSalaryCapDraft:
         pd.testing.assert_frame_equal(a, b)
         assert a["sim"].nunique() == 3
 
+    def test_keepers_reduce_team_budget(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """A team that keeps a player at $40 should spend at most
+        $160 in the open auction (cap 200, keeper costs $40)."""
+        keepers = pd.DataFrame([
+            {"name": "RB00", "team_idx": 1, "winning_bid": 40},
+        ])
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers,
+        )
+        result = sim.simulate(seed=7)
+        # Team 1's auction picks (the keeper itself is not in the result).
+        team1_spend = result[result["team"] == 1]["winning_bid"].sum()
+        assert team1_spend <= 160
+
+    def test_keepers_not_available_in_auction(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """Keeper players must not be re-drafted in the open auction."""
+        keepers = pd.DataFrame([
+            {"name": "RB00", "team_idx": 2, "winning_bid": 35},
+            {"name": "WR00", "team_idx": 3, "winning_bid": 25},
+        ])
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers,
+        )
+        result = sim.simulate(seed=13)
+        assert "RB00" not in set(result["name"])
+        assert "WR00" not in set(result["name"])
+
+    def test_keepers_fill_roster_slots(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """A team with keepers has fewer open roster slots in the auction,
+        so it drafts fewer players in the open portion."""
+        n_keepers = 3
+        keepers = pd.DataFrame([
+            {"name": f"RB0{i}", "team_idx": 1, "winning_bid": 20}
+            for i in range(n_keepers)
+        ])
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers,
+        )
+        result = sim.simulate(seed=21)
+        team1_auction_picks = len(result[result["team"] == 1])
+        roster_size = 16  # 10 starters + 6 bench
+        assert team1_auction_picks == roster_size - n_keepers
+
 
 # --------------------------------------------------------------------- #
 # Backtest harness
@@ -847,4 +899,36 @@ class TestBacktestSalaryValues:
                 pd.DataFrame({"name": ["A"], "fantasy_team": ["T1"]}),
                 pd.DataFrame({"name": ["A"], "salary_value": [10]}),
             )
+
+    def test_keeper_picks_excluded_from_surplus(self):
+        """Keeper picks should not contribute to per-team surplus/overpay
+        metrics -- their prices are pre-negotiated, not auction results."""
+        history = pd.DataFrame([
+            {"name": "Keeper", "fantasy_team": "T1", "winning_bid": 50},
+            {"name": "Auction", "fantasy_team": "T1", "winning_bid": 20},
+        ])
+        values = pd.DataFrame([
+            {"name": "Keeper", "salary_value": 10},   # looks like a huge overpay
+            {"name": "Auction", "salary_value": 30},  # actually a bargain
+        ])
+        # Without exclusion, T1's surplus = (10 + 30) - (50 + 20) = -30.
+        without = backtest_salary_values(history, values)
+        assert without.iloc[0]["surplus"] == pytest.approx(-30)
+
+        # With the keeper excluded, only the auction pick counts:
+        # surplus = 30 - 20 = +10.
+        with_excl = backtest_salary_values(
+            history, values, keeper_names={"Keeper"},
+        )
+        assert with_excl.iloc[0]["surplus"] == pytest.approx(10)
+        assert with_excl.iloc[0]["picks"] == 1
+
+    def test_empty_keeper_names_same_as_no_exclusion(self):
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "T1", "winning_bid": 40},
+        ])
+        values = pd.DataFrame([{"name": "A", "salary_value": 40}])
+        a = backtest_salary_values(history, values)
+        b = backtest_salary_values(history, values, keeper_names=set())
+        pd.testing.assert_frame_equal(a, b)
 

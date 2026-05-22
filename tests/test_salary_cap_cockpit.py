@@ -83,6 +83,15 @@ def board(small_pool, standard_roster_spec) -> pd.DataFrame:
 # --------------------------------------------------------------------- #
 
 
+@pytest.fixture
+def keepers_df():
+    """A small keeper set: two players pre-assigned to teams."""
+    return pd.DataFrame([
+        {"name": "RB00", "fantasy_team": "team1", "winning_bid": 40.0},
+        {"name": "WR00", "fantasy_team": "team2", "winning_bid": 30.0},
+    ])
+
+
 class TestBuildBoard:
     def test_drops_synthetic_avg_rows(self, standard_roster_spec):
         """avg_* synthetic rows the League injects for sim purposes
@@ -103,6 +112,62 @@ class TestBuildBoard:
         assert "winning_bid" in board.columns
         assert board["winning_bid"].isna().all()
         assert (board["salary_value"] >= 1.0).all()
+
+    def test_keepers_seeded_as_drafted(
+        self, small_pool, standard_roster_spec, keepers_df,
+    ):
+        """Keeper players must appear on the board as already-drafted
+        (fantasy_team set, winning_bid set to their keeper price)."""
+        board = build_board(
+            small_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers_df,
+        )
+        for _, kp in keepers_df.iterrows():
+            row = board[board["name"] == kp["name"]]
+            assert not row.empty, f"{kp['name']} missing from board"
+            assert row.iloc[0]["fantasy_team"] == kp["fantasy_team"]
+            assert row.iloc[0]["winning_bid"] == pytest.approx(kp["winning_bid"])
+
+    def test_keepers_excluded_from_auction_salary_values(
+        self, small_pool, standard_roster_spec, keepers_df,
+    ):
+        """Salary values for non-keeper auction players should be higher
+        when keepers are removed from the salary computation pool, because
+        the same dollars are distributed among fewer players."""
+        board_no_keepers = build_board(
+            small_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200,
+        )
+        board_with_keepers = build_board(
+            small_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers_df,
+        )
+        # Non-keeper RBs should carry higher salary_value in the keeper board.
+        non_keeper_rbs_base = board_no_keepers[
+            (board_no_keepers["position"] == "RB")
+            & ~board_no_keepers["name"].isin(keepers_df["name"])
+        ]["salary_value"].sum()
+        non_keeper_rbs_kp = board_with_keepers[
+            (board_with_keepers["position"] == "RB")
+            & ~board_with_keepers["name"].isin(keepers_df["name"])
+            & board_with_keepers["fantasy_team"].isna()
+        ]["salary_value"].sum()
+        assert non_keeper_rbs_kp >= non_keeper_rbs_base
+
+    def test_inflation_near_one_at_start_with_keepers(
+        self, small_pool, standard_roster_spec, keepers_df,
+    ):
+        """With keepers at their salary_value price, inflation should
+        still start close to 1.0 at the start of the auction."""
+        board = build_board(
+            small_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers_df,
+        )
+        # Inflation = remaining_dollars / remaining_salary_value.
+        # Keeper bids are set to their salary_value in this fixture
+        # (40 and 30 are roughly in range), so inflation should be ~1.
+        infl = compute_inflation(board, salary_cap=200, num_teams=12)
+        assert 0.8 < infl < 1.2
 
     def test_dedupes_by_player_id(self, standard_roster_spec):
         rows = [_make_projection("RB00", "RB", 20),

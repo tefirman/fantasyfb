@@ -238,7 +238,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "explicitly when drafting pre-season.")
     p.add_argument("--keepers", default=None,
                    help="path to a keepers CSV (columns: name, "
-                        "fantasy_team, salary)")
+                        "fantasy_team, salary -- last year's winning "
+                        "price; final keeper price = salary + "
+                        "--keeper-surcharge)")
+    p.add_argument("--keeper-surcharge", type=int, default=5,
+                   dest="keeper_surcharge",
+                   help="dollars added to each keeper's last-year salary "
+                        "(default 5; use 0 to treat the CSV salary as "
+                        "the final keeper price)")
     p.add_argument("--exclude", default=None,
                    help="comma-separated players to exclude from views")
     p.add_argument("--inprogress", default=None,
@@ -322,34 +329,63 @@ def main(argv=None) -> int:
         progress = pd.DataFrame(columns=["name", "fantasy_team", "winning_bid"])
         output_path = args.output or "DraftProgressSalaryCap.csv"
 
-    # Keepers: apply to the league before building the board so they
-    # show up in views correctly.
+    # Keepers: compute cost-plus-N prices, validate team budgets, and
+    # apply to the league before building the board.
+    keepers_df = None
     if args.keepers and os.path.exists(args.keepers):
-        keepers = pd.read_csv(args.keepers)
-        bad_names = ~keepers["name"].isin(league.players["name"])
+        keepers_raw = pd.read_csv(args.keepers)
+        bad_names = ~keepers_raw["name"].isin(league.players["name"])
         if bad_names.any():
             print("Player names not found in projections, ignoring: "
-                  + ", ".join(keepers.loc[bad_names, "name"].astype(str)))
-            keepers = keepers[~bad_names]
+                  + ", ".join(keepers_raw.loc[bad_names, "name"].astype(str)))
+            keepers_raw = keepers_raw[~bad_names]
         team_names = set(_team_names(league))
-        bad_teams = ~keepers["fantasy_team"].isin(team_names)
+        bad_teams = ~keepers_raw["fantasy_team"].isin(team_names)
         if bad_teams.any():
             print("Team names not in league, ignoring: "
-                  + ", ".join(keepers.loc[bad_teams, "fantasy_team"].astype(str)))
-            keepers = keepers[~bad_teams]
-        for _, kp in keepers.iterrows():
-            _apply_pick(league, board=None, name=kp["name"],
-                        team_name=kp["fantasy_team"], bid=int(kp["salary"]))
-            progress = pd.concat([progress, pd.DataFrame([{
-                "name": kp["name"],
-                "fantasy_team": kp["fantasy_team"],
-                "winning_bid": int(kp["salary"]),
-            }])], ignore_index=True)
-        _save_progress(progress, output_path)
+                  + ", ".join(keepers_raw.loc[bad_teams, "fantasy_team"].astype(str)))
+            keepers_raw = keepers_raw[~bad_teams]
+
+        keepers_raw = keepers_raw.copy()
+        keepers_raw["winning_bid"] = (
+            keepers_raw["salary"].astype(int) + args.keeper_surcharge
+        )
+
+        # Validate: no team's keeper commitments may exceed their cap.
+        team_totals = keepers_raw.groupby("fantasy_team")["winning_bid"].sum()
+        over_cap = team_totals[team_totals > args.salary_cap]
+        if not over_cap.empty:
+            for team, total in over_cap.items():
+                print(f"WARNING: {team}'s keeper commitments (${total}) exceed "
+                      f"the salary cap (${args.salary_cap}). Dropping all "
+                      f"keepers for that team.")
+            keepers_raw = keepers_raw[
+                ~keepers_raw["fantasy_team"].isin(over_cap.index)
+            ]
+
+        if not keepers_raw.empty:
+            keepers_df = keepers_raw[["name", "fantasy_team", "winning_bid"]].copy()
+
+            # Apply to league.players for season simulation compatibility.
+            # Skip any players already in progress (draft-resume safety).
+            already_applied = set(progress["name"])
+            for _, kp in keepers_df.iterrows():
+                if kp["name"] in already_applied:
+                    continue
+                _apply_pick(league, board=None, name=kp["name"],
+                            team_name=kp["fantasy_team"],
+                            bid=int(kp["winning_bid"]))
+                progress = pd.concat([progress, pd.DataFrame([{
+                    "name": kp["name"],
+                    "fantasy_team": kp["fantasy_team"],
+                    "winning_bid": int(kp["winning_bid"]),
+                }])], ignore_index=True)
+            _save_progress(progress, output_path)
 
     board = cockpit.build_board(
         league.players, league.roster_spots, num_teams,
         salary_cap=args.salary_cap, min_bid=args.min_bid,
+        keepers=keepers_df,
     )
     # Replay applied picks onto the board (build_board snapshots the
     # pool but doesn't know about winning_bid).

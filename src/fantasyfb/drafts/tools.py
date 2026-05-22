@@ -825,6 +825,14 @@ class MockSalaryCapDraft:
         $50 player has stdev ~$5, a $5 player has stdev ~$2 (floored).
     my_strategy : str
         One of ``'value'``, ``'aggressive'``, ``'conservative'``.
+    keepers : optional DataFrame
+        Pre-assigned keeper players with columns ``name``, ``team_idx``
+        (1-indexed), and ``winning_bid``. At the start of each simulated
+        auction the keeper prices are deducted from the owning team's
+        budget, the keeper fills a roster slot for that team, and the
+        player is removed from the available pool. This lets
+        ``simulate_many`` model keeper leagues without re-drafting players
+        who are already off the board.
     """
 
     def __init__(
@@ -839,6 +847,7 @@ class MockSalaryCapDraft:
         noise_floor: float = 2.0,
         noise_slope: float = 0.1,
         my_strategy: str = "value",
+        keepers: Optional[pd.DataFrame] = None,
     ) -> None:
         required = {"name", "position", "salary_value", "vorp_per_game"}
         missing = required - set(projections.columns)
@@ -866,6 +875,7 @@ class MockSalaryCapDraft:
         self.noise_floor = noise_floor
         self.noise_slope = noise_slope
         self.my_strategy = my_strategy
+        self.keepers = keepers
 
         empty = Roster.from_spec(roster_spec)
         self.starting_slots_per_team = sum(empty.starting_slots.values())
@@ -956,6 +966,20 @@ class MockSalaryCapDraft:
         available = self.projections.copy().reset_index(drop=True)
         picks: List[dict] = []
         my_idx = self.my_team_idx - 1
+
+        # Pre-apply keepers: deduct prices from owning team's budget,
+        # fill a roster slot, and remove from the available pool.
+        if self.keepers is not None and not self.keepers.empty:
+            pos_map = dict(zip(self.projections["name"], self.projections["position"]))
+            for _, kp in self.keepers.iterrows():
+                team_i = int(kp["team_idx"]) - 1
+                price = int(kp["winning_bid"])
+                name = str(kp["name"])
+                budgets[team_i] = max(0, budgets[team_i] - price)
+                pos = pos_map.get(name)
+                if pos:
+                    rosters[team_i].add({"position": pos})
+                available = available[available["name"] != name].reset_index(drop=True)
 
         nominator = 0
         nomination = 0
@@ -1085,6 +1109,7 @@ def backtest_salary_values(
     *,
     value_col: str = "salary_value",
     bid_col: str = "winning_bid",
+    keeper_names: Optional[Iterable[str]] = None,
 ) -> pd.DataFrame:
     """Compare a salary valuation engine's outputs to a real auction
     history, returning per-team metrics.
@@ -1108,6 +1133,11 @@ def backtest_salary_values(
     the best deals" sit at the top. Run on V1 and V2 valuations side
     by side to see which engine's surplus rankings better predict
     actual season finish.
+
+    keeper_names : optional collection of player names to exclude from
+        the surplus calculation. Keeper prices are pre-negotiated and
+        don't reflect competitive auction dynamics, so including them
+        skews the per-team overpay metrics.
     """
     if "name" not in history.columns:
         raise ValueError("history must have a 'name' column")
@@ -1129,6 +1159,11 @@ def backtest_salary_values(
     # engine had a coverage gap.
     fallback = float(merged[value_col].median(skipna=True) or 0.0)
     merged[value_col] = merged[value_col].fillna(fallback)
+
+    # Exclude keeper picks: their prices are pre-negotiated and don't
+    # reflect the live auction market.
+    if keeper_names is not None:
+        merged = merged[~merged["name"].isin(set(keeper_names))].copy()
 
     merged["overpay"] = merged[bid_col] - merged[value_col]
     merged["overpay_pct"] = merged["overpay"] / merged[value_col].clip(lower=1.0)
