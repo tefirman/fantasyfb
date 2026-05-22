@@ -5,11 +5,196 @@ Monte Carlo simulation of fantasy football seasons, including regular season
 standings, playoff brackets, and payout calculations. Completed games are
 locked to their real scores so historical results aren't re-randomized;
 only future weeks contribute variance.
+
+Best ball support: pass ``best_ball=True`` to ``SeasonSimulator.simulate_season``
+(with ``roster_spots`` set on the simulator) to score each week using the
+optimal lineup from each team's full player pool rather than a manually-set
+starter list.  The public helper ``select_optimal_lineup`` and the batch
+converter ``compute_best_ball_team_projections`` are also available as
+standalone functions.
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Tuple
+
+# Flex slot eligibility — mirrors drafts/tools.py FLEX_ELIGIBILITY but kept
+# here to avoid a sim → drafts import dependency.
+_FLEX_ELIGIBILITY: Dict[str, Tuple[str, ...]] = {
+    "W/T":     ("WR", "TE"),
+    "W/R/T":   ("WR", "RB", "TE"),
+    "Q/W/R/T": ("QB", "WR", "RB", "TE"),
+}
+_BASE_POSITIONS: FrozenSet[str] = frozenset(("QB", "RB", "WR", "TE", "K", "DEF"))
+
+
+def select_optimal_lineup(
+    positions: List[str],
+    scores: np.ndarray,
+    roster_spec: Dict[str, int],
+) -> float:
+    """Return the total score of the optimal starting lineup.
+
+    Greedy algorithm: fill fixed-position slots (QB, RB, …) from the best
+    available player at each position, then fill flex slots (W/R/T, etc.)
+    from the best remaining eligible players.  This is optimal because fixed
+    slots can only hold one position type, so the only real decision is which
+    players fall into flex vs. bench — and that is always resolved by taking
+    the highest scorer among those eligible.
+
+    Args:
+        positions: Position string for each player on the roster (length K).
+        scores:    Simulated fantasy score for each player (length K).
+        roster_spec: ``{slot: count}`` mapping.  BN/IR keys are ignored.
+
+    Returns:
+        Sum of scores for the optimal starting lineup.
+    """
+    scores = np.asarray(scores, dtype=float)
+    if len(positions) == 0:
+        return 0.0
+    available = np.ones(len(positions), dtype=bool)
+    total = 0.0
+
+    fixed = [(s, c) for s, c in roster_spec.items()
+             if s in _BASE_POSITIONS and c > 0]
+    flex  = [(s, c) for s, c in roster_spec.items()
+             if s in _FLEX_ELIGIBILITY and c > 0]
+
+    for slot, count in fixed:
+        pos_mask = np.array([p == slot for p in positions])
+        for _ in range(count):
+            eligible = pos_mask & available
+            if not eligible.any():
+                break
+            best = int(np.where(eligible, scores, -np.inf).argmax())
+            total += scores[best]
+            available[best] = False
+
+    for slot, count in flex:
+        eligible_positions = _FLEX_ELIGIBILITY[slot]
+        pos_mask = np.array([p in eligible_positions for p in positions])
+        for _ in range(count):
+            eligible = pos_mask & available
+            if not eligible.any():
+                break
+            best = int(np.where(eligible, scores, -np.inf).argmax())
+            total += scores[best]
+            available[best] = False
+
+    return total
+
+
+def _lineup_score_vectorized(
+    positions: np.ndarray,
+    sim_scores: np.ndarray,
+    roster_spec: Dict[str, int],
+) -> np.ndarray:
+    """Vectorized optimal lineup scorer across many simulations.
+
+    Args:
+        positions:  Shape ``(K,)`` array of position strings.
+        sim_scores: Shape ``(num_sims, K)`` array of simulated player scores.
+        roster_spec: ``{slot: count}`` mapping; BN/IR ignored.
+
+    Returns:
+        Shape ``(num_sims,)`` array of optimal lineup totals.
+    """
+    num_sims, K = sim_scores.shape
+    available = np.ones((num_sims, K), dtype=bool)
+    total = np.zeros(num_sims)
+    sim_range = np.arange(num_sims)
+
+    fixed = [(s, c) for s, c in roster_spec.items()
+             if s in _BASE_POSITIONS and c > 0]
+    flex  = [(s, c) for s, c in roster_spec.items()
+             if s in _FLEX_ELIGIBILITY and c > 0]
+
+    def _pick_best(pos_mask: np.ndarray) -> None:
+        # pos_mask: (K,) boolean indicating which players are eligible by position
+        eligible = available & pos_mask[np.newaxis, :]        # (num_sims, K)
+        has_eligible = eligible.any(axis=1)                   # (num_sims,)
+        masked = np.where(eligible, sim_scores, -np.inf)
+        best_idx = masked.argmax(axis=1)                      # (num_sims,)
+        total[sim_range] += np.where(
+            has_eligible, sim_scores[sim_range, best_idx], 0.0,
+        )
+        active = np.where(has_eligible)[0]
+        if active.size:
+            available[active, best_idx[active]] = False
+
+    for slot, count in fixed:
+        pos_mask = positions == slot
+        for _ in range(count):
+            _pick_best(pos_mask)
+
+    for slot, count in flex:
+        eligible_pos = _FLEX_ELIGIBILITY[slot]
+        pos_mask = np.isin(positions, eligible_pos)
+        for _ in range(count):
+            _pick_best(pos_mask)
+
+    return total
+
+
+def compute_best_ball_team_projections(
+    player_projections: pd.DataFrame,
+    roster_spots,
+    n_samples: int = 1000,
+) -> pd.DataFrame:
+    """Convert per-player projections into team-level best-ball projections.
+
+    For each ``(fantasy_team, week)`` group, simulates ``n_samples`` sets of
+    player scores, selects the optimal lineup for each, and returns the mean
+    and standard deviation of the resulting team scores.  The output has the
+    same ``[fantasy_team, week, points_avg, points_stdev]`` schema as the
+    team-level projections expected by ``SeasonSimulator.simulate_season``.
+
+    Args:
+        player_projections: One row per player per week, with columns
+            ``[fantasy_team, week, position, points_avg, points_stdev]``.
+        roster_spots: Roster-spots DataFrame (``position``/``count`` columns)
+            or ``{slot: count}`` dict.  BN/IR are stripped automatically.
+        n_samples: Number of lineup simulations per ``(team, week)`` used
+            to estimate the best-ball score distribution.
+
+    Returns:
+        DataFrame with columns ``[fantasy_team, week, points_avg, points_stdev]``.
+    """
+    if isinstance(roster_spots, pd.DataFrame):
+        spec: Dict[str, int] = {
+            row["position"]: int(row["count"])
+            for _, row in roster_spots.iterrows()
+            if row["position"] not in ("BN", "IR") and int(row["count"]) > 0
+        }
+    else:
+        spec = {
+            k: int(v) for k, v in roster_spots.items()
+            if k not in ("BN", "IR") and int(v) > 0
+        }
+
+    rows = []
+    for (team, week), group in player_projections.groupby(["fantasy_team", "week"]):
+        positions = group["position"].to_numpy(dtype=str)
+        avgs = group["points_avg"].to_numpy(dtype=float)
+        stds = group["points_stdev"].fillna(0.0).to_numpy(dtype=float)
+        K = len(positions)
+
+        sim_scores = np.random.normal(
+            loc=avgs[np.newaxis, :],
+            scale=np.maximum(stds[np.newaxis, :], 0.0),
+            size=(n_samples, K),
+        )
+        lineup_scores = _lineup_score_vectorized(positions, sim_scores, spec)
+
+        rows.append({
+            "fantasy_team": team,
+            "week": week,
+            "points_avg": float(lineup_scores.mean()),
+            "points_stdev": float(lineup_scores.std()),
+        })
+
+    return pd.DataFrame(rows)
 
 
 class SeasonSimulator:
@@ -20,7 +205,7 @@ class SeasonSimulator:
     for any fantasy football league structure.
     """
 
-    def __init__(self, league_settings: Dict):
+    def __init__(self, league_settings: Dict, roster_spots=None):
         """
         Initialize simulator with league-specific settings.
 
@@ -30,8 +215,12 @@ class SeasonSimulator:
                 - num_playoff_teams: Number of teams making playoffs
                 - uses_playoff_reseeding: Whether to reseed after each round
                 - num_teams: Total teams in league
+            roster_spots: Roster-spots DataFrame (position/count columns) or
+                {slot: count} dict.  Required when ``simulate_season`` is
+                called with ``best_ball=True``.
         """
         self.settings = league_settings
+        self.roster_spots = roster_spots
 
         required_keys = ['playoff_start_week', 'num_playoff_teams']
         if not all(key in league_settings for key in required_keys):
@@ -41,6 +230,7 @@ class SeasonSimulator:
                        player_projections: pd.DataFrame,
                        schedule_df: pd.DataFrame,
                        num_sims: int = 10000,
+                       best_ball: bool = False,
                        include_playoffs: bool = True,
                        payouts: List[float] = [800, 300, 100],
                        fixed_winner: Optional[List] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -48,9 +238,15 @@ class SeasonSimulator:
         Simulate a complete fantasy season with playoffs.
 
         Args:
-            player_projections: DataFrame with columns [fantasy_team, week, points_avg, points_stdev]
+            player_projections: DataFrame with columns [fantasy_team, week, points_avg, points_stdev].
+                When ``best_ball=True``, must also have ``position`` column and one row per
+                player per week; the simulator converts these to team-level projections via
+                optimal lineup selection before running the Monte Carlo.
             schedule_df: DataFrame with columns [week, team_1, team_2, score_1, score_2]
             num_sims: Number of Monte Carlo simulations
+            best_ball: When True, compute weekly team scores using the optimal lineup
+                from each team's full player pool (best ball mode).  Requires
+                ``roster_spots`` to be set on this simulator instance.
             include_playoffs: Whether to simulate playoffs
             payouts: Prize amounts for [1st, 2nd, 3rd, ...]
             fixed_winner: Optional [week, team_name] to force a specific outcome
@@ -58,6 +254,16 @@ class SeasonSimulator:
         Returns:
             Tuple of (schedule_results, standings_results) DataFrames
         """
+        if best_ball:
+            if self.roster_spots is None:
+                raise ValueError(
+                    "roster_spots must be provided on SeasonSimulator "
+                    "to use best_ball=True."
+                )
+            player_projections = compute_best_ball_team_projections(
+                player_projections, self.roster_spots
+            )
+
         # Lock in real scores for completed games before any simulation runs.
         # Both the regular-season Monte Carlo and the playoff bracket then
         # inherit deterministic outcomes for anything already played.
@@ -473,19 +679,28 @@ def simulate_season(player_projections: pd.DataFrame,
                    schedule_df: pd.DataFrame,
                    league_settings: Dict,
                    num_sims: int = 10000,
-                   payouts: List[float] = [800, 300, 100]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                   payouts: List[float] = [800, 300, 100],
+                   best_ball: bool = False,
+                   roster_spots=None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Convenience function to simulate a season in one call.
 
     Args:
-        player_projections: Team projections by week
+        player_projections: Team projections by week (or per-player projections
+            when ``best_ball=True``).
         schedule_df: League schedule
         league_settings: League configuration
         num_sims: Number of simulations
         payouts: Prize distribution
+        best_ball: Use optimal-lineup scoring (requires ``roster_spots``).
+        roster_spots: Roster-spots DataFrame or dict; required when
+            ``best_ball=True``.
 
     Returns:
         Tuple of (schedule_results, standings_results)
     """
-    simulator = SeasonSimulator(league_settings)
-    return simulator.simulate_season(player_projections, schedule_df, num_sims, True, payouts)
+    simulator = SeasonSimulator(league_settings, roster_spots=roster_spots)
+    return simulator.simulate_season(
+        player_projections, schedule_df, num_sims,
+        best_ball=best_ball, include_playoffs=True, payouts=payouts,
+    )

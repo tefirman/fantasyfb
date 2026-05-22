@@ -43,6 +43,19 @@ DEFAULT_DISPLAY_COLS: tuple[str, ...] = (
     "adp", "adp_round", "adp_value",
 )
 
+# Best-ball views swap in `bb_vorp` (upside-weighted) and show `points_stdev`.
+_BB_DISPLAY_COLS: tuple[str, ...] = (
+    "name", "position", "current_team", "tier",
+    "vorp_adjusted", "need_factor",
+    "bb_vorp", "points_rate", "points_stdev",
+    "adp", "adp_round", "adp_value",
+)
+
+# Weight applied to points_stdev when computing best-ball VORP.
+# Positive value rewards high-upside players: their boom weeks automatically
+# start in best ball, so variance is an asset rather than a risk.
+_BB_UPSIDE_FACTOR: float = 0.5
+
 
 def build_board(
     players: pd.DataFrame,
@@ -272,6 +285,90 @@ def random_pick(
     weights = weights / weights.sum()
     idx = int(rng.choice(len(pool), p=weights))
     return str(pool.iloc[idx]["name"])
+
+
+def _add_bb_vorp(df: pd.DataFrame, upside_factor: float = _BB_UPSIDE_FACTOR) -> pd.DataFrame:
+    """Add ``bb_vorp`` column: upside-weighted value over replacement.
+
+    ``bb_vorp = (points_rate + upside_factor * points_stdev) - replacement_rate``
+
+    Falls back gracefully when ``points_stdev`` or ``replacement_rate`` are
+    absent (e.g. a board built without those columns).
+    """
+    df = df.copy()
+    stdev = df["points_stdev"].fillna(0.0) if "points_stdev" in df.columns else 0.0
+    repl  = df["replacement_rate"].fillna(0.0) if "replacement_rate" in df.columns else 0.0
+    df["bb_vorp"] = df["points_rate"].fillna(0.0) + upside_factor * stdev - repl
+    return df
+
+
+def view_bestball(
+    board: pd.DataFrame,
+    *,
+    exclude: Iterable[str] = (),
+    limit_per_position: int = 5,
+    positions: Optional[Iterable[str]] = None,
+    my_roster: Optional[Roster] = None,
+    upside_factor: float = _BB_UPSIDE_FACTOR,
+) -> pd.DataFrame:
+    """Top-N available players per position ranked by best-ball adjusted VORP.
+
+    Like ``view_best`` but rewards upside: ``bb_vorp`` adds a fraction of
+    each player's ``points_stdev`` to their projected rate before computing
+    value over replacement.  In best ball there are no weekly lineup
+    decisions — a player's boom week always counts — so variance is an asset
+    rather than a risk and high-ceiling players deserve more credit.
+
+    ``upside_factor`` (default 0.5) controls how heavily stdev is weighted.
+    Need-scaling (via ``my_roster``) works identically to ``view_best``.
+    """
+    avail = _available(board, exclude)
+    if positions is not None:
+        avail = avail[avail["position"].isin(set(positions))]
+    avail = _add_bb_vorp(avail, upside_factor)
+
+    sort_col = "bb_vorp"
+    if my_roster is not None:
+        avail["need_factor"] = avail["position"].map(my_roster.need_score)
+        avail["vorp_adjusted"] = avail["bb_vorp"] * avail["need_factor"]
+        sort_col = "vorp_adjusted"
+
+    avail = avail.sort_values(sort_col, ascending=False, na_position="last")
+    top = avail.groupby("position", sort=False).head(limit_per_position)
+    return top[_ordered_columns(top, _BB_DISPLAY_COLS)].reset_index(drop=True)
+
+
+def view_nearestbestball(
+    board: pd.DataFrame,
+    *,
+    pick_overall: int,
+    num_teams: int,
+    exclude: Iterable[str] = (),
+    window_rounds: int = 2,
+    my_roster: Optional[Roster] = None,
+    upside_factor: float = _BB_UPSIDE_FACTOR,
+) -> pd.DataFrame:
+    """Available players in the next ADP window, ranked by best-ball VORP.
+
+    Like ``view_nearest`` but the sort metric is ``bb_vorp`` (upside-weighted
+    value over replacement) rather than standard VORP.  Use this during a
+    best-ball draft when you want to see which near-ADP players offer the
+    most ceiling, not just the safest floor.
+    """
+    avail = _available(board, exclude)
+    cutoff = pick_overall + window_rounds * num_teams
+    near = avail[avail["adp"].notna() & (avail["adp"] <= cutoff)]
+    near = _add_bb_vorp(near, upside_factor)
+
+    sort_col = "bb_vorp"
+    if my_roster is not None:
+        near = near.copy()
+        near["need_factor"] = near["position"].map(my_roster.need_score)
+        near["vorp_adjusted"] = near["bb_vorp"] * near["need_factor"]
+        sort_col = "vorp_adjusted"
+
+    near = near.sort_values(sort_col, ascending=False, na_position="last")
+    return near[_ordered_columns(near, _BB_DISPLAY_COLS)].reset_index(drop=True)
 
 
 def view_roster(board: pd.DataFrame, team_name: str) -> pd.DataFrame:
