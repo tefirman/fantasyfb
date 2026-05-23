@@ -215,6 +215,39 @@ class TestComputeBestBallTeamProjections:
         # Should always pick the 30-point QB
         assert result["points_avg"].values[0] == pytest.approx(30.0, abs=0.1)
 
+    def test_variance_is_asset_when_players_compete_for_same_slot(self):
+        """Core best ball math: E[max(X, Y)] > E[max(X, Z)] when Var(Y) > Var(Z)
+        and E[Y] == E[Z].
+
+        Two teams have the same lead WR and a backup WR with identical averages.
+        The boom/bust team's backup has much higher variance, so its ceiling weeks
+        more often beat the lead WR — the slot is "saved" on the lead's bad weeks.
+        The steady team's backup rarely surpasses the lead, so it contributes less.
+
+        This tests that variance is genuinely rewarded, not just expected value.
+        """
+        np.random.seed(42)
+        rows = [
+            # Lead WR: identical on both teams
+            {"fantasy_team": "Steady",    "week": 1, "position": "WR",
+             "points_avg": 20.0, "points_stdev": 5.0},
+            {"fantasy_team": "Boom/Bust", "week": 1, "position": "WR",
+             "points_avg": 20.0, "points_stdev": 5.0},
+            # Backup WR: same average (15), but Boom/Bust team has much higher stdev
+            {"fantasy_team": "Steady",    "week": 1, "position": "WR",
+             "points_avg": 15.0, "points_stdev": 3.0},
+            {"fantasy_team": "Boom/Bust", "week": 1, "position": "WR",
+             "points_avg": 15.0, "points_stdev": 12.0},
+        ]
+        # One WR slot: best ball picks whichever WR scores higher each week
+        spec = {"WR": 1}
+        result = compute_best_ball_team_projections(pd.DataFrame(rows), spec, n_samples=10000)
+
+        steady_avg = result.loc[result.fantasy_team == "Steady",    "points_avg"].values[0]
+        boom_avg   = result.loc[result.fantasy_team == "Boom/Bust", "points_avg"].values[0]
+        # Analytically: E[max(N(20,5), N(15,12))] ≈ 23.1 vs E[max(N(20,5), N(15,3))] ≈ 20.7
+        assert boom_avg > steady_avg
+
 
 # ---------------------------------------------------------------------------
 # SeasonSimulator with best_ball=True
