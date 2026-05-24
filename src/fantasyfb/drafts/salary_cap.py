@@ -368,17 +368,27 @@ def main(argv=None) -> int:
             keepers_raw["salary"].astype(int) + args.keeper_surcharge
         )
 
-        # Validate: no team's keeper commitments may exceed their cap.
+        # Validate: each team must be able to pay their keeper prices AND
+        # still fill every remaining roster slot at min_bid.
+        # Max affordable keeper spend = salary_cap - (remaining_slots * min_bid).
+        team_keeper_counts = keepers_raw.groupby("fantasy_team")["winning_bid"].count()
         team_totals = keepers_raw.groupby("fantasy_team")["winning_bid"].sum()
-        over_cap = team_totals[team_totals > args.salary_cap]
-        if not over_cap.empty:
-            for team, total in over_cap.items():
-                print(f"WARNING: {team}'s keeper commitments (${total}) exceed "
-                      f"the salary cap (${args.salary_cap}). Dropping all "
-                      f"keepers for that team.")
-            keepers_raw = keepers_raw[
-                ~keepers_raw["fantasy_team"].isin(over_cap.index)
-            ]
+        errors = []
+        for team in team_totals.index:
+            total = int(team_totals[team])
+            n_keepers = int(team_keeper_counts[team])
+            remaining_slots = roster_size - n_keepers
+            max_affordable = args.salary_cap - remaining_slots * args.min_bid
+            if total > max_affordable:
+                errors.append(
+                    f"  {team}: ${total} in keepers, but cap allows at most "
+                    f"${max_affordable} (${args.salary_cap} cap - "
+                    f"{remaining_slots} remaining slots × ${args.min_bid} min bid)"
+                )
+        if errors:
+            print("ERROR: The following teams cannot afford their keepers. "
+                  "Fix the keeper CSV and re-run.\n" + "\n".join(errors))
+            return 1
 
         if not keepers_raw.empty:
             keepers_df = keepers_raw[["name", "fantasy_team", "winning_bid"]].copy()
