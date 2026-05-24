@@ -324,8 +324,20 @@ def main(argv=None) -> int:
                         bid=int(row["winning_bid"]))
         output_path = args.output or args.inprogress
     else:
-        custom = input("Would you like to provide custom team names? (y/n) ")
-        league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
+        use_yahoo = input(
+            "Use Yahoo team names? (y/n, default y) "
+        ).strip().lower()
+        if use_yahoo in ("n", "no"):
+            custom = input("Customize team names manually? (y/n) ")
+            league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
+        else:
+            # Pass Yahoo names in the order setup_teams will process them
+            # (user's team first, then all others) so each team gets its
+            # real Yahoo name instead of the generic "Team #N" fallback.
+            my_entry = next(t for t in league.teams if t["name"] == league.name)
+            other_entries = [t for t in league.teams if t["name"] != league.name]
+            yahoo_names = [t["name"] for t in [my_entry] + other_entries]
+            league = setup_teams(league, already=yahoo_names)
         progress = pd.DataFrame(columns=["name", "fantasy_team", "winning_bid"])
         output_path = args.output or "DraftProgressSalaryCap.csv"
 
