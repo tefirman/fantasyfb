@@ -69,6 +69,7 @@ def build_board(
     *,
     salary_cap: int,
     min_bid: int = 1,
+    keepers: Optional[pd.DataFrame] = None,
     gap_z: float = 1.0,
     top_n: int = 30,
     max_per_tier: int = 12,
@@ -83,22 +84,67 @@ def build_board(
     Unlike the snake board there's no ADP merge -- salary cap drafts
     are bid-driven, not pick-order-driven. The cockpit shell can still
     layer ADP on if it wants nomination-order analytics.
+
+    keepers : optional DataFrame with columns ``name``, ``fantasy_team``,
+        ``winning_bid``. When provided, keeper players are excluded from
+        the salary-value computation pool so values reflect the competitive
+        auction pool only. VORP is still computed on the full pool so
+        replacement levels are correct. Keepers are seeded onto the board
+        as already-drafted rows (``winning_bid`` pre-set, ``salary_value``
+        taken from the full-pool computation for display/reference).
     """
     pool = (
         players[~players["player_id_sr"].astype(str).str.startswith("avg_")]
         .drop_duplicates(subset=["player_id_sr"], keep="first")
+        .reset_index(drop=True)
         .copy()
     )
-    with_vorp = compute_vorp(pool, roster_spec, num_teams)
-    tiered = assign_tiers(
-        with_vorp, top_n=top_n, max_per_tier=max_per_tier, min_gap_z=gap_z,
+    # Ensure fantasy_team is always present so compute_inflation and the
+    # _available helper never KeyError on a bare projection pool.
+    if "fantasy_team" not in pool.columns:
+        pool["fantasy_team"] = pd.NA
+
+    keeper_names: set = set(keepers["name"]) if keepers is not None and not keepers.empty else set()
+
+    if not keeper_names:
+        with_vorp = compute_vorp(pool, roster_spec, num_teams)
+        tiered = assign_tiers(
+            with_vorp, top_n=top_n, max_per_tier=max_per_tier, min_gap_z=gap_z,
+        )
+        valued = compute_salary_values(
+            tiered, roster_spec, num_teams,
+            salary_cap=salary_cap, min_bid=min_bid,
+        )
+        valued["winning_bid"] = np.nan
+        return valued
+
+    # Keeper path: VORP on the full pool (correct replacement levels), salary
+    # values on the auction pool only (correct effective $ denominator).
+    full_vorp = compute_vorp(pool, roster_spec, num_teams)
+    full_tiered = assign_tiers(
+        full_vorp, top_n=top_n, max_per_tier=max_per_tier, min_gap_z=gap_z,
     )
-    valued = compute_salary_values(
-        tiered, roster_spec, num_teams,
+
+    auction_tiered = full_tiered[~full_tiered["name"].isin(keeper_names)].copy()
+    auction_valued = compute_salary_values(
+        auction_tiered, roster_spec, num_teams,
         salary_cap=salary_cap, min_bid=min_bid,
     )
-    valued["winning_bid"] = np.nan
-    return valued
+    auction_valued["winning_bid"] = np.nan
+
+    # Keeper salary_value: from the full-pool computation, for reference only.
+    full_valued = compute_salary_values(
+        full_tiered, roster_spec, num_teams,
+        salary_cap=salary_cap, min_bid=min_bid,
+    )
+    keeper_display = full_valued[full_valued["name"].isin(keeper_names)].copy()
+    kp_lookup = keepers.set_index("name")
+    keeper_display["fantasy_team"] = keeper_display["name"].map(kp_lookup["fantasy_team"])
+    keeper_display["winning_bid"] = keeper_display["name"].map(
+        kp_lookup["winning_bid"].astype(float)
+    )
+
+    return pd.concat([auction_valued, keeper_display], ignore_index=True)
 
 
 def compute_inflation(

@@ -382,6 +382,27 @@ class TestArgParser:
         args = parser.parse_args(["--team", "X", "--season", "2026"])
         assert args.season == 2026
 
+    def test_keeper_surcharge_defaults_to_five(self):
+        """The default surcharge is $5 to match our league's cost-plus-5
+        rule. Users in different leagues can override with --keeper-surcharge."""
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X"])
+        assert args.keeper_surcharge == 5
+
+    def test_keeper_surcharge_override(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--keeper-surcharge", "10",
+        ])
+        assert args.keeper_surcharge == 10
+
+    def test_keeper_surcharge_zero_uses_csv_salary_as_is(self):
+        """--keeper-surcharge 0 means the CSV salary IS the final price,
+        matching the old V1 behavior."""
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--keeper-surcharge", "0"])
+        assert args.keeper_surcharge == 0
+
 
 # --------------------------------------------------------------------- #
 # Command list / help alignment

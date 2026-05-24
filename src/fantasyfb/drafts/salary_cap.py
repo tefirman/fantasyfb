@@ -238,7 +238,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "explicitly when drafting pre-season.")
     p.add_argument("--keepers", default=None,
                    help="path to a keepers CSV (columns: name, "
-                        "fantasy_team, salary)")
+                        "fantasy_team, salary -- last year's winning "
+                        "price; final keeper price = salary + "
+                        "--keeper-surcharge)")
+    p.add_argument("--keeper-surcharge", type=int, default=5,
+                   dest="keeper_surcharge",
+                   help="dollars added to each keeper's last-year salary "
+                        "(default 5; use 0 to treat the CSV salary as "
+                        "the final keeper price)")
     p.add_argument("--exclude", default=None,
                    help="comma-separated players to exclude from views")
     p.add_argument("--inprogress", default=None,
@@ -317,39 +324,95 @@ def main(argv=None) -> int:
                         bid=int(row["winning_bid"]))
         output_path = args.output or args.inprogress
     else:
-        custom = input("Would you like to provide custom team names? (y/n) ")
-        league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
+        use_yahoo = input(
+            "Use Yahoo team names? (y/n, default y) "
+        ).strip().lower()
+        if use_yahoo in ("n", "no"):
+            custom = input("Customize team names manually? (y/n) ")
+            league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
+        else:
+            # Pass Yahoo names in the order setup_teams will process them
+            # (user's team first, then all others) so each team gets its
+            # real Yahoo name instead of the generic "Team #N" fallback.
+            my_entry = next(t for t in league.teams if t["name"] == league.name)
+            other_entries = [t for t in league.teams if t["name"] != league.name]
+            yahoo_names = [t["name"] for t in [my_entry] + other_entries]
+            league = setup_teams(league, already=yahoo_names)
         progress = pd.DataFrame(columns=["name", "fantasy_team", "winning_bid"])
         output_path = args.output or "DraftProgressSalaryCap.csv"
 
-    # Keepers: apply to the league before building the board so they
-    # show up in views correctly.
+    # Keepers: compute cost-plus-N prices, validate team budgets, and
+    # apply to the league before building the board.
+    keepers_df = None
     if args.keepers and os.path.exists(args.keepers):
-        keepers = pd.read_csv(args.keepers)
-        bad_names = ~keepers["name"].isin(league.players["name"])
+        keepers_raw = pd.read_csv(args.keepers)
+        bad_names = ~keepers_raw["name"].isin(league.players["name"])
         if bad_names.any():
             print("Player names not found in projections, ignoring: "
-                  + ", ".join(keepers.loc[bad_names, "name"].astype(str)))
-            keepers = keepers[~bad_names]
+                  + ", ".join(keepers_raw.loc[bad_names, "name"].astype(str)))
+            keepers_raw = keepers_raw[~bad_names]
+        # Accept the user's original Yahoo team name as an alias for "My Team"
+        # since setup_teams has already renamed it by this point.
+        keepers_raw["fantasy_team"] = keepers_raw["fantasy_team"].replace(
+            {args.team: "My Team"}
+        )
         team_names = set(_team_names(league))
-        bad_teams = ~keepers["fantasy_team"].isin(team_names)
+        bad_teams = ~keepers_raw["fantasy_team"].isin(team_names)
         if bad_teams.any():
             print("Team names not in league, ignoring: "
-                  + ", ".join(keepers.loc[bad_teams, "fantasy_team"].astype(str)))
-            keepers = keepers[~bad_teams]
-        for _, kp in keepers.iterrows():
-            _apply_pick(league, board=None, name=kp["name"],
-                        team_name=kp["fantasy_team"], bid=int(kp["salary"]))
-            progress = pd.concat([progress, pd.DataFrame([{
-                "name": kp["name"],
-                "fantasy_team": kp["fantasy_team"],
-                "winning_bid": int(kp["salary"]),
-            }])], ignore_index=True)
-        _save_progress(progress, output_path)
+                  + ", ".join(keepers_raw.loc[bad_teams, "fantasy_team"].astype(str)))
+            keepers_raw = keepers_raw[~bad_teams]
+
+        keepers_raw = keepers_raw.copy()
+        keepers_raw["winning_bid"] = (
+            keepers_raw["salary"].astype(int) + args.keeper_surcharge
+        )
+
+        # Validate: each team must be able to pay their keeper prices AND
+        # still fill every remaining roster slot at min_bid.
+        # Max affordable keeper spend = salary_cap - (remaining_slots * min_bid).
+        team_keeper_counts = keepers_raw.groupby("fantasy_team")["winning_bid"].count()
+        team_totals = keepers_raw.groupby("fantasy_team")["winning_bid"].sum()
+        errors = []
+        for team in team_totals.index:
+            total = int(team_totals[team])
+            n_keepers = int(team_keeper_counts[team])
+            remaining_slots = roster_size - n_keepers
+            max_affordable = args.salary_cap - remaining_slots * args.min_bid
+            if total > max_affordable:
+                errors.append(
+                    f"  {team}: ${total} in keepers, but cap allows at most "
+                    f"${max_affordable} (${args.salary_cap} cap - "
+                    f"{remaining_slots} remaining slots × ${args.min_bid} min bid)"
+                )
+        if errors:
+            print("ERROR: The following teams cannot afford their keepers. "
+                  "Fix the keeper CSV and re-run.\n" + "\n".join(errors))
+            return 1
+
+        if not keepers_raw.empty:
+            keepers_df = keepers_raw[["name", "fantasy_team", "winning_bid"]].copy()
+
+            # Apply to league.players for season simulation compatibility.
+            # Skip any players already in progress (draft-resume safety).
+            already_applied = set(progress["name"])
+            for _, kp in keepers_df.iterrows():
+                if kp["name"] in already_applied:
+                    continue
+                _apply_pick(league, board=None, name=kp["name"],
+                            team_name=kp["fantasy_team"],
+                            bid=int(kp["winning_bid"]))
+                progress = pd.concat([progress, pd.DataFrame([{
+                    "name": kp["name"],
+                    "fantasy_team": kp["fantasy_team"],
+                    "winning_bid": int(kp["winning_bid"]),
+                }])], ignore_index=True)
+            _save_progress(progress, output_path)
 
     board = cockpit.build_board(
         league.players, league.roster_spots, num_teams,
         salary_cap=args.salary_cap, min_bid=args.min_bid,
+        keepers=keepers_df,
     )
     # Replay applied picks onto the board (build_board snapshots the
     # pool but doesn't know about winning_bid).
