@@ -99,6 +99,10 @@ def build_board(
         .reset_index(drop=True)
         .copy()
     )
+    # Ensure fantasy_team is always present so compute_inflation and the
+    # _available helper never KeyError on a bare projection pool.
+    if "fantasy_team" not in pool.columns:
+        pool["fantasy_team"] = pd.NA
 
     keeper_names: set = set(keepers["name"]) if keepers is not None and not keepers.empty else set()
 
