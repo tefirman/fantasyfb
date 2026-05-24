@@ -351,6 +351,11 @@ def main(argv=None) -> int:
             print("Player names not found in projections, ignoring: "
                   + ", ".join(keepers_raw.loc[bad_names, "name"].astype(str)))
             keepers_raw = keepers_raw[~bad_names]
+        # Accept the user's original Yahoo team name as an alias for "My Team"
+        # since setup_teams has already renamed it by this point.
+        keepers_raw["fantasy_team"] = keepers_raw["fantasy_team"].replace(
+            {args.team: "My Team"}
+        )
         team_names = set(_team_names(league))
         bad_teams = ~keepers_raw["fantasy_team"].isin(team_names)
         if bad_teams.any():
