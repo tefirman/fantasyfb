@@ -325,10 +325,17 @@ class SeasonSimulator:
                           projections_df: pd.DataFrame,
                           payouts: List[float]) -> Dict[str, pd.DataFrame]:
         """Simulate playoff brackets and determine final rankings."""
-        playoff_teams = standings_df[standings_df['playoffs'] == 1].copy()
-        playoff_teams['seed'] = playoff_teams.index % self.settings['num_playoff_teams']
+        num_playoff_teams = self.settings['num_playoff_teams']
+        if num_playoff_teams not in {4, 6}:
+            # Only 4- and 6-team brackets are supported. For best-ball leagues
+            # with no traditional playoff (e.g. DraftKings), call
+            # simulate_season with include_playoffs=False instead.
+            return None
 
-        if self.settings['num_playoff_teams'] == 6:
+        playoff_teams = standings_df[standings_df['playoffs'] == 1].copy()
+        playoff_teams['seed'] = playoff_teams.index % num_playoff_teams
+
+        if num_playoff_teams == 6:
             wild_card_week = self.settings['playoff_start_week']
             semifinalists = self._simulate_6_team_wildcard(
                 playoff_teams, projections_df, wild_card_week
