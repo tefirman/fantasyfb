@@ -54,7 +54,8 @@ from . import snake_cockpit as cockpit
 
 
 _PICK_COMMANDS = (
-    "best", "nearest", "lookup", "exclude", "go back", "sim", "roster",
+    "best", "nearest", "bestball", "nearestbestball",
+    "lookup", "exclude", "go back", "sim", "roster",
     "random", "random til me", "help", "exit",
 )
 
@@ -110,18 +111,20 @@ def _set_completion_candidates(names: Iterable[str]) -> None:
 
 _HELP_TEXT = """
 Commands during the draft:
-  <player name>  Draft this player for the team on the clock
-  best           Top-N available per position by need-adjusted VORP
-  nearest        Available players within next N rounds of ADP
-  lookup         Detailed view of one player
-  exclude        Add a player to the per-session exclude list
-  roster         Show My Team's current picks
-  sim            Run a full season simulation with current rosters
-  random         Auto-pick for the team currently on the clock
-  random til me  Auto-pick for everyone until it's your turn again
-  go back        Revert the previous pick
-  help           Show this command list
-  exit           Save progress and exit the draft (no final summary)
+  <player name>   Draft this player for the team on the clock
+  best            Top-N available per position by need-adjusted VORP
+  nearest         Available players within next N rounds of ADP
+  bestball        Like 'best' but ranked by upside-weighted best-ball VORP
+  nearestbestball Like 'nearest' but ranked by best-ball VORP
+  lookup          Detailed view of one player
+  exclude         Add a player to the per-session exclude list
+  roster          Show My Team's current picks
+  sim             Run a full season simulation with current rosters
+  random          Auto-pick for the team currently on the clock
+  random til me   Auto-pick for everyone until it's your turn again
+  go back         Revert the previous pick
+  help            Show this command list
+  exit            Save progress and exit the draft (no final summary)
 """
 
 
@@ -409,6 +412,33 @@ def main(argv=None) -> int:
                 ),
                 f"Available within next {args.nearest_window} rounds of ADP "
                 f"(need-adjusted):",
+            )
+
+        elif pick_name == "bestball":
+            my_roster = cockpit.build_my_roster(
+                board, "My Team", league.roster_spots,
+            )
+            _print_df(
+                cockpit.view_bestball(
+                    board, exclude=exclude,
+                    limit_per_position=args.limit_per_position,
+                    my_roster=my_roster,
+                ),
+                "Best available by need-adjusted best-ball VORP (upside-weighted):",
+            )
+
+        elif pick_name == "nearestbestball":
+            my_roster = cockpit.build_my_roster(
+                board, "My Team", league.roster_spots,
+            )
+            _print_df(
+                cockpit.view_nearestbestball(
+                    board, pick_overall=pick_num + 1, num_teams=num_teams,
+                    exclude=exclude, window_rounds=args.nearest_window,
+                    my_roster=my_roster,
+                ),
+                f"Available within next {args.nearest_window} rounds of ADP "
+                f"(best-ball VORP, upside-weighted):",
             )
 
         elif pick_name == "lookup":
