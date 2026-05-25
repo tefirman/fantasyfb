@@ -22,15 +22,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: amber
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: amber
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
@@ -102,3 +102,6 @@ extra:
       link: https://github.com/tefirman/fantasyfb
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/fantasyfb/
+
+extra_css:
+  - stylesheets/extra.css

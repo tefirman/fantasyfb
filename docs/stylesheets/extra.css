@@ -1,0 +1,33 @@
+/* Custom palette pulled from the fantasyfb logo.
+ * Primary: deep navy from the shield interior (#06152b).
+ * Accent: warm gold from the shield trim and "FANTASY" lettering (#b29d76).
+ *
+ * Material uses `--md-primary-fg-color` for the header bar, sidebar
+ * highlights, and link color; `--md-accent-fg-color` for hover state,
+ * the copy-code button, and the "active" indicator in the nav.
+ */
+
+:root {
+  --md-primary-fg-color:           #06152b;
+  --md-primary-fg-color--light:    #1f2d4a;
+  --md-primary-fg-color--dark:     #011129;
+
+  /* Text/icon color when shown on the primary-colored background
+     (e.g. the white "fantasyfb" title in the header bar). */
+  --md-primary-bg-color:           hsla(0, 0%, 100%, 1);
+  --md-primary-bg-color--light:    hsla(0, 0%, 100%, 0.7);
+
+  --md-accent-fg-color:            #b29d76;
+  --md-accent-fg-color--transparent: rgba(178, 157, 118, 0.1);
+  --md-accent-bg-color:            hsla(0, 0%, 100%, 1);
+  --md-accent-bg-color--light:     hsla(0, 0%, 100%, 0.7);
+}
+
+/* In dark mode the navy is so close to the page background that the
+   header would blend in; lift it a touch and brighten the gold for
+   better legibility against the slate scheme. */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:           #0d2247;
+  --md-accent-fg-color:            #c9b48a;
+  --md-accent-fg-color--transparent: rgba(201, 180, 138, 0.15);
+}
