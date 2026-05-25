@@ -21,3 +21,14 @@ roster tables the CLI renders.
 ::: fantasyfb.drafts.snake_cockpit
     options:
       members: true
+
+## Salary-cap cockpit views
+
+Salary-cap analogue of the snake cockpit. Adds `salary_value` and
+`winning_bid` columns to the board; every view derives per-team
+budget and slot state from the board itself, so picks are applied
+with two cell writes and no external bookkeeping.
+
+::: fantasyfb.drafts.salary_cap_cockpit
+    options:
+      members: true

@@ -75,16 +75,21 @@ Once running, the prompt accepts:
 | `<player name>`  | Tab-completes; commits the pick to whichever team is on the clock             |
 | `best`           | Top-VORP players per position                                                  |
 | `nearest`        | Players inside the ADP window of the current pick                              |
+| `bestball`       | Like `best` but ranked by upside-weighted best-ball VORP                       |
+| `nearestbestball`| Like `nearest` but ranked by best-ball VORP                                    |
 | `lookup`         | Look up an individual player                                                   |
 | `roster`         | Your roster as drafted so far                                                  |
-| `traps`          | Overdrafted players to avoid                                                   |
+| `exclude`        | Add a player to the per-session exclude list                                   |
+| `sim`            | Run a full season simulation with current rosters                              |
 | `random`         | Auto-pick for the team on the clock (samples from `--random-pool-size`)        |
 | `random til me`  | Auto-pick until it's your turn again                                           |
 | `go back`        | Undo the last pick                                                             |
 | `help`           | Full command list                                                              |
 | `exit`           | Quit (progress is already saved on every pick)                                 |
 
-Type `<command> --help` for per-command options.
+Type `<command> --help` for per-command options. Best-ball league?
+Use `bestball` / `nearestbestball` for upside-weighted rankings —
+no separate CLI flag needed.
 
 ## Output
 

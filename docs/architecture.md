@@ -28,7 +28,7 @@ fantasyfb/
 | `fantasyfb.scoring`     | `FantasyScorer` (stats → points), `LineupOptimizer`, `MatchupModel`                  |
 | `fantasyfb.projections` | `ProjectionEngineV2` (current), V1 (legacy, scheduled for removal), `model_fitter`   |
 | `fantasyfb.sim`         | `SeasonSimulator`, `ScheduleManager`, `backtest` harness for V1-vs-V2 comparisons    |
-| `fantasyfb.drafts`      | `snake.py`, `salary_cap.py`, `prep.py`, `tools.py`, cockpit view helpers             |
+| `fantasyfb.drafts`      | `snake.py`, `salary_cap.py`, `prep.py`, `tools.py`, `snake_cockpit.py`, `salary_cap_cockpit.py` |
 | `fantasyfb.analysis`    | `WARCalculator`, `MoveAnalyzer`                                                      |
 | `fantasyfb.io`          | `FantasyExcelExporter`                                                               |
 
