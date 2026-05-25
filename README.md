@@ -1,13 +1,16 @@
-<p align="center">
-  <img src="assets/fantasyfb_logo.png" alt="fantasyfb" width="400">
-</p>
+<table>
+<tr>
+  <td><img src="https://github.com/tefirman/fantasyfb/blob/main/assets/fantasyfb_logo.png?raw=true" width="400" alt="fantasyfb logo"></td>
+  <td>
+    <h1>fantasyfb</h1>
+    <p>Fantasy football league simulation and optimization toolkit. Pulls projections from <a href="https://github.com/nflverse">nflverse</a> data, syncs roster state from a Yahoo Fantasy league, and runs Monte Carlo season simulations to value pickups, trades, and draft picks.</p>
+  </td>
+</tr>
+</table>
 
-# fantasyfb
-
-Fantasy football league simulation and optimization toolkit. Pulls
-projections from [nflverse](https://github.com/nflverse) data, syncs
-roster state from a Yahoo Fantasy league, and runs Monte Carlo season
-simulations to value pickups, trades, and draft picks.
+[![PyPI version](https://badge.fury.io/py/fantasyfb.svg)](https://badge.fury.io/py/fantasyfb)
+[![Run Tests](https://github.com/tefirman/fantasyfb/actions/workflows/test.yml/badge.svg)](https://github.com/tefirman/fantasyfb/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Docs:** <https://tefirman.github.io/fantasyfb/>
 
