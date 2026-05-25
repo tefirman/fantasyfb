@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-05-24
+
+Best ball support across the draft and simulation stack (#31), and cost-plus-N keeper support across the salary cap V2 stack (#29).
+
+### Added
+- **Best ball season simulation** (#32): `SeasonSimulator.simulate_season(best_ball=True)` auto-fills optimal weekly lineups; `select_optimal_lineup` greedily fills fixed slots then flex; `compute_best_ball_team_projections` Monte Carlos per-player projections into team-level `(avg, stdev)`.
+- **Best ball cockpit views** (#32): `view_bestball` and `view_nearestbestball` rank available players by upside-weighted VORP (`points_rate + 0.5 × points_stdev − replacement_rate`); `bestball` / `nearestbestball` wired into the snake draft pick loop.
+- **Cost-plus-N keeper pricing** (#33): new `--keeper-surcharge` flag on `salary-cap-draft` (default `5`); keeper price = last year's salary + surcharge.
+- **Keepers in salary cap V2 stack** (#33): `build_board` accepts a `keepers` DataFrame and excludes keepers from the dollar pool (VORP still computed on full pool); `MockSalaryCapDraft` accepts a `keepers` DataFrame to pre-apply keepers in mock drafts; `backtest_salary_values` gains a `keeper_names` parameter to strip pre-negotiated picks from surplus / overpay calculations.
+- **Per-team keeper budget validation** (#33): teams whose keeper commitments exceed the cap have their keepers dropped with a warning before the draft starts. Resume-safe: keepers already present in an `--inprogress` file are skipped when `--keepers` is also passed.
+
+### Changed
+- Draft cockpits default to real Yahoo team names instead of generic placeholders (#33).
+- Keepers CSV `fantasy_team` column accepts the user's actual Yahoo team name (#33).
+
+### Fixed
+- `_simulate_playoffs` returns `None` early for unsupported bracket sizes (anything other than 4 or 6 playoff teams), covering DraftKings / Underdog best-ball formats with no traditional playoff bracket (#32).
+- `build_board` no longer raises `KeyError: 'fantasy_team'` when called on a bare projection pool (#33).
+
 ## [0.4.0] — 2026-05-21
 
 Salary cap draft V2 (#11). Rebuilds `salary-cap-draft` on top of a tested valuation layer and cockpit views, with snake-parity ergonomics and a mock salary cap draft simulator.
