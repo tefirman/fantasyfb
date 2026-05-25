@@ -17,10 +17,14 @@ import pytest
 
 from fantasyfb.drafts.tools import (
     MockDraft,
+    MockSalaryCapDraft,
     assign_tiers,
+    backtest_salary_values,
     compute_replacement_levels,
+    compute_salary_values,
     compute_vorp,
     load_adp_csv,
+    max_bid,
     merge_adp,
 )
 
@@ -151,6 +155,157 @@ class TestVORP:
         out = compute_vorp(small_pool, standard_roster_spec, 12)
         worst_qb = out.loc[out["name"] == "QB23"].iloc[0]
         assert worst_qb["vorp_per_game"] < 0
+
+
+# --------------------------------------------------------------------- #
+# Salary cap values
+# --------------------------------------------------------------------- #
+
+
+class TestSalaryValues:
+    def test_money_conserved_across_drafted_picks(
+        self, small_pool, standard_roster_spec,
+    ):
+        """Money conservation: summing salary_value across the top
+        `num_teams * roster_size` players (the ones that will actually
+        get drafted) should equal `num_teams * salary_cap`. This is the
+        defining property of the valuation formula."""
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+        )
+        # 16 roster slots per team (1+2+3+1+1+1+1 starters + 6 bench) * 12 teams.
+        drafted = valued.sort_values("salary_value", ascending=False).head(16 * 12)
+        assert drafted["salary_value"].sum() == pytest.approx(12 * 200)
+
+    def test_top_player_has_highest_value(
+        self, small_pool, standard_roster_spec,
+    ):
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+        )
+        # RB00 has the highest VORP in this pool (top RB, low RB
+        # replacement level) so it should also get the highest value.
+        top_by_vorp = valued.sort_values("vorp_season", ascending=False).iloc[0]
+        top_by_value = valued.sort_values("salary_value", ascending=False).iloc[0]
+        assert top_by_value["name"] == top_by_vorp["name"]
+
+    def test_below_replacement_gets_min_bid(
+        self, small_pool, standard_roster_spec,
+    ):
+        """Players with non-positive VORP fall outside the starter
+        cohort and get exactly the min bid."""
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec,
+            num_teams=12, salary_cap=200, min_bid=1,
+        )
+        worst_qb = valued.loc[valued["name"] == "QB23"].iloc[0]
+        assert worst_qb["salary_value"] == 1.0
+
+    def test_synthetic_avg_rows_excluded(self, standard_roster_spec):
+        """avg_ synthetic rows should never receive an above-min value;
+        they aren't real draftable players."""
+        rows = []
+        for i in range(20):
+            rows.append(_make_projection(f"RB{i:02d}", "RB", 20 - i * 0.5))
+        # Two synthetic average rows that would otherwise dominate VORP.
+        rows.append(_make_projection("avg starter", "RB", 100,
+                                     player_id_sr="avg_rb_starter"))
+        rows.append(_make_projection("avg bench", "RB", 50,
+                                     player_id_sr="avg_rb_bench"))
+        df = pd.DataFrame(rows)
+        with_vorp = compute_vorp(df, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+        )
+        synthetic = valued[valued["player_id_sr"].str.startswith("avg_")]
+        assert (synthetic["salary_value"] == 1.0).all()
+
+    def test_too_small_cap_raises(self, small_pool, standard_roster_spec):
+        """A cap that can't even cover min_bid * roster_size is a
+        configuration error."""
+        with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+        with pytest.raises(ValueError, match="too small"):
+            compute_salary_values(
+                with_vorp, standard_roster_spec,
+                num_teams=12, salary_cap=10, min_bid=1,
+            )
+
+    def test_missing_vorp_raises(self, small_pool, standard_roster_spec):
+        with pytest.raises(ValueError, match="vorp_season"):
+            compute_salary_values(
+                small_pool, standard_roster_spec,
+                num_teams=12, salary_cap=200,
+            )
+
+    def test_accepts_dict_roster_spec(self, small_pool):
+        """Dict and DataFrame roster_spec forms produce identical values."""
+        spec_df = pd.DataFrame({
+            "position": ["QB", "RB", "WR", "TE", "K", "DEF", "BN"],
+            "count":    [1,    2,    3,    1,    1,    1,     6],
+        })
+        spec_dict = {"QB": 1, "RB": 2, "WR": 3, "TE": 1,
+                     "K": 1, "DEF": 1, "BN": 6}
+        a = compute_salary_values(
+            compute_vorp(small_pool, spec_df, 12),
+            spec_df, num_teams=12, salary_cap=200,
+        )
+        b = compute_salary_values(
+            compute_vorp(small_pool, spec_dict, 12),
+            spec_dict, num_teams=12, salary_cap=200,
+        )
+        assert (a["salary_value"].to_numpy()
+                == b["salary_value"].to_numpy()).all()
+
+    def test_all_negative_vorp_collapses_to_min_bid(self, standard_roster_spec):
+        """If nobody has positive VORP (degenerate pool below replacement
+        level), every player gets exactly min_bid -- no division by zero,
+        no negative values."""
+        rows = [_make_projection(f"WR{i:02d}", "WR", 1.0) for i in range(50)]
+        df = pd.DataFrame(rows)
+        with_vorp = compute_vorp(df, standard_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, standard_roster_spec,
+            num_teams=12, salary_cap=200, min_bid=1,
+        )
+        assert (valued["salary_value"] == 1.0).all()
+
+
+# --------------------------------------------------------------------- #
+# Max bid
+# --------------------------------------------------------------------- #
+
+
+class TestMaxBid:
+    def test_full_budget_full_roster(self):
+        """$200 cap, 16 slots, $1 min bid: max bid = $200 - 15 = $185."""
+        assert max_bid(200, 16) == 185
+
+    def test_last_slot_uses_full_remaining_budget(self):
+        """With one slot left, max bid is the entire remaining budget --
+        no reserve needed for future picks."""
+        assert max_bid(47, 1) == 47
+
+    def test_zero_open_slots_returns_zero(self):
+        """A full roster can't bid on anyone."""
+        assert max_bid(50, 0) == 0
+
+    def test_under_water_budget_returns_zero(self):
+        """If the budget can't even cover min_bid for every remaining
+        slot, the function caps at 0 rather than going negative."""
+        assert max_bid(5, 10) == 0
+
+    def test_custom_min_bid(self):
+        """A $2 minimum reserves twice as much per remaining slot."""
+        assert max_bid(200, 16, min_bid=2) == 200 - 15 * 2
+
+    def test_exact_reserve_leaves_one_min_bid(self):
+        """Edge case: budget equals exactly what's needed to bid min on
+        each slot. Max bid is min_bid (we can bid the minimum on this
+        slot and still cover the rest)."""
+        assert max_bid(16, 16, min_bid=1) == 1
 
 
 # --------------------------------------------------------------------- #
@@ -485,3 +640,295 @@ class TestMockDraft:
         assert (always_taken_early["available_pct"] < 0.2).all()
         late = avail[avail["avg_pick_taken"] > 100]
         assert (late["available_pct"] > 0.8).all()
+
+
+# --------------------------------------------------------------------- #
+# Salary cap mock auction simulator
+# --------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def salary_ready_pool(small_pool, standard_roster_spec) -> pd.DataFrame:
+    """Pool with VORP + salary_value attached -- the input contract
+    for MockSalaryCapDraft."""
+    with_vorp = compute_vorp(small_pool, standard_roster_spec, 12)
+    return compute_salary_values(
+        with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
+    )
+
+
+class TestMockSalaryCapDraft:
+    def test_missing_columns_raises(self, small_pool, standard_roster_spec):
+        with pytest.raises(ValueError, match="missing required columns"):
+            MockSalaryCapDraft(small_pool, standard_roster_spec, num_teams=12)
+
+    def test_invalid_my_team_idx_raises(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        with pytest.raises(ValueError, match="my_team_idx"):
+            MockSalaryCapDraft(
+                salary_ready_pool, standard_roster_spec,
+                num_teams=12, my_team_idx=99,
+            )
+
+    def test_unknown_strategy_raises(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        with pytest.raises(ValueError, match="my_strategy"):
+            MockSalaryCapDraft(
+                salary_ready_pool, standard_roster_spec,
+                num_teams=12, my_strategy="wild",
+            )
+
+    def test_fills_every_roster(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """A successful simulation drafts every team to a full roster
+        -- 16 picks per team * 12 teams = 192 picks total."""
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        result = sim.simulate(seed=7)
+        assert len(result) == 16 * 12
+        assert (result["team"].value_counts() == 16).all()
+
+    def test_no_player_drafted_twice(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        result = sim.simulate(seed=3)
+        assert result["name"].is_unique
+
+    def test_no_team_exceeds_cap(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """The Vickrey resolution + max_bid clipping must keep every
+        team's total spend at or below the cap."""
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200,
+        )
+        result = sim.simulate(seed=11)
+        per_team = result.groupby("team")["winning_bid"].sum()
+        assert (per_team <= 200).all()
+
+    def test_every_bid_at_least_min(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            min_bid=1,
+        )
+        result = sim.simulate(seed=5)
+        assert (result["winning_bid"] >= 1).all()
+
+    def test_reproducible_with_seed(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        a = sim.simulate(seed=42)
+        b = sim.simulate(seed=42)
+        pd.testing.assert_frame_equal(a, b)
+
+    def test_aggressive_strategy_spends_more_than_conservative(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """Across many sims the user's spend should track their
+        strategy multiplier -- aggressive bidders end up paying more
+        than conservative bidders for the same role players."""
+        agg = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            my_team_idx=1, my_strategy="aggressive",
+        ).simulate_many(8, seed=1)
+        con = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            my_team_idx=1, my_strategy="conservative",
+        ).simulate_many(8, seed=1)
+        agg_spend = agg.loc[agg["is_user"]].groupby("sim")["winning_bid"].sum().mean()
+        con_spend = con.loc[con["is_user"]].groupby("sim")["winning_bid"].sum().mean()
+        assert agg_spend > con_spend
+
+    def test_simulate_many_seeds_are_reproducible(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+        )
+        a = sim.simulate_many(3, seed=99)
+        b = sim.simulate_many(3, seed=99)
+        pd.testing.assert_frame_equal(a, b)
+        assert a["sim"].nunique() == 3
+
+    def test_keepers_reduce_team_budget(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """A team that keeps a player at $40 should spend at most
+        $160 in the open auction (cap 200, keeper costs $40)."""
+        keepers = pd.DataFrame([
+            {"name": "RB00", "team_idx": 1, "winning_bid": 40},
+        ])
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers,
+        )
+        result = sim.simulate(seed=7)
+        # Team 1's auction picks (the keeper itself is not in the result).
+        team1_spend = result[result["team"] == 1]["winning_bid"].sum()
+        assert team1_spend <= 160
+
+    def test_keepers_not_available_in_auction(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """Keeper players must not be re-drafted in the open auction."""
+        keepers = pd.DataFrame([
+            {"name": "RB00", "team_idx": 2, "winning_bid": 35},
+            {"name": "WR00", "team_idx": 3, "winning_bid": 25},
+        ])
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers,
+        )
+        result = sim.simulate(seed=13)
+        assert "RB00" not in set(result["name"])
+        assert "WR00" not in set(result["name"])
+
+    def test_keepers_fill_roster_slots(
+        self, salary_ready_pool, standard_roster_spec,
+    ):
+        """A team with keepers has fewer open roster slots in the auction,
+        so it drafts fewer players in the open portion."""
+        n_keepers = 3
+        keepers = pd.DataFrame([
+            {"name": f"RB0{i}", "team_idx": 1, "winning_bid": 20}
+            for i in range(n_keepers)
+        ])
+        sim = MockSalaryCapDraft(
+            salary_ready_pool, standard_roster_spec, num_teams=12,
+            salary_cap=200, keepers=keepers,
+        )
+        result = sim.simulate(seed=21)
+        team1_auction_picks = len(result[result["team"] == 1])
+        roster_size = 16  # 10 starters + 6 bench
+        assert team1_auction_picks == roster_size - n_keepers
+
+
+# --------------------------------------------------------------------- #
+# Backtest harness
+# --------------------------------------------------------------------- #
+
+
+class TestBacktestSalaryValues:
+    def test_per_team_totals(self):
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "T1", "winning_bid": 50},
+            {"name": "B", "fantasy_team": "T1", "winning_bid": 30},
+            {"name": "C", "fantasy_team": "T2", "winning_bid": 40},
+        ])
+        values = pd.DataFrame([
+            {"name": "A", "salary_value": 45},
+            {"name": "B", "salary_value": 35},
+            {"name": "C", "salary_value": 30},
+        ])
+        out = backtest_salary_values(history, values)
+        t1 = out[out["team"] == "T1"].iloc[0]
+        assert t1["total_spent"] == 80
+        assert t1["total_value"] == 80
+        # Surplus = total_value - total_spent; T1 broke even.
+        assert t1["surplus"] == 0
+        t2 = out[out["team"] == "T2"].iloc[0]
+        # T2 paid $40 for a $30-valued player; surplus = -10.
+        assert t2["surplus"] == -10
+
+    def test_sorted_by_surplus_desc(self):
+        """The team that got the best deals (highest surplus) should
+        sit at the top."""
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "Bargain", "winning_bid": 10},
+            {"name": "B", "fantasy_team": "Overpay", "winning_bid": 80},
+        ])
+        values = pd.DataFrame([
+            {"name": "A", "salary_value": 50},
+            {"name": "B", "salary_value": 40},
+        ])
+        out = backtest_salary_values(history, values)
+        assert out.iloc[0]["team"] == "Bargain"
+        assert out.iloc[-1]["team"] == "Overpay"
+
+    def test_overpay_pct_signals_systematic_bias(self):
+        """A team that overpays on every pick by ~50% should have
+        avg_overpay_pct ~ 0.5."""
+        history = pd.DataFrame([
+            {"name": n, "fantasy_team": "Big Spender", "winning_bid": 30}
+            for n in ["A", "B", "C"]
+        ])
+        values = pd.DataFrame([
+            {"name": "A", "salary_value": 20},
+            {"name": "B", "salary_value": 20},
+            {"name": "C", "salary_value": 20},
+        ])
+        out = backtest_salary_values(history, values)
+        assert out.iloc[0]["avg_overpay_pct"] == pytest.approx(0.5)
+
+    def test_missing_value_falls_back_to_median(self):
+        """Players the valuation engine didn't price get the median
+        value of the cohort, so a single coverage gap doesn't
+        artificially inflate surplus."""
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "T1", "winning_bid": 50},
+            {"name": "Mystery", "fantasy_team": "T1", "winning_bid": 20},
+        ])
+        values = pd.DataFrame([{"name": "A", "salary_value": 40}])
+        out = backtest_salary_values(history, values)
+        t1 = out.iloc[0]
+        # Median of {40} = 40, so Mystery gets value 40.
+        assert t1["total_value"] == 80
+        assert t1["total_spent"] == 70
+
+    def test_missing_columns_raises(self):
+        with pytest.raises(ValueError, match="name"):
+            backtest_salary_values(
+                pd.DataFrame({"fantasy_team": ["T1"], "winning_bid": [10]}),
+                pd.DataFrame({"name": ["A"], "salary_value": [10]}),
+            )
+        with pytest.raises(ValueError, match="winning_bid"):
+            backtest_salary_values(
+                pd.DataFrame({"name": ["A"], "fantasy_team": ["T1"]}),
+                pd.DataFrame({"name": ["A"], "salary_value": [10]}),
+            )
+
+    def test_keeper_picks_excluded_from_surplus(self):
+        """Keeper picks should not contribute to per-team surplus/overpay
+        metrics -- their prices are pre-negotiated, not auction results."""
+        history = pd.DataFrame([
+            {"name": "Keeper", "fantasy_team": "T1", "winning_bid": 50},
+            {"name": "Auction", "fantasy_team": "T1", "winning_bid": 20},
+        ])
+        values = pd.DataFrame([
+            {"name": "Keeper", "salary_value": 10},   # looks like a huge overpay
+            {"name": "Auction", "salary_value": 30},  # actually a bargain
+        ])
+        # Without exclusion, T1's surplus = (10 + 30) - (50 + 20) = -30.
+        without = backtest_salary_values(history, values)
+        assert without.iloc[0]["surplus"] == pytest.approx(-30)
+
+        # With the keeper excluded, only the auction pick counts:
+        # surplus = 30 - 20 = +10.
+        with_excl = backtest_salary_values(
+            history, values, keeper_names={"Keeper"},
+        )
+        assert with_excl.iloc[0]["surplus"] == pytest.approx(10)
+        assert with_excl.iloc[0]["picks"] == 1
+
+    def test_empty_keeper_names_same_as_no_exclusion(self):
+        history = pd.DataFrame([
+            {"name": "A", "fantasy_team": "T1", "winning_bid": 40},
+        ])
+        values = pd.DataFrame([{"name": "A", "salary_value": 40}])
+        a = backtest_salary_values(history, values)
+        b = backtest_salary_values(history, values, keeper_names=set())
+        pd.testing.assert_frame_equal(a, b)
+

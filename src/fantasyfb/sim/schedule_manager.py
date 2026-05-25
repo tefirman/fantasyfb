@@ -103,12 +103,12 @@ class ScheduleManager:
         """Clean and format the schedule DataFrame."""
         # Standardize team order (alphabetical)
         switch = schedule.team_1 > schedule.team_2
-        schedule.loc[switch, "temp"] = schedule.loc[switch, "team_1"]
-        schedule.loc[switch, "team_1"] = schedule.loc[switch, "team_2"]
-        schedule.loc[switch, "team_2"] = schedule.loc[switch, "temp"]
-        schedule.loc[switch, "temp"] = schedule.loc[switch, "score_1"].astype(float)
-        schedule.loc[switch, "score_1"] = schedule.loc[switch, "score_2"].astype(float)
-        schedule.loc[switch, "score_2"] = schedule.loc[switch, "temp"].astype(float)
+        schedule.loc[switch, ["team_1", "team_2"]] = (
+            schedule.loc[switch, ["team_2", "team_1"]].values
+        )
+        schedule.loc[switch, ["score_1", "score_2"]] = (
+            schedule.loc[switch, ["score_2", "score_1"]].values
+        )
         
         # Remove duplicates and sort
         schedule = (
