@@ -8,7 +8,7 @@ edit_uri: edit/main/docs/
 theme:
   name: material
   logo: assets/fantasyfb_logo.png
-  favicon: assets/fantasyfb_logo.png
+  favicon: assets/favicon.png
   features:
     - navigation.instant
     - navigation.tracking
