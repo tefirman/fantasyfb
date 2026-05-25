@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/fantasyfb_logo.png" alt="fantasyfb" width="400">
+</p>
+
 # fantasyfb
 
 Fantasy football league simulation and optimization toolkit. Pulls
