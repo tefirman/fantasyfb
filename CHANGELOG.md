@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Docs site** (#21): MkDocs Material site at <https://tefirman.github.io/fantasyfb/>. Covers install, Yahoo OAuth setup, an end-to-end first-weekly-report walkthrough, full CLI reference for all four entry points, an architecture overview, and auto-generated API reference via `mkdocstrings`. Built and `--strict`-validated on every PR; deployed to GitHub Pages on push to `main`.
+- **`scripts/build-assets.py`**: regenerates the docs-site logo variants (web hero + favicon) from the high-res master at `assets/fantasyfb_logo.png`.
+
 ## [0.5.0] — 2026-05-24
 
 Best ball support across the draft and simulation stack (#31), and cost-plus-N keeper support across the salary cap V2 stack (#29).
