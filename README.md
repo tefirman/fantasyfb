@@ -12,6 +12,8 @@
 [![Run Tests](https://github.com/tefirman/fantasyfb/actions/workflows/test.yml/badge.svg)](https://github.com/tefirman/fantasyfb/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+**Docs:** <https://tefirman.github.io/fantasyfb/>
+
 ## Install
 
 ```bash
