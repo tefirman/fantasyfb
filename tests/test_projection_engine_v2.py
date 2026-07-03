@@ -75,11 +75,10 @@ def scored_synthetic(synthetic_wr_stats: pd.DataFrame) -> pd.DataFrame:
 
 
 class TestOutputSchema:
-    def test_columns_match_v1_contract(self, scored_synthetic: pd.DataFrame) -> None:
+    def test_output_schema(self, scored_synthetic: pd.DataFrame) -> None:
         proj = ProjectionEngineV2().calculate_projections(
             scored_synthetic, {"WR": 202401}, current_week=202406,
         )
-        # V1 contract for downstream consumers.
         for col in ["player_id_sr", "position", "points_rate", "points_stdev", "num_games"]:
             assert col in proj.columns
         # V2 diagnostic columns.

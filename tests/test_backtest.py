@@ -1,4 +1,4 @@
-"""Tests for the V1 vs V2 backtest harness."""
+"""Tests for the V2 backtest harness."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class TestEvaluate:
 
 class TestRunBacktest:
     """End-to-end check on the live provider; one test week to keep
-    runtime sane (the harness runs V1 + four V2 variants per week)."""
+    runtime sane (the harness runs three V2 variants per week)."""
 
     @pytest.fixture(scope="class")
     def predictions(self, provider):
@@ -74,7 +74,7 @@ class TestRunBacktest:
 
     def test_emits_all_variants(self, predictions: pd.DataFrame) -> None:
         variants = set(predictions["variant"].unique())
-        expected = {"V1_full", "V2_neutral", "V2_default", "V2_fitted", "baseline"}
+        expected = {"V2_neutral", "V2_default", "V2_fitted", "baseline"}
         assert expected.issubset(variants)
 
     def test_predictions_are_finite(self, predictions: pd.DataFrame) -> None:
