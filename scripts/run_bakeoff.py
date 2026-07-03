@@ -5,12 +5,13 @@ Walk-forward backtest over a full regular season comparing:
   V1_full     – legacy ELO-weighted engine
   V2_neutral  – new volume×efficiency engine, no matchup adjustment
   V2_default  – V2 engine + hand-tuned Vegas matchup weights
+  V2_fitted   – V2 engine + ridge-fit matchup weights (alpha/beta fit via
+                model_fitter.fit_from_history on the season before the
+                test season; gamma carried over from the hand-tuned
+                default, since historical depth charts aren't available)
   baseline    – position-average (sanity floor)
 
 Lower MAE/RMSE = better. The result informs whether to retire V1 (issue #24).
-
-Note: V2_fitted (LS-fitted matchup weights) is Stage 3 work and not yet
-implemented in run_backtest(); it is omitted from this report.
 
 Usage:
     python scripts/run_bakeoff.py
@@ -29,6 +30,7 @@ import pandas as pd
 
 from fantasyfb.configs import apply_default_scoring_categories
 from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
+from fantasyfb.projections.model_fitter import fit_from_history
 from fantasyfb.scoring.fantasy_scoring import FantasyScorer
 from fantasyfb.sim.backtest import evaluate, run_backtest
 
@@ -45,8 +47,8 @@ _HALF_PPR = apply_default_scoring_categories({
     "FG 40-49": 4, "FG 50+": 5,
 })
 
-# Canonical variant display order (V2_fitted excluded until Stage 3).
-_VARIANTS = ["V1_full", "V2_neutral", "V2_default", "baseline"]
+# Canonical variant display order.
+_VARIANTS = ["V1_full", "V2_neutral", "V2_default", "V2_fitted", "baseline"]
 _POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]
 _WIDTH = 68
 
@@ -130,6 +132,12 @@ def main() -> int:
     schedule = provider.get_schedule(history_start, test_season)
     print(f"{len(schedule):,} team-week rows  ({time.monotonic() - t0:.1f}s)")
 
+    fit_season = test_season - 1
+    print(f"Fitting V2_fitted matchup weights on {fit_season} ...", end=" ", flush=True)
+    t0 = time.monotonic()
+    fitted_weights = fit_from_history(scored, schedule, [fit_season])
+    print(f"done ({time.monotonic() - t0:.0f}s)")
+
     print(
         f"\nRunning walk-forward backtest over {len(test_weeks)} weeks "
         "(this fetches V1 weights from GitHub each week — allow 1–3 min) ...\n"
@@ -140,13 +148,10 @@ def main() -> int:
         schedule=schedule,
         test_season=test_season,
         test_weeks=test_weeks,
+        fitted_weights=fitted_weights,
     )
     elapsed = time.monotonic() - t0
     print(f"  Done — {len(predictions):,} prediction rows in {elapsed:.0f}s\n")
-
-    # V2_fitted is not implemented yet (Stage 3 LS fitting); omit it so the
-    # table doesn't misleadingly show it tying the baseline.
-    predictions = predictions[predictions["variant"] != "V2_fitted"].copy()
 
     if predictions.empty:
         print("ERROR: no predictions produced. Check data load.", file=sys.stderr)
@@ -166,19 +171,17 @@ def main() -> int:
     # ── Verdict ────────────────────────────────────────────────────────
     best = overall.iloc[0]
     v1_row = overall[overall["variant"] == "V1_full"]
-    v2_row = overall[overall["variant"] == "V2_default"]
     v1_mae = v1_row["mae"].values[0] if not v1_row.empty else float("nan")
-    v2_mae = v2_row["mae"].values[0] if not v2_row.empty else float("nan")
-    delta = v1_mae - v2_mae  # positive means V2 better
+    best_mae = best["mae"]
+    delta = v1_mae - best_mae  # positive means the best model beats V1
 
     print(f"\n{_hr('═')}")
     print(f"  VERDICT")
     print(_hr("═"))
-    print(f"  Best model : {best['variant']}  (overall MAE {best['mae']:.3f})")
-    print(f"  V1_full    : MAE {v1_mae:.3f}")
-    print(f"  V2_default : MAE {v2_mae:.3f}  (Δ {delta:+.3f} vs V1)")
+    print(f"  Best model : {best['variant']}  (overall MAE {best_mae:.3f})")
+    print(f"  V1_full    : MAE {v1_mae:.3f}  (Δ {delta:+.3f} vs best)")
 
-    if best["variant"] in ("V2_neutral", "V2_default"):
+    if best["variant"] in ("V2_neutral", "V2_default", "V2_fitted"):
         margin_pct = abs(delta) / v1_mae * 100
         print(f"\n  ✓ V2 wins by {margin_pct:.1f}% — safe to retire V1 (see issue #24).")
     elif best["variant"] == "V1_full":
