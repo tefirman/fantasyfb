@@ -67,7 +67,7 @@ class League:
         sfb: bool = False,
         bestball: str = "",
         nfl_provider: NFLDataProvider = None,
-        fit_matchup: bool = False,
+        fit_matchup: bool = True,
     ):
         """
         Initializes a League object using the parameters provided and class functions defined below.
