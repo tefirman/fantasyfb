@@ -12,7 +12,7 @@ fantasyfb/
 ├── cli.py                 # argparse/optparse glue for the `fantasyfb` entry point
 ├── data/                  # Yahoo client + nflverse providers
 ├── scoring/               # FantasyScorer, LineupOptimizer, MatchupModel
-├── projections/           # V1 / V2 projection engines + walk-forward fitter
+├── projections/           # V2 projection engine + walk-forward fitter
 ├── sim/                   # SeasonSimulator, ScheduleManager, backtest harness
 ├── drafts/                # Snake, salary-cap, prep, shared draft math
 ├── analysis/              # WAR calculation, move analysis
@@ -26,8 +26,8 @@ fantasyfb/
 | `fantasyfb.cli`         | `optparse` glue for the `fantasyfb` console script                                   |
 | `fantasyfb.data`        | Yahoo Fantasy API client; pluggable NFL data providers (nflreadpy default)           |
 | `fantasyfb.scoring`     | `FantasyScorer` (stats → points), `LineupOptimizer`, `MatchupModel`                  |
-| `fantasyfb.projections` | `ProjectionEngineV2` (current), V1 (legacy, scheduled for removal), `model_fitter`   |
-| `fantasyfb.sim`         | `SeasonSimulator`, `ScheduleManager`, `backtest` harness for V1-vs-V2 comparisons    |
+| `fantasyfb.projections` | `ProjectionEngineV2`, `model_fitter` (walk-forward LS weight fitting)                 |
+| `fantasyfb.sim`         | `SeasonSimulator`, `ScheduleManager`, `backtest` harness                              |
 | `fantasyfb.drafts`      | `snake.py`, `salary_cap.py`, `prep.py`, `tools.py`, `snake_cockpit.py`, `salary_cap_cockpit.py` |
 | `fantasyfb.analysis`    | `WARCalculator`, `MoveAnalyzer`                                                      |
 | `fantasyfb.io`          | `FantasyExcelExporter`                                                               |
@@ -96,13 +96,19 @@ stats, schedules, and depth charts in the expected shape will work —
 useful for testing without hitting the network or wiring in a
 different data source.
 
-## Projection engines
+## Projection engine
 
-- **V2** (`projections/engine_v2.py`): current default. Vegas-backed
-  matchup factors with walk-forward weight fitting.
-- **V1** (`projections/engine.py`): legacy. Kept around for a final
-  pre-2026-season bake-off, then scheduled for removal — see issue
-  [#24](https://github.com/tefirman/fantasyfb/issues/24).
+`ProjectionEngineV2` (`projections/engine_v2.py`) is the sole projection
+engine. It decomposes each player's historical output into volume ×
+efficiency rates, applies time decay and Bayesian shrinkage toward a
+position prior, then multiplies by a Vegas-backed `MatchupModel` factor.
+
+By default (`League(fit_matchup=True)`), the matchup weights are
+ridge-fitted via walk-forward least squares on the prior season
+(`model_fitter.fit_from_history`). A 2024 walk-forward backtest confirmed
+the fitted weights beat both the hand-tuned defaults and the legacy V1
+engine by 5–6% overall MAE — see issue
+[#24](https://github.com/tefirman/fantasyfb/issues/24) for full results.
 
 ## See also
 

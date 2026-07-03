@@ -1,45 +1,34 @@
 """
-Backtest harness comparing V1 and V2 projections against actual results.
+Backtest harness for the V2 projection engine.
 
 Walks forward through a held-out test period and, for each (player, week)
 that actually played, computes:
 
-  V1_full       = V1 engine's points_rate * V1 game_factor (with the
-                  hand-tuned weighting_factors.csv weights)
   V2_neutral    = V2 engine's points_rate (no matchup adjustment)
   V2_default    = V2 engine's points_rate * MatchupModel(default weights)
   V2_fitted     = V2 engine's points_rate * MatchupModel(LS-fitted weights)
   baseline      = position average
 
-Then reports per-position MAE and RMSE. The point is to show empirically
-which moving parts of V2 (the volume*efficiency rebuild, the Vegas-backed
-matchup factor, the LS fit) actually improve accuracy.
+Then reports per-position MAE and RMSE.
 
 Walk-forward construction guards against look-ahead bias: predictions for
 week W only use stats from games played before W. The fitted weights are
-trained on 2023 walk-forward and applied to the 2024 test set.
+trained on the season prior to the test season and applied to the test set.
 """
 
 from __future__ import annotations
 
-import io
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-from urllib.request import urlopen
 
 import numpy as np
 import pandas as pd
 
 from ..scoring.matchup_model import MatchupModel, _DEFAULT_WEIGHTS, _PositionWeights
-from ..projections.engine import ProjectionEngine as ProjectionEngineV1
 from ..projections.engine_v2 import ProjectionEngineV2
 
 
 _FANTASY_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]
-_V1_WEIGHTS_URL = (
-    "https://raw.githubusercontent.com/"
-    "tefirman/fantasy-data/main/fantasyfb/weighting_factors.csv"
-)
 
 
 @dataclass
@@ -50,57 +39,10 @@ class BacktestRow:
     season: int
     week: int
     actual: float
-    v1_full: float
     v2_neutral: float
     v2_default: float
     v2_fitted: float
     baseline: float
-
-
-def _load_v1_weights(target_week: int) -> tuple[pd.DataFrame, Dict[str, int]]:
-    """Fetch the legacy weighting_factors CSV and pick the row matching
-    the target week (1-indexed within the season)."""
-    raw = pd.read_csv(io.BytesIO(urlopen(_V1_WEIGHTS_URL).read()))
-    week_rows = raw[raw["week"] == target_week]
-    if week_rows.empty:
-        week_rows = raw[raw["week"] == raw["week"].max()]
-    weighting = week_rows[
-        ["position", "basal", "opp_elo_weight", "string_weight", "time_scale"]
-    ].copy()
-    reference_games = (
-        week_rows.set_index("position")["games"].astype(int).to_dict()
-    )
-    return weighting, reference_games
-
-
-def _v1_predictions(
-    stats: pd.DataFrame, schedule: pd.DataFrame,
-    cutoff: int, target_week: int,
-) -> pd.DataFrame:
-    """Run V1 engine and apply V1's per-week game_factor."""
-    weighting, reference_games = _load_v1_weights(target_week)
-    earliest = {p: cutoff - 200 for p in _FANTASY_POSITIONS}  # ~2 seasons back
-    engine = ProjectionEngineV1(weighting, reference_games)
-    proj = engine.calculate_projections(stats, earliest, current_week=cutoff)
-
-    season, week = divmod(cutoff, 100)
-    week_sched = schedule[
-        (schedule["season"] == season) & (schedule["week"] == week)
-    ][["team", "elo_diff"]]
-    out = proj.merge(weighting, on="position", how="left")
-    # Look up elo_diff per player via their team. We don't have the team
-    # column in V1's projection output, so fall back to neutral elo_diff
-    # (0) for players whose team we can't resolve from the test week.
-    # That under-uses the V1 matchup signal slightly but errs on the
-    # side of fairness vs. V2.
-    out["elo_diff"] = 0.0
-    out["game_factor"] = (
-        out["basal"]
-        + out["opp_elo_weight"] * out["elo_diff"]
-        + out["string_weight"] * 0.0  # string=1 (starter) for everyone
-    )
-    out["prediction"] = out["points_rate"] * out["game_factor"]
-    return out[["player_id_sr", "position", "prediction"]]
 
 
 def _v2_predictions(
@@ -166,8 +108,8 @@ def run_backtest(
         schedule: provider schedule with Vegas fields.
         test_season: season to backtest in.
         test_weeks: weeks within test_season to evaluate.
-        fitted_weights: LS-fit weights for V2_fitted. If None, a fresh
-            fit will be run on the season prior to test_season.
+        fitted_weights: LS-fit weights for V2_fitted. If None, V2_fitted
+            falls back to position-average predictions.
 
     Returns:
         Long DataFrame, one row per (player, week, variant). Columns:
@@ -200,7 +142,6 @@ def run_backtest(
                 history, sched_history, weights=fitted_weights,
             )
 
-        v1 = _v1_predictions(history, schedule, cutoff, target_week=week)
         v2_neutral = _v2_predictions(engine_v2, None, history, schedule, cutoff)
         v2_default = _v2_predictions(engine_v2, matchup_default, history, schedule, cutoff)
         v2_fitted = (
@@ -231,7 +172,7 @@ def run_backtest(
                 return float(hit.iloc[0]["prediction"])
 
             for variant, df in [
-                ("V1_full", v1), ("V2_neutral", v2_neutral),
+                ("V2_neutral", v2_neutral),
                 ("V2_default", v2_default), ("V2_fitted", v2_fitted),
             ]:
                 rows.append({

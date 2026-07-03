@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs site** (#21): MkDocs Material site at <https://tefirman.github.io/fantasyfb/>. Covers install, Yahoo OAuth setup, an end-to-end first-weekly-report walkthrough, full CLI reference for all four entry points, an architecture overview, and auto-generated API reference via `mkdocstrings`. Built and `--strict`-validated on every PR; deployed to GitHub Pages on push to `main`.
 - **`scripts/build-assets.py`**: regenerates the docs-site logo variants (web hero + favicon) from the high-res master at `assets/fantasyfb_logo.png`.
 
+### Changed
+- **`League(fit_matchup=True)` is now the default** (#24): matchup weights are ridge-fitted via walk-forward least squares on the prior season instead of using the hand-tuned defaults. A 2024 full-season walk-forward backtest showed `V2_fitted` beats the hand-tuned `V2_default` on QB/WR/K and overall RMSE.
+
+### Removed
+- **V1 projection engine** (#24): `projections/engine.py` deleted after a walk-forward bake-off confirmed V2 beats V1 by 5.7% overall MAE on the 2024 season (4.317 vs 4.576), consistent across 2023 as well. Bake-off script preserved at commit `894b6b4`.
+
 ## [0.5.0] — 2026-05-24
 
 Best ball support across the draft and simulation stack (#31), and cost-plus-N keeper support across the salary cap V2 stack (#29).

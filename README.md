@@ -101,7 +101,7 @@ from fantasyfb.io.excel_exporter import FantasyExcelExporter
 | `fantasyfb.drafts`      | Snake, salary-cap, prep, shared draft math |
 | `fantasyfb.data`        | Yahoo client + nflverse providers          |
 | `fantasyfb.scoring`     | Scoring, lineup optimization, matchups     |
-| `fantasyfb.projections` | V1 / V2 projection engines, fitter         |
+| `fantasyfb.projections` | V2 projection engine, walk-forward fitter  |
 | `fantasyfb.sim`         | Season simulation, backtests, schedule     |
 | `fantasyfb.analysis`    | WAR, move analysis                         |
 | `fantasyfb.io`          | Excel export                               |
