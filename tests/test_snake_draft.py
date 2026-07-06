@@ -38,6 +38,35 @@ class TestSnakePickSlot:
         assert snake_pick_slot(10, 10) == 9
         assert snake_pick_slot(19, 10) == 0
 
+    def test_reversal_round_zero_is_plain_snake(self):
+        # Sleeper's "disabled" sentinel -- same as omitting the arg.
+        picks = [snake_pick_slot(i, 12, reversal_round=0) for i in range(36)]
+        plain = [snake_pick_slot(i, 12) for i in range(36)]
+        assert picks == plain
+
+    def test_third_round_reversal_repeats_round_2_direction(self):
+        # Rounds 1-2 unaffected; round 3 (picks 24..35) repeats round 2's
+        # reverse direction (12..1) instead of flipping back to 1..12.
+        assert [snake_pick_slot(i, 12, reversal_round=3) for i in range(24, 36)] \
+            == list(range(11, -1, -1))
+
+    def test_third_round_reversal_flips_parity_from_round_4_on(self):
+        # Round 4 (picks 36..47) then reverses *relative to round 3*,
+        # landing back on forward order -- opposite of plain snake's
+        # round 4 (which would be reverse).
+        assert [snake_pick_slot(i, 12, reversal_round=3) for i in range(36, 48)] \
+            == list(range(12))
+
+    def test_reversal_round_matches_manual_trace_for_first_two_teams(self):
+        # Hand-traced from the league-slot perspective (see conversation):
+        # slot 0 (1st overall) picks #1, #24, #36 under TRR@3.
+        # slot 11 (12th overall) picks #12, #13, #25 under TRR@3.
+        picks = [snake_pick_slot(i, 12, reversal_round=3) for i in range(36)]
+        slot0_picks = [i + 1 for i, s in enumerate(picks) if s == 0]
+        slot11_picks = [i + 1 for i, s in enumerate(picks) if s == 11]
+        assert slot0_picks == [1, 24, 36]
+        assert slot11_picks == [12, 13, 25]
+
 
 class TestParsePayouts:
     def test_default_when_blank(self):

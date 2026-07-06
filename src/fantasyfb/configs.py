@@ -47,12 +47,36 @@ import pandas as pd
 #     })
 # }
 
-# Scott Fish Bowl 15 configuration (current)
+# Scott Fish Bowl 15 configuration (historical)
+# SFB_CONFIG = {
+#     'scoring': {
+#         'Pass Yds': 0.04, 'Pass Comp': 0.0, 'Pass TD': 6.0, 'Pass 1D': 0.0, 'Pass 300+': 0.0,
+#         'Int Thrown': 0.0, 'Rush Yds': 0.1, 'Rush Att': 0.5, 'Rush TD': 6.0, 'Rush 1D': 1.0, 'Rush 100+': 0.0,
+#         'Rec Yds': 0.1, 'Rec': 2.5, 'Rec TD': 6.0, 'Rec 1D': 1.0, 'Rec 100+': 0.0, 'Ret Yds': 0.0, 'Ret TD': 6.0,
+#         'TE Rec Bonus': 1.0, 'TE 1D Bonus': 1.0, '2-PT': 2.0, 'Fum Lost': 0.0, 'Fum Ret TD': 6.0,
+#         'FG 0-19': 0.0, 'FG 20-29': 0.0, 'FG 30-39': 0.0, 'FG 40-49': 0.0, 'FG 50+': 0.0, 'PAT Made': 0.0,
+#         'Sack': 0.0, 'Int': 0.0, 'Fum Rec': 0.0, 'TD': 0.0, 'Safe': 0.0, 'Blk Kick': 0.0,
+#         'Pts Allow 0': 0.0, 'Pts Allow 1-6': 0.0, 'Pts Allow 7-13': 0.0, 'Pts Allow 14-20': 0.0,
+#         'Pts Allow 21-27': 0.0, 'Pts Allow 28-34': 0.0, 'Pts Allow 35+': 0.0, 'XPR': 0.0
+#     },
+#     'roster_spots': pd.DataFrame({
+#         'position': ['QB', 'RB', 'WR', 'TE', 'W/R/T', 'Q/W/R/T', 'K', 'BN'],
+#         'count': [0, 0, 0, 0, 9, 2, 0, 11]
+#     })
+# }
+
+# Scott Fish Bowl 16 configuration (current), pulled from Sleeper league
+# 1367870433398915072 on 2026-07-05 via sleeper_client.get_league_config().
+# Note: Sleeper's per-play "long play" bonuses (40+ yard completions/rushes,
+# 20-29/30-39/40+ yard receptions, all worth +10 each) are NOT modeled here --
+# they need play-by-play data, not the per-game box-score stats FantasyScorer
+# works from. See sleeper_client.UNSUPPORTED_SCORING_KEYS.
 SFB_CONFIG = {
     'scoring': {
-        'Pass Yds': 0.04, 'Pass Comp': 0.0, 'Pass TD': 6.0, 'Pass 1D': 0.0, 'Pass 300+': 0.0,
-        'Int Thrown': 0.0, 'Rush Yds': 0.1, 'Rush Att': 0.5, 'Rush TD': 6.0, 'Rush 1D': 1.0, 'Rush 100+': 0.0,
-        'Rec Yds': 0.1, 'Rec': 2.5, 'Rec TD': 6.0, 'Rec 1D': 1.0, 'Rec 100+': 0.0, 'Ret Yds': 0.0, 'Ret TD': 6.0,
+        'Pass Yds': 0.04, 'Pass Comp': 0.0, 'Pass TD': 6.0, 'Pass 1D': 0.0, 'Pass 300+': 10.0, 'Pass 400+': 20.0,
+        'Int Thrown': 0.0, 'Rush Yds': 0.1, 'Rush Att': 0.0, 'Rush TD': 6.0, 'Rush 1D': 0.5, 'Rush 100+': 0.0, 'Rush 200+': 0.0,
+        'Rec Yds': 0.1, 'Rec': 0.5, 'Rec TD': 6.0, 'Rec 1D': 0.5, 'Rec 100+': 0.0, 'Rec 200+': 0.0,
+        'Rush+Rec 100+': 10.0, 'Rush+Rec 200+': 20.0, 'Ret Yds': 0.0, 'Ret TD': 6.0,
         'TE Rec Bonus': 1.0, 'TE 1D Bonus': 1.0, '2-PT': 2.0, 'Fum Lost': 0.0, 'Fum Ret TD': 6.0,
         'FG 0-19': 0.0, 'FG 20-29': 0.0, 'FG 30-39': 0.0, 'FG 40-49': 0.0, 'FG 50+': 0.0, 'PAT Made': 0.0,
         'Sack': 0.0, 'Int': 0.0, 'Fum Rec': 0.0, 'TD': 0.0, 'Safe': 0.0, 'Blk Kick': 0.0,
@@ -61,9 +85,29 @@ SFB_CONFIG = {
     },
     'roster_spots': pd.DataFrame({
         'position': ['QB', 'RB', 'WR', 'TE', 'W/R/T', 'Q/W/R/T', 'K', 'BN'],
-        'count': [0, 0, 0, 0, 9, 2, 0, 11]
+        'count': [0, 0, 0, 0, 8, 2, 0, 10]
     })
 }
+
+
+def get_sfb_config_from_sleeper(league_id: str):
+    """
+    Fetch the current SFB scoring/roster config directly from Sleeper.
+
+    Prefer this over the static SFB_CONFIG snapshot above when you have a
+    concrete league ID (e.g. next year's SFB draft) -- it reflects
+    whatever the commissioner actually configured instead of a
+    point-in-time transcription.
+
+    Args:
+        league_id: numeric Sleeper league ID (from the league URL).
+
+    Returns:
+        Dict containing 'scoring' and 'roster_spots', same shape as SFB_CONFIG.
+    """
+    from .data.sleeper_client import get_league_config as _fetch
+
+    return _fetch(league_id)
 
 # DraftKings Best Ball configuration
 DRAFTKINGS_CONFIG = {
@@ -144,7 +188,9 @@ def apply_default_scoring_categories(scoring: dict):
     """
     default_categories = [
         'Pass Comp', 'Pass 1D', 'Rush Att', 'Rush 1D', 'Rec 1D',
-        'TE Rec Bonus', 'TE 1D Bonus', 'Pass 300+', 'Rush 100+', 'Rec 100+'
+        'TE Rec Bonus', 'TE 1D Bonus', 'Pass 300+', 'Pass 400+',
+        'Rush 100+', 'Rush 200+', 'Rec 100+', 'Rec 200+',
+        'Rush+Rec 100+', 'Rush+Rec 200+',
     ]
     
     for category in default_categories:

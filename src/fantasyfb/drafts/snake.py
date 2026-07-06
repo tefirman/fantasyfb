@@ -51,6 +51,7 @@ except ImportError:  # pragma: no cover -- Windows-only fallback
     readline = None
 
 from . import snake_cockpit as cockpit
+from .tools import round_direction
 
 
 _PICK_COMMANDS = (
@@ -218,13 +219,13 @@ def provide_pick_order(league, customize=False, already=()):
     return league
 
 
-def snake_pick_slot(pick_index: int, num_teams: int) -> int:
+def snake_pick_slot(pick_index: int, num_teams: int, reversal_round: int = 0) -> int:
     """0-indexed team slot owning the given 0-indexed overall pick under
-    standard snake ordering (rounds reverse on odd 1-based round numbers).
+    snake ordering, optionally with Third-Round Reversal applied.
     """
     rnd = pick_index // num_teams
     slot = pick_index % num_teams
-    if rnd % 2 == 1:
+    if round_direction(rnd + 1, reversal_round) == 1:
         slot = num_teams - 1 - slot
     return slot
 
@@ -295,6 +296,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="size of the top-VORP pool the 'random' command "
                         "samples from (default 8). Smaller = more "
                         "deterministic auto-picks; larger = more chaos.")
+    p.add_argument("--sfb", nargs="?", const=True, default=False,
+                   help="apply Scott Fish Bowl scoring/roster settings "
+                        "instead of your Yahoo league's own. Pass a Sleeper "
+                        "league ID (from the league URL) to pull settings "
+                        "live from Sleeper; bare --sfb falls back to the "
+                        "static snapshot in fantasyfb.configs")
+    p.add_argument("--reversal-round", type=int, default=0,
+                   dest="reversal_round",
+                   help="apply Third-Round Reversal at this round number "
+                        "(the round repeats the previous round's direction "
+                        "instead of flipping back, then normal alternation "
+                        "resumes -- matches Sleeper's draft 'reversal_round' "
+                        "setting). Default 0 = disabled, plain snake.")
     return p
 
 
@@ -313,7 +327,7 @@ def main(argv=None) -> int:
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
 
-    league = fb.League(name=args.team, num_sims=10000, season=args.season)
+    league = fb.League(name=args.team, num_sims=10000, season=args.season, sfb=args.sfb)
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
         league.roster_spots.position != "IR", "count"
@@ -361,7 +375,7 @@ def main(argv=None) -> int:
 
     while pick_num < tot_picks:
         round_num = pick_num // num_teams + 1
-        slot = snake_pick_slot(pick_num, num_teams)
+        slot = snake_pick_slot(pick_num, num_teams, args.reversal_round)
         prompt = (f"Round #{round_num}, Pick #{pick_num + 1}, "
                   f"{league.teams[slot]['name']}: ")
 
@@ -528,7 +542,7 @@ def main(argv=None) -> int:
             rng = np.random.default_rng()
             auto_count = 0
             while pick_num < tot_picks:
-                next_slot = snake_pick_slot(pick_num, num_teams)
+                next_slot = snake_pick_slot(pick_num, num_teams, args.reversal_round)
                 next_team = league.teams[next_slot]["name"]
                 if next_team == "My Team":
                     break

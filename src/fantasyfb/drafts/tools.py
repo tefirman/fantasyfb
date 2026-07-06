@@ -521,11 +521,31 @@ def _build_rosters(roster_spec, num_teams: int) -> List[Roster]:
     return [Roster.from_spec(roster_spec) for _ in range(num_teams)]
 
 
-def _snake_pick_owner(pick_index: int, num_teams: int, snake: bool) -> int:
+def round_direction(round_num: int, reversal_round: int = 0) -> int:
+    """0 (forward, slot 0..n-1) or 1 (reverse, slot n-1..0) for a 1-indexed round.
+
+    Standard snake alternates every round. Third-Round Reversal (TRR) --
+    a Sleeper draft setting, `reversal_round` in its draft `settings` --
+    repeats the *previous* round's direction at `reversal_round` instead
+    of flipping, then resumes normal alternation from there (which
+    permanently flips the parity of every round after it). `reversal_round
+    = 0` (Sleeper's convention for "disabled") always falls through to
+    plain alternating snake regardless of round number.
+    """
+    if reversal_round and round_num >= reversal_round:
+        dir_before_reversal = (reversal_round - 2) % 2
+        offset = round_num - reversal_round
+        return (dir_before_reversal + offset) % 2
+    return (round_num - 1) % 2
+
+
+def _snake_pick_owner(
+    pick_index: int, num_teams: int, snake: bool, reversal_round: int = 0
+) -> int:
     """Return the 0-indexed team owning pick `pick_index` (0-indexed)."""
     rnd = pick_index // num_teams
     slot = pick_index % num_teams
-    if snake and rnd % 2 == 1:
+    if snake and round_direction(rnd + 1, reversal_round) == 1:
         slot = num_teams - 1 - slot
     return slot
 
@@ -622,6 +642,10 @@ class MockDraft:
         the math from degenerating without making pick #1 a coin flip.
     my_strategy : str
         One of 'bpa', 'vorp', 'need'.
+    reversal_round : int
+        Round number (1-indexed) to apply Third-Round Reversal at, matching
+        Sleeper's draft `reversal_round` setting. Default 0 = disabled
+        (plain alternating snake). Ignored when `snake` is False.
     """
 
     def __init__(
@@ -635,6 +659,7 @@ class MockDraft:
         noise_slope: float = 0.1,
         noise_floor: float = 1.0,
         my_strategy: str = "vorp",
+        reversal_round: int = 0,
     ) -> None:
         required = {"name", "position", "points_rate", "vorp_per_game", "adp"}
         missing = required - set(projections.columns)
@@ -652,6 +677,7 @@ class MockDraft:
         self.num_teams = num_teams
         self.my_pick = my_pick
         self.snake = snake
+        self.reversal_round = reversal_round
         self.noise_slope = noise_slope
         self.noise_floor = noise_floor
         self.my_strategy = my_strategy
@@ -674,7 +700,9 @@ class MockDraft:
         my_idx = self.my_pick - 1
 
         for pick in range(self.total_picks):
-            owner = _snake_pick_owner(pick, self.num_teams, self.snake)
+            owner = _snake_pick_owner(
+                pick, self.num_teams, self.snake, self.reversal_round
+            )
             if available.empty:
                 break
 

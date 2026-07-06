@@ -44,7 +44,9 @@ class FantasyScorer:
             'Rec', 'Rec Yds', 'Rec TD', 'Rec 1D',
             'Pass Yds', 'Pass Comp', 'Pass TD', 'Pass 1D', 'Int Thrown',
             'Fum Lost', 'Ret Yds', 'Ret TD', 'PAT Made', 'FG 0-19',
-            'TE Rec Bonus', 'TE 1D Bonus', 'Pass 300+', 'Rush 100+', 'Rec 100+',
+            'TE Rec Bonus', 'TE 1D Bonus', 'Pass 300+', 'Pass 400+',
+            'Rush 100+', 'Rush 200+', 'Rec 100+', 'Rec 200+',
+            'Rush+Rec 100+', 'Rush+Rec 200+',
             'Sack', 'Int', 'Fum Rec', 'Pts Allow 0', 'Pts Allow 1-6',
             'Pts Allow 7-13', 'Pts Allow 14-20', 'Pts Allow 21-27',
             'Pts Allow 28-34', 'Pts Allow 35+'
@@ -135,14 +137,23 @@ class FantasyScorer:
                  offense_df.loc[te_mask, 'pass_first_down']) * self.scoring['TE 1D Bonus']
             )
         
-        # Yardage bonuses
+        # Yardage bonuses. Each threshold is independent/stacking (e.g. a
+        # 450-yard passing game earns both the 300+ and 400+ bonus), matching
+        # how Sleeper (and most platforms that offer both tiers) score them.
         if 'pass_yds' in offense_df.columns:
             points.loc[offense_df['pass_yds'] >= 300] += self.scoring['Pass 300+']
+            points.loc[offense_df['pass_yds'] >= 400] += self.scoring['Pass 400+']
         if 'rush_yds' in offense_df.columns:
             points.loc[offense_df['rush_yds'] >= 100] += self.scoring['Rush 100+']
+            points.loc[offense_df['rush_yds'] >= 200] += self.scoring['Rush 200+']
         if 'rec_yds' in offense_df.columns:
             points.loc[offense_df['rec_yds'] >= 100] += self.scoring['Rec 100+']
-        
+            points.loc[offense_df['rec_yds'] >= 200] += self.scoring['Rec 200+']
+        if 'rush_yds' in offense_df.columns and 'rec_yds' in offense_df.columns:
+            combined_yds = offense_df['rush_yds'] + offense_df['rec_yds']
+            points.loc[combined_yds >= 100] += self.scoring['Rush+Rec 100+']
+            points.loc[combined_yds >= 200] += self.scoring['Rush+Rec 200+']
+
         return points
     
     def _calculate_defensive_points(self, defense_df: pd.DataFrame) -> pd.Series:
