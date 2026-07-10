@@ -585,6 +585,21 @@ class TestMockDraft:
         assert round1 == list(range(1, 13))
         assert round2 == list(range(12, 0, -1))
 
+    def test_reversal_round_repeats_round_2_order_in_round_3(
+        self, draft_ready_pool, standard_roster_spec,
+    ):
+        md = MockDraft(draft_ready_pool, standard_roster_spec,
+                       num_teams=12, my_pick=1, snake=True, noise_slope=0.1,
+                       reversal_round=3)
+        result = md.simulate(seed=1)
+        round2 = result[result["round"] == 2]["team"].tolist()
+        round3 = result[result["round"] == 3]["team"].tolist()
+        round4 = result[result["round"] == 4]["team"].tolist()
+        assert round3 == round2 == list(range(12, 0, -1))
+        # Parity flips permanently after the reversal round: round 4 lands
+        # on forward order instead of plain snake's reverse.
+        assert round4 == list(range(1, 13))
+
     def test_user_picks_match_strategy(
         self, draft_ready_pool, standard_roster_spec,
     ):

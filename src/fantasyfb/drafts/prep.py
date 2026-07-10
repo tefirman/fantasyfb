@@ -45,7 +45,7 @@ def _build_league(args: argparse.Namespace):
     Imported lazily so `--help` works without Yahoo deps installed.
     """
     import fantasyfb as fb
-    return fb.League(name=args.team)
+    return fb.League(name=args.team, sfb=args.sfb)
 
 
 def _maybe_save(df: pd.DataFrame, path: Optional[str]) -> None:
@@ -172,7 +172,7 @@ def cmd_mock(args: argparse.Namespace) -> int:
         merged, league.roster_spots, num_teams=len(league.teams),
         my_pick=args.my_pick, snake=not args.linear,
         noise_slope=args.noise_slope, noise_floor=args.noise_floor,
-        my_strategy=args.strategy,
+        my_strategy=args.strategy, reversal_round=args.reversal_round,
     )
 
     if args.sims == 1:
@@ -220,6 +220,12 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Yahoo team name (passed to fantasyfb.League)")
         p.add_argument("--output", default=None,
                        help="optional CSV path to save the result")
+        p.add_argument("--sfb", nargs="?", const=True, default=False,
+                       help="apply Scott Fish Bowl scoring/roster settings "
+                            "instead of your Yahoo league's own. Pass a "
+                            "Sleeper league ID (from the league URL) to pull "
+                            "settings live from Sleeper; bare --sfb falls "
+                            "back to the static snapshot in fantasyfb.configs")
 
     p_tiers = sub.add_parser("tiers", help="per-position tier sheet")
     add_common(p_tiers)
@@ -297,6 +303,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "the top of the draft (default 1.0)")
     p_mock.add_argument("--linear", action="store_true",
                         help="use linear (non-snake) draft order")
+    p_mock.add_argument("--reversal-round", type=int, default=0,
+                        dest="reversal_round",
+                        help="apply Third-Round Reversal at this round "
+                             "number (matches Sleeper's draft "
+                             "'reversal_round' setting). Default 0 = "
+                             "disabled, plain snake.")
     p_mock.add_argument("--seed", type=int, default=None,
                         help="RNG seed for reproducibility")
     p_mock.set_defaults(func=cmd_mock)

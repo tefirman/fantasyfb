@@ -13,6 +13,7 @@ import pandas as pd
 import os
 import numpy as np
 import datetime
+from typing import Union
 from .scoring.fantasy_scoring import FantasyScorer
 from .configs import get_league_config, apply_default_scoring_categories
 from .sim.schedule_manager import ScheduleManager
@@ -64,7 +65,7 @@ class League:
         earliest: int = None,
         reference_games: int = None,
         basaloppstringtime: list = [],
-        sfb: bool = False,
+        sfb: Union[bool, str] = False,
         bestball: str = "",
         nfl_provider: NFLDataProvider = None,
         fit_matchup: bool = True,
@@ -81,7 +82,10 @@ class League:
             earliest (int, optional): integer describing the earliest week to pull statistics from (YYYYWW), defaults to None.  
             reference_games (int, optional): integer describing the number of games to use as a prior for rates, defaults to None.  
             basaloppstringtime (list, optional): list of the four weighting factors when calculating rates, defaults to an empty list.  
-            sfb (bool, optional): whether to implement SFB14 settings and scoring, defaults to False.  
+            sfb (bool or str, optional): whether to implement Scott Fish Bowl settings and scoring,
+                defaults to False. Pass a Sleeper league ID (from the league URL) instead of True
+                to pull the current year's scoring/roster settings live from Sleeper rather than
+                the static snapshot in fantasyfb.configs.
             bestball (str, optional): which platform to use when implementing best ball settings/scoring, defaults to a blank string (no bestball).
         """
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
@@ -154,12 +158,14 @@ class League:
         self.get_schedule()
         self.starters(self.week)
 
-    def load_settings(self, sfb: bool = False, bestball: str = ""):
+    def load_settings(self, sfb: Union[bool, str] = False, bestball: str = ""):
         """
         Pulls league roster/schedule settings and scoring modifiers
 
         Args:
-            sfb (bool, optional): whether to use Scott Fish Bowl 13 settings, defaults to False.  
+            sfb (bool or str, optional): whether to use Scott Fish Bowl settings, defaults to False.
+                Pass a Sleeper league ID to pull settings live from Sleeper instead of the static
+                snapshot in fantasyfb.configs.
             bestball (str, optional): which best ball settings to use if desired, defaults to "" (redraft).
         """
         # Pulling league settings
@@ -196,7 +202,10 @@ class League:
 
         # Check for predefined platform configurations
         config = None
-        if sfb:
+        if isinstance(sfb, str) and sfb:
+            from .configs import get_sfb_config_from_sleeper
+            config = get_sfb_config_from_sleeper(sfb)
+        elif sfb:
             config = get_league_config('sfb')
         elif str(bestball).lower() in ["dk", "draftkings"]:
             config = get_league_config('draftkings')
