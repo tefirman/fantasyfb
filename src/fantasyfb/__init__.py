@@ -23,7 +23,12 @@ from .data.nfl_provider import NFLDataProvider
 from .data.nflreadpy_provider import NflreadpyProvider
 from .configs import get_league_config, apply_default_scoring_categories
 
-__version__ = "0.5.0"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("fantasyfb")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 __all__ = [
     "League",
