@@ -96,19 +96,32 @@ class YahooFantasyClient:
             if self.lg_id:
                 self.lg = self.gm.to_league(self.lg_id)
     
-    def connect_to_league(self, season: int, team_name: Optional[str] = None) -> Tuple[str, str]:
+    def _find_nfl_league_teams(self, season: int) -> Dict[str, str]:
         """
-        Connect to a fantasy league for the specified season.
-        
-        Args:
-            season: NFL season year
-            team_name: Specific team name if user has multiple teams
-            
+        Locate the user's NFL fantasy team(s) for ``season`` and each one's
+        own league id.
+
+        Shared by :meth:`connect_to_league` (which goes on to pick one team
+        and open its league) and :meth:`list_team_names` (which only needs
+        the names -- e.g. to populate a UI picker before a team is chosen).
+
+        A season's "teams" here can span *multiple distinct leagues* --
+        Yahoo groups a user's teams for a season under one ``game`` entry
+        even when each team belongs to a different league (observed: two
+        teams, two different ``team_key`` league-id segments, i.e. two
+        separate leagues that both happen to be for the same season). So
+        each team's league id must be read from *that team's own*
+        ``team_key`` -- reading it from an arbitrary team (e.g. the first)
+        and applying it to whichever team the user actually picked
+        connects to the wrong league.
+
         Returns:
-            Tuple of (team_name, league_id)
+            Dict mapping team name -> that team's league id (its ``team_key``
+            with the trailing ``.t.<team_id>`` dropped). Empty if no NFL
+            entry is found for that season.
         """
         self.gm = yfa.Game(self.oauth, "nfl")
-        
+
         # Get user's fantasy teams
         while True:
             try:
@@ -119,8 +132,8 @@ class YahooFantasyClient:
                 print("Teams query failed... Waiting 30 seconds and trying again...")
                 print(e)
                 time.sleep(30)
-        
-        # Find NFL league for the specified season
+
+        # Find NFL league(s) for the specified season
         for ind in range(leagues["count"] - 1, -1, -1):
             game = leagues[str(ind)]["game"]
             if type(game) == dict:
@@ -128,26 +141,57 @@ class YahooFantasyClient:
             if game[0]["code"] == "nfl" and game[0]["season"] == str(season):
                 teams = game[1]["teams"]
                 details = [teams[str(ind)]["team"][0] for ind in range(teams["count"])]
-                names = [
-                    [val["name"] for val in team if "name" in val][0]
-                    for team in details
-                ]
-                
-                if teams["count"] > 1:
-                    # Multiple teams - use provided name or prompt user
-                    while team_name not in names:
-                        print("Found multiple fantasy teams: " + ", ".join(names))
-                        team_name = input("Which team would you like to analyze? ")
-                    team = teams[str(names.index(team_name))]["team"][0]
-                else:
-                    # Single team
-                    team = teams["0"]["team"][0]
-                    team_name = names[0]
-                
-                team_key = [val["team_key"] for val in team if "team_key" in val][0]
-                self.lg_id = ".".join(team_key.split(".")[:3])
-                break
-        
+                out: Dict[str, str] = {}
+                for team in details:
+                    name = [val["name"] for val in team if "name" in val][0]
+                    team_key = [val["team_key"] for val in team if "team_key" in val][0]
+                    out[name] = ".".join(team_key.split(".")[:3])
+                return out
+
+        return {}
+
+    def list_team_names(self, season: int) -> List[str]:
+        """
+        List the user's fantasy team name(s) for ``season``, without
+        connecting to any league or picking one -- e.g. to populate a
+        dropdown before calling :meth:`connect_to_league`.
+
+        Returns:
+            Team names in Yahoo's own order (empty if no NFL entry is found
+            for that season). Note distinct names can belong to entirely
+            different leagues (see :meth:`_find_nfl_league_teams`).
+        """
+        return list(self._find_nfl_league_teams(season).keys())
+
+    def connect_to_league(self, season: int, team_name: Optional[str] = None) -> Tuple[str, str]:
+        """
+        Connect to a fantasy league for the specified season.
+
+        Args:
+            season: NFL season year
+            team_name: Specific team name if user has multiple teams
+
+        Returns:
+            Tuple of (team_name, league_id)
+        """
+        name_to_lg_id = self._find_nfl_league_teams(season)
+        if not name_to_lg_id:
+            raise ValueError(f"No NFL fantasy league found for season {season}.")
+
+        names = list(name_to_lg_id.keys())
+        if len(names) > 1:
+            # Multiple teams (possibly in different leagues) - use provided
+            # name or prompt user
+            while team_name not in names:
+                print("Found multiple fantasy teams: " + ", ".join(names))
+                team_name = input("Which team would you like to analyze? ")
+        else:
+            # Single team
+            team_name = names[0]
+
+        # Each team's league id comes from ITS OWN team_key, not an arbitrary
+        # one -- see _find_nfl_league_teams docstring for why that matters.
+        self.lg_id = name_to_lg_id[team_name]
         # Create league object
         self.lg = self.gm.to_league(self.lg_id)
         return team_name, self.lg_id
