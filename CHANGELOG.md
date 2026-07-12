@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Dual VORP (position-specific + flex)**: `compute_vorp` now emits three additional columns — `flex_replacement_rate`, `vorp_flex_per_game`, and `vorp_flex_season` — alongside the existing position-only columns. The new `compute_flex_replacement_levels` function sets each position's replacement baseline against the combined pool of all players eligible for the deepest flex slot covering that position. In a superflex (`Q/W/R/T`) league this correctly compresses QB VORP to reflect that the superflex slot would otherwise be filled by a WR/RB/TE rather than another QB. All draft decision surfaces (`vorp_adjusted` in cockpit views, salary cap dollar values, mock draft pick strategies) now use `vorp_flex_per_game`/`vorp_flex_season` as their primary signal. For positions with no flex slot (K, DEF) and for QB in a non-superflex league, flex VORP equals position VORP so there is no behavioral change in those cases.
+
 ## [0.6.0] — 2026-07-09
 
 Sleeper-native scoring for SFB-style leagues (Third-Round Reversal, stacking yardage bonuses), V2 projection engine now the sole engine after winning the V1 bake-off (#24), and a new MkDocs documentation site (#21).

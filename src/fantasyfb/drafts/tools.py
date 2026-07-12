@@ -12,6 +12,7 @@ without Yahoo creds.
 
 Public API:
     compute_replacement_levels(projections, roster_spec, num_teams)
+    compute_flex_replacement_levels(projections, roster_spec, num_teams)
     compute_vorp(projections, roster_spec, num_teams)
     compute_salary_values(projections, roster_spec, num_teams, salary_cap=...)
     max_bid(remaining_budget, open_slots)
@@ -123,6 +124,86 @@ def compute_replacement_levels(
     return levels
 
 
+def compute_flex_replacement_levels(
+    projections: pd.DataFrame,
+    roster_spec,
+    num_teams: int,
+) -> Dict[str, float]:
+    """Replacement-level points_rate for each position measured against
+    the combined flex pool it competes in.
+
+    For a position that is eligible for one or more flex slots, the flex
+    replacement level is the rate of the Nth-best player across *all*
+    positions eligible for the deepest flex slot that includes this
+    position, where N = total dedicated starters (non-flex) at that
+    position + total flex slots of that type, summed across all teams.
+
+    This answers: "what would I have gotten if I hadn't drafted this
+    player and instead took the best remaining flex-eligible option?"
+    In a superflex league that baseline is a WR/RB/TE, not a QB, which
+    correctly captures that QBs are less scarce than their position-only
+    VORP suggests.
+
+    For positions with no flex slot (K, DEF) this falls back to the
+    same value as compute_replacement_levels -- there is no flex
+    competition, so position-only VORP is the correct measure.
+    """
+    spec = _roster_spec_to_dict(roster_spec)
+    pool = projections[~projections["player_id_sr"].astype(str).str.startswith("avg_")]
+
+    # Dedicated (non-flex) starting slots per position across the league.
+    dedicated: Dict[str, float] = {p: 0.0 for p in _BASE_POSITIONS}
+    for slot, count in spec.items():
+        if slot in _BASE_POSITIONS:
+            dedicated[slot] += count * num_teams
+
+    # For each position find the "deepest" flex slot it is eligible for
+    # (Q/W/R/T > W/R/T > W/T in terms of positional breadth). We use
+    # that slot to define its flex pool and the total number of combined
+    # starters that pool must cover.
+    pos_to_flex_slot: Dict[str, Optional[str]] = {p: None for p in _BASE_POSITIONS}
+    _FLEX_BREADTH = {slot: len(eligible) for slot, eligible in FLEX_ELIGIBILITY.items()}
+    for slot, eligible in FLEX_ELIGIBILITY.items():
+        if slot not in spec or spec[slot] == 0:
+            continue
+        for pos in eligible:
+            current = pos_to_flex_slot[pos]
+            if current is None or _FLEX_BREADTH[slot] > _FLEX_BREADTH[current]:
+                pos_to_flex_slot[pos] = slot
+
+    pos_levels = compute_replacement_levels(projections, roster_spec, num_teams)
+
+    flex_levels: Dict[str, float] = {}
+    for pos in _BASE_POSITIONS:
+        flex_slot = pos_to_flex_slot[pos]
+        if flex_slot is None:
+            # No flex slot covers this position; fall back to position VORP.
+            flex_levels[pos] = pos_levels[pos]
+            continue
+
+        eligible_positions = FLEX_ELIGIBILITY[flex_slot]
+        flex_count = spec.get(flex_slot, 0) * num_teams
+
+        # Combined pool: all players at any eligible position, sorted by rate.
+        combined_rates = (
+            pool.loc[pool["position"].isin(eligible_positions), "points_rate"]
+            .dropna().sort_values(ascending=False).to_numpy()
+        )
+        if combined_rates.size == 0:
+            flex_levels[pos] = 0.0
+            continue
+
+        # Replacement index: all dedicated starters at each eligible position
+        # plus the flex slots themselves. The flex replacement player is the
+        # next-best combined-pool player after those slots are filled.
+        total_dedicated = sum(dedicated[p] for p in eligible_positions)
+        total_starters = int(round(total_dedicated + flex_count))
+        idx = min(total_starters, combined_rates.size - 1)
+        flex_levels[pos] = float(combined_rates[idx])
+
+    return flex_levels
+
+
 def compute_vorp(
     projections: pd.DataFrame,
     roster_spec,
@@ -131,18 +212,34 @@ def compute_vorp(
 ) -> pd.DataFrame:
     """Add VORP columns to a projection DataFrame.
 
-    Returns a copy with two new columns:
-        vorp_per_game: points_rate - replacement_level[position]
-        vorp_season:   vorp_per_game * season_games
+    Returns a copy with four new columns:
+        replacement_rate:      position-specific replacement level
+        vorp_per_game:         points_rate - replacement_rate
+        vorp_season:           vorp_per_game * season_games
+        flex_replacement_rate: replacement level vs. combined flex pool
+                               (same as replacement_rate for K/DEF)
+        vorp_flex_per_game:    points_rate - flex_replacement_rate
+        vorp_flex_season:      vorp_flex_per_game * season_games
 
-    Players at positions that don't appear in the league (e.g. K in a
-    K-less league) get NaN VORP -- the caller can drop them.
+    `vorp_flex_per_game` is the economically correct value signal for
+    draft decisions in flex and superflex leagues: it measures edge over
+    the best player you could have taken instead across the entire
+    eligible flex pool. For non-flex positions (K, DEF) it equals
+    `vorp_per_game`. For QB in a superflex league it will be lower than
+    `vorp_per_game`, correctly reflecting that the superflex slot would
+    otherwise be filled by a WR/RB/TE rather than a QB.
+
+    Players at positions that don't appear in the league get NaN VORP.
     """
     levels = compute_replacement_levels(projections, roster_spec, num_teams)
+    flex_levels = compute_flex_replacement_levels(projections, roster_spec, num_teams)
     out = projections.copy()
     out["replacement_rate"] = out["position"].map(levels)
     out["vorp_per_game"] = out["points_rate"] - out["replacement_rate"]
     out["vorp_season"] = out["vorp_per_game"] * season_games
+    out["flex_replacement_rate"] = out["position"].map(flex_levels)
+    out["vorp_flex_per_game"] = out["points_rate"] - out["flex_replacement_rate"]
+    out["vorp_flex_season"] = out["vorp_flex_per_game"] * season_games
     return out
 
 
@@ -212,17 +309,26 @@ def compute_salary_values(
             f"min_bid={min_bid} across {roster_size} roster slots."
         )
 
+    # Use flex VORP for valuation when available: it measures edge over
+    # the true alternative (the best flex-eligible player you could have
+    # taken), which is the economically correct signal for salary prices.
+    vorp_col = (
+        "vorp_flex_season"
+        if "vorp_flex_season" in projections.columns
+        else "vorp_season"
+    )
+
     out = projections.copy()
     out["salary_value"] = float(min_bid)
 
     pool_mask = ~out["player_id_sr"].astype(str).str.startswith("avg_")
-    eligible = out.loc[pool_mask].sort_values("vorp_season", ascending=False)
+    eligible = out.loc[pool_mask].sort_values(vorp_col, ascending=False)
     starter_cohort = eligible.head(num_teams * starting_slots_per_team)
-    positive = starter_cohort.loc[starter_cohort["vorp_season"] > 0]
+    positive = starter_cohort.loc[starter_cohort[vorp_col] > 0]
 
-    total_positive_vorp = float(positive["vorp_season"].sum())
+    total_positive_vorp = float(positive[vorp_col].sum())
     if total_positive_vorp > 0 and above_min_pool > 0:
-        share = positive["vorp_season"] / total_positive_vorp
+        share = positive[vorp_col] / total_positive_vorp
         out.loc[positive.index, "salary_value"] = (
             min_bid + share * above_min_pool
         ).astype(float)
@@ -590,20 +696,25 @@ def _user_pick(
     strategy: str,
 ) -> int:
     """Pick the user's player according to the chosen strategy."""
+    vorp_col = (
+        "vorp_flex_per_game"
+        if "vorp_flex_per_game" in available.columns
+        else "vorp_per_game"
+    )
     if strategy == "bpa":
         return int(available["points_rate"].fillna(-np.inf).to_numpy().argmax())
     if strategy == "vorp":
         # Players at positions the user has 0 starting slots left for
         # get a small VORP penalty so we don't draft a 3rd QB before
         # filling RB. The penalty scales with the remaining draft slots.
-        scores = available["vorp_per_game"].fillna(-np.inf).to_numpy()
+        scores = available[vorp_col].fillna(-np.inf).to_numpy()
         need = np.array([roster.need_score(p) for p in available["position"]])
         adjusted = scores * np.where(need > 0.5, 1.0, 0.6)
         return int(adjusted.argmax())
     if strategy == "need":
         # Best VORP at the position with the largest remaining need.
         need = np.array([roster.need_score(p) for p in available["position"]])
-        scores = available["vorp_per_game"].fillna(-np.inf).to_numpy()
+        scores = available[vorp_col].fillna(-np.inf).to_numpy()
         return int((scores * need).argmax())
     raise ValueError(f"Unknown user strategy: {strategy!r}")
 

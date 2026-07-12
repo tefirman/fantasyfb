@@ -159,12 +159,12 @@ class TestViewBest:
         assert set(out["position"].unique()) <= {"RB", "WR"}
 
     def test_globally_sorted_by_vorp_descending(self, board):
-        """Final list is VORP-ordered across positions, not grouped by
+        """Final list is flex-VORP-ordered across positions, not grouped by
         position. The top row is whoever has the highest cross-position
-        value -- typically an RB/WR rather than the top QB, since QBs
-        sit on a deeper replacement level."""
+        flex value -- the player with the highest edge over the combined
+        flex pool."""
         out = view_best(board, limit_per_position=5)
-        vorps = out["vorp_per_game"].tolist()
+        vorps = out["vorp_flex_per_game"].tolist()
         assert vorps == sorted(vorps, reverse=True)
 
     def test_within_position_sorted_by_vorp_descending(self, board):
@@ -225,7 +225,7 @@ class TestViewNearest:
     def test_sorted_by_vorp_descending(self, board):
         out = view_nearest(board, pick_overall=20, num_teams=12,
                            window_rounds=3)
-        vorps = out["vorp_per_game"].tolist()
+        vorps = out["vorp_flex_per_game"].tolist()
         assert vorps == sorted(vorps, reverse=True)
 
 
@@ -345,25 +345,27 @@ class TestViewBestNeedAdjusted:
     def test_filled_position_demotes_below_open_position(
         self, board, standard_roster_spec,
     ):
-        """The point of need adjustment: with WR + flex slots filled, a
-        top WR should fall behind a top RB even though WR has higher raw
-        VORP in this synthetic pool (3 WR starters/team + WRs fill flex
-        push WR replacement level deeper than RB's, so top WR > top RB
-        on raw VORP).
-        """
-        # Sanity: in the no-need view, top of the table is a WR.
-        baseline = view_best(board, limit_per_position=5)
-        assert baseline.iloc[0]["position"] == "WR"
+        """The point of need adjustment: with RB slots filled, a top RB
+        should fall behind a top WR in the need-adjusted view.
 
-        # Fill all 3 WR slots + 1 W/R/T flex slot (Roster.add greedily
-        # fills WR first, then flex when WR is full).
-        board.loc[board["name"].isin(["WR00", "WR01", "WR02", "WR03"]),
+        In this synthetic pool RB tops the flex-VORP ranking (RB00 rate
+        30 > WR00 rate 25, and W/R/T flex compresses WR flex edge more
+        than RB's). After filling both RB starting slots + the flex slot,
+        need_score(RB) drops to bench-only (~0.2) while WR stays at 1.0,
+        so WR should rise to the top.
+        """
+        # Sanity: in the no-need view, top of the table is an RB.
+        baseline = view_best(board, limit_per_position=5)
+        assert baseline.iloc[0]["position"] == "RB"
+
+        # Fill both RB slots + 1 W/R/T flex slot.
+        board.loc[board["name"].isin(["RB00", "RB01", "RB02"]),
                   "fantasy_team"] = "My Team"
         roster = build_my_roster(board, "My Team", standard_roster_spec)
-        # WR/flex consumed -> need_score(WR) drops to bench-only (~0.2).
-        # RB still has open slots -> need_score(RB) = 1.0.
+        # RB/flex consumed -> need_score(RB) drops to bench-only (~0.2).
+        # WR still has open slots -> need_score(WR) = 1.0.
         adjusted = view_best(board, my_roster=roster, limit_per_position=5)
-        assert adjusted.iloc[0]["position"] == "RB"
+        assert adjusted.iloc[0]["position"] == "WR"
 
     def test_need_factor_constant_within_position(
         self, board, standard_roster_spec,
@@ -495,11 +497,15 @@ class TestRandomPick:
         self, board, standard_roster_spec,
     ):
         """The auto-pick scores need against the on-the-clock team, not
-        always My Team. If team A has filled WR but team B has not,
-        random_pick(team=A) should avoid WR while random_pick(team=B)
+        always My Team. If team A has filled RB but team B has not,
+        random_pick(team=A) should avoid RB while random_pick(team=B)
         shouldn't.
+
+        RB is used here because in a W/R/T flex league RB tops the flex-
+        VORP ranking (RB00 rate 30 >> WR00 rate 25), making it the most
+        natural fill position in the top-N pool.
         """
-        board.loc[board["name"].isin(["WR00", "WR01", "WR02", "WR03"]),
+        board.loc[board["name"].isin(["RB00", "RB01", "RB02"]),
                   "fantasy_team"] = "Team A"
         a_positions = []
         b_positions = []
@@ -522,7 +528,7 @@ class TestRandomPick:
             b_positions.append(
                 board.loc[board["name"] == b, "position"].iloc[0]
             )
-        a_wr = sum(p == "WR" for p in a_positions)
-        b_wr = sum(p == "WR" for p in b_positions)
-        # Team B (no WRs yet) should pick WR much more often than A.
-        assert b_wr > a_wr
+        a_rb = sum(p == "RB" for p in a_positions)
+        b_rb = sum(p == "RB" for p in b_positions)
+        # Team B (no RBs yet) should pick RB much more often than A.
+        assert b_rb > a_rb

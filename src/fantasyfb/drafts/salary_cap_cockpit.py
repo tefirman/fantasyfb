@@ -228,8 +228,9 @@ def view_best(
     my_roster = build_my_roster(board, my_team, roster_spec)
 
     avail = avail.copy()
+    base_col = "vorp_flex_per_game" if "vorp_flex_per_game" in avail.columns else "vorp_per_game"
     avail["need_factor"] = avail["position"].map(my_roster.need_score)
-    avail["vorp_adjusted"] = avail["vorp_per_game"] * avail["need_factor"]
+    avail["vorp_adjusted"] = avail[base_col] * avail["need_factor"]
     avail["inflated_value"] = avail["salary_value"] * inflation
     # The user can't bid more than their cap allows, regardless of the
     # market price -- clip so the column reads as an actionable number.
