@@ -39,7 +39,7 @@ _POSITION_ORDER: tuple[str, ...] = ("QB", "RB", "WR", "TE", "K", "DEF")
 DEFAULT_DISPLAY_COLS: tuple[str, ...] = (
     "name", "position", "current_team", "tier",
     "vorp_adjusted", "need_factor",
-    "vorp_per_game", "points_rate",
+    "vorp_flex_per_game", "vorp_per_game", "points_rate",
     "adp", "adp_round", "adp_value",
 )
 
@@ -125,13 +125,22 @@ def _apply_need_scaling(
 ) -> tuple[pd.DataFrame, str]:
     """Add ``need_factor`` and ``vorp_adjusted`` columns when a roster is
     provided, and return the column to sort by. With no roster, sorts by
-    raw ``vorp_per_game`` -- the original cross-position behavior.
+    raw ``vorp_flex_per_game`` (or ``vorp_per_game`` as fallback) --
+    the original cross-position behavior.
+
+    ``vorp_adjusted`` uses ``vorp_flex_per_game`` as its base when
+    available: flex VORP measures edge over the true alternative (the
+    best flex-eligible player you could have taken), which is the
+    economically correct signal for draft decisions in flex/superflex
+    leagues. For K/DEF -- positions with no flex slot -- flex VORP
+    equals position VORP, so there is no difference for those players.
     """
+    base_col = "vorp_flex_per_game" if "vorp_flex_per_game" in avail.columns else "vorp_per_game"
     if my_roster is None:
-        return avail, "vorp_per_game"
+        return avail, base_col
     avail = avail.copy()
     avail["need_factor"] = avail["position"].map(my_roster.need_score)
-    avail["vorp_adjusted"] = avail["vorp_per_game"] * avail["need_factor"]
+    avail["vorp_adjusted"] = avail[base_col] * avail["need_factor"]
     return avail, "vorp_adjusted"
 
 
@@ -270,8 +279,9 @@ def random_pick(
         roster.add({"position": row["position"]})
 
     avail = avail.copy()
+    base_col = "vorp_flex_per_game" if "vorp_flex_per_game" in avail.columns else "vorp_per_game"
     avail["need_factor"] = avail["position"].map(roster.need_score)
-    avail["vorp_adjusted"] = avail["vorp_per_game"] * avail["need_factor"]
+    avail["vorp_adjusted"] = avail[base_col] * avail["need_factor"]
     avail = avail.sort_values(
         "vorp_adjusted", ascending=False, na_position="last",
     )

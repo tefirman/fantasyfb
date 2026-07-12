@@ -20,6 +20,7 @@ from fantasyfb.drafts.tools import (
     MockSalaryCapDraft,
     assign_tiers,
     backtest_salary_values,
+    compute_flex_replacement_levels,
     compute_replacement_levels,
     compute_salary_values,
     compute_vorp,
@@ -158,6 +159,104 @@ class TestVORP:
 
 
 # --------------------------------------------------------------------- #
+# Flex / superflex VORP
+# --------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def superflex_roster_spec() -> pd.DataFrame:
+    """1-QB / 2-RB / 3-WR / 1-TE / 1-superflex (Q/W/R/T) league."""
+    return pd.DataFrame({
+        "position": ["QB", "RB", "WR", "TE", "Q/W/R/T", "K", "DEF", "BN"],
+        "count":    [1,    2,    3,    1,    1,          1,   1,     6],
+    })
+
+
+class TestFlexVORP:
+    def test_flex_columns_present(self, small_pool, standard_roster_spec):
+        """compute_vorp should add vorp_flex_per_game and vorp_flex_season."""
+        out = compute_vorp(small_pool, standard_roster_spec, 12)
+        assert "vorp_flex_per_game" in out.columns
+        assert "vorp_flex_season" in out.columns
+        assert "flex_replacement_rate" in out.columns
+
+    def test_no_flex_slot_equals_position_vorp_for_k_def(
+        self, small_pool, standard_roster_spec,
+    ):
+        """K and DEF have no flex slot in any league config, so their
+        flex VORP should equal their position VORP."""
+        out = compute_vorp(small_pool, standard_roster_spec, 12)
+        k_rows = out[out["position"] == "K"]
+        np.testing.assert_allclose(
+            k_rows["vorp_flex_per_game"].to_numpy(),
+            k_rows["vorp_per_game"].to_numpy(),
+        )
+        def_rows = out[out["position"] == "DEF"]
+        np.testing.assert_allclose(
+            def_rows["vorp_flex_per_game"].to_numpy(),
+            def_rows["vorp_per_game"].to_numpy(),
+        )
+
+    def test_superflex_qb_flex_vorp_less_than_pos_vorp(
+        self, small_pool, superflex_roster_spec,
+    ):
+        """In a superflex league, the flex replacement baseline for QB is
+        drawn from the QB+WR+RB+TE pool, which includes many high-scoring
+        WRs and RBs. That combined baseline is higher than the position-only
+        QB baseline, so vorp_flex_per_game < vorp_per_game for QBs."""
+        out = compute_vorp(small_pool, superflex_roster_spec, 12)
+        qb_rows = out[out["position"] == "QB"]
+        assert (qb_rows["vorp_flex_per_game"] < qb_rows["vorp_per_game"]).all()
+
+    def test_superflex_flex_replacement_is_combined_pool(
+        self, small_pool, superflex_roster_spec,
+    ):
+        """The flex replacement level for all Q/W/R/T eligible positions
+        should be the same value -- the Nth-best player across the combined
+        QB+WR+RB+TE pool where N = dedicated starters + superflex slots."""
+        flex_levels = compute_flex_replacement_levels(
+            small_pool, superflex_roster_spec, 12
+        )
+        # All Q/W/R/T eligible positions should share the same baseline.
+        assert flex_levels["QB"] == pytest.approx(flex_levels["WR"])
+        assert flex_levels["QB"] == pytest.approx(flex_levels["RB"])
+        assert flex_levels["QB"] == pytest.approx(flex_levels["TE"])
+
+    def test_standard_flex_qb_unchanged(
+        self, small_pool, standard_roster_spec,
+    ):
+        """In a standard W/R/T flex league, QB has no flex slot, so its
+        flex VORP should equal its position VORP."""
+        out = compute_vorp(small_pool, standard_roster_spec, 12)
+        qb_rows = out[out["position"] == "QB"]
+        np.testing.assert_allclose(
+            qb_rows["vorp_flex_per_game"].to_numpy(),
+            qb_rows["vorp_per_game"].to_numpy(),
+        )
+
+    def test_vorp_flex_season_is_per_game_times_games(
+        self, small_pool, superflex_roster_spec,
+    ):
+        out = compute_vorp(small_pool, superflex_roster_spec, 12)
+        assert out["vorp_flex_season"].equals(out["vorp_flex_per_game"] * 17)
+
+    def test_salary_values_use_flex_vorp_in_superflex(
+        self, small_pool, superflex_roster_spec,
+    ):
+        """In a superflex league, salary_value should be proportional to
+        vorp_flex_season, not vorp_season. Concretely: the top RB should
+        command more than the top QB (whose flex edge is compressed), which
+        is the opposite of a raw-points ranking but correct for superflex."""
+        with_vorp = compute_vorp(small_pool, superflex_roster_spec, 12)
+        valued = compute_salary_values(
+            with_vorp, superflex_roster_spec, num_teams=12, salary_cap=200,
+        )
+        top_rb = valued.loc[valued["name"] == "RB00", "salary_value"].iloc[0]
+        top_qb = valued.loc[valued["name"] == "QB00", "salary_value"].iloc[0]
+        assert top_rb > top_qb
+
+
+# --------------------------------------------------------------------- #
 # Salary cap values
 # --------------------------------------------------------------------- #
 
@@ -185,11 +284,11 @@ class TestSalaryValues:
         valued = compute_salary_values(
             with_vorp, standard_roster_spec, num_teams=12, salary_cap=200,
         )
-        # RB00 has the highest VORP in this pool (top RB, low RB
-        # replacement level) so it should also get the highest value.
-        top_by_vorp = valued.sort_values("vorp_season", ascending=False).iloc[0]
+        # salary_value is driven by vorp_flex_season, so the top player
+        # by salary_value should be the top player by vorp_flex_season.
+        top_by_flex_vorp = valued.sort_values("vorp_flex_season", ascending=False).iloc[0]
         top_by_value = valued.sort_values("salary_value", ascending=False).iloc[0]
-        assert top_by_value["name"] == top_by_vorp["name"]
+        assert top_by_value["name"] == top_by_flex_vorp["name"]
 
     def test_below_replacement_gets_min_bid(
         self, small_pool, standard_roster_spec,
