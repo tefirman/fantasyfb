@@ -56,7 +56,7 @@ from .tools import round_direction
 
 _PICK_COMMANDS = (
     "best", "nearest", "bestball", "nearestbestball",
-    "lookup", "exclude", "go back", "sim", "roster",
+    "lookup", "exclude", "go back", "sim", "simadd", "roster",
     "random", "random til me", "help", "exit",
 )
 
@@ -121,6 +121,7 @@ Commands during the draft:
   exclude         Add a player to the per-session exclude list
   roster          Show My Team's current picks
   sim             Run a full season simulation with current rosters
+  simadd          Simulate adding a specific player to your team and show the delta
   random          Auto-pick for the team currently on the clock
   random til me   Auto-pick for everyone until it's your turn again
   go back         Revert the previous pick
@@ -373,6 +374,8 @@ def main(argv=None) -> int:
 
     _enable_completion()
 
+    _sim_baseline = None  # cached baseline standings for simadd; invalidated on each pick
+
     while pick_num < tot_picks:
         round_num = pick_num // num_teams + 1
         slot = snake_pick_slot(pick_num, num_teams, args.reversal_round)
@@ -400,6 +403,7 @@ def main(argv=None) -> int:
             )
             progress.to_csv(output_path, index=False)
             pick_num += 1
+            _sim_baseline = None
 
         elif pick_name == "best":
             my_roster = cockpit.build_my_roster(
@@ -506,12 +510,50 @@ def main(argv=None) -> int:
             progress = progress.iloc[:-1].reset_index(drop=True)
             progress.to_csv(output_path, index=False)
             pick_num -= 1
+            _sim_baseline = None
 
         elif pick_name == "sim":
-            standings = league.season_sims(payouts=payouts)[1]
-            print(standings[["team", "points_avg", "wins_avg",
-                             "playoffs", "winner", "earnings"]]
+            _sim_baseline = league.season_sims(payouts=payouts)[1]
+            print(_sim_baseline[["team", "points_avg", "wins_avg",
+                                  "playoffs", "winner", "earnings"]]
                   .to_string(index=False))
+
+        elif pick_name == "simadd":
+            _set_completion_candidates(
+                ["nevermind"]
+                + league.players.loc[league.players.fantasy_team.isnull(), "name"]
+                .dropna().tolist()
+            )
+            focus = check_pick_name(
+                league,
+                input("Which player would you like to simulate adding? "),
+                ("nevermind",),
+            )
+            while focus is None:
+                focus = check_pick_name(
+                    league,
+                    input("Which player would you like to simulate adding? "),
+                    ("nevermind",),
+                )
+            if focus != "nevermind":
+                print(f"Running baseline sim...")
+                if _sim_baseline is None:
+                    _sim_baseline = league.season_sims(payouts=payouts)[1]
+                baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
+                print(f"Simulating with {focus} on My Team...")
+                league.players.loc[league.players.name == focus, "fantasy_team"] = "My Team"
+                new_standings = league.season_sims(payouts=payouts)[1]
+                league.players.loc[league.players.name == focus, "fantasy_team"] = None
+                new_row = new_standings.loc[new_standings.team == "My Team"]
+                delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
+                delta_cols = [c for c in delta_cols if c in new_row.columns]
+                print(f"\nSimulated impact of adding {focus}:")
+                print(f"  {'metric':<18} {'baseline':>10} {'with add':>10} {'delta':>10}")
+                print(f"  {'-'*52}")
+                for col in delta_cols:
+                    base_val = baseline_row[col].values[0]
+                    new_val = new_row[col].values[0]
+                    print(f"  {col:<18} {base_val:>10.3f} {new_val:>10.3f} {new_val - base_val:>+10.3f}")
 
         elif pick_name == "roster":
             _print_df(cockpit.view_roster(board, "My Team"),
@@ -533,6 +575,7 @@ def main(argv=None) -> int:
             )
             progress.to_csv(output_path, index=False)
             pick_num += 1
+            _sim_baseline = None
 
         elif pick_name == "random til me":
             # Inner loop: auto-pick for every team until "My Team" is on
@@ -566,6 +609,7 @@ def main(argv=None) -> int:
                 print("It's already your pick.")
             else:
                 print(f"Auto-drafted {auto_count} picks. You're up.")
+                _sim_baseline = None
 
         elif pick_name == "help":
             print(_HELP_TEXT)
