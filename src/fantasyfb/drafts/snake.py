@@ -536,6 +536,8 @@ def main(argv=None) -> int:
                     ("nevermind",),
                 )
             if focus != "nevermind":
+                orig_num_sims = league.num_sims
+                league.num_sims = 1000
                 print(f"Running baseline sim...")
                 if _sim_baseline is None:
                     _sim_baseline = league.season_sims(payouts=payouts)[1]
@@ -544,6 +546,7 @@ def main(argv=None) -> int:
                 league.players.loc[league.players.name == focus, "fantasy_team"] = "My Team"
                 new_standings = league.season_sims(payouts=payouts)[1]
                 league.players.loc[league.players.name == focus, "fantasy_team"] = None
+                league.num_sims = orig_num_sims
                 new_row = new_standings.loc[new_standings.team == "My Team"]
                 delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
                 delta_cols = [c for c in delta_cols if c in new_row.columns]
