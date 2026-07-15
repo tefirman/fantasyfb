@@ -56,7 +56,7 @@ from .tools import round_direction
 
 _PICK_COMMANDS = (
     "best", "nearest", "bestball", "nearestbestball",
-    "lookup", "exclude", "go back", "sim", "simadd", "roster",
+    "lookup", "exclude", "go back", "sim", "simadd", "nearestsimadd", "bestballsimadd", "roster",
     "random", "random til me", "help", "exit",
 )
 
@@ -122,6 +122,8 @@ Commands during the draft:
   roster          Show My Team's current picks
   sim             Run a full season simulation with current rosters
   simadd          Sim top-N available per position; rank by win/playoff/earnings delta
+  nearestsimadd   Same as simadd but limited to players in the next ADP window
+  bestballsimadd  Same as simadd but uses best-ball upside-weighted candidates
   random          Auto-pick for the team currently on the clock
   random til me   Auto-pick for everyone until it's your turn again
   go back         Revert the previous pick
@@ -289,6 +291,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit-per-position", type=int, default=5,
                    dest="limit_per_position",
                    help="rows per position in 'best' view")
+    p.add_argument("--simadd-limit", type=int, default=3,
+                   dest="simadd_limit",
+                   help="players per position to simulate in 'simadd' commands (default 3)")
     p.add_argument("--nearest-window", type=int, default=2,
                    dest="nearest_window",
                    help="ADP window in rounds for 'nearest' view")
@@ -518,16 +523,32 @@ def main(argv=None) -> int:
                                   "playoffs", "winner", "earnings"]]
                   .to_string(index=False))
 
-        elif pick_name == "simadd":
+        elif pick_name in ("simadd", "nearestsimadd", "bestballsimadd"):
             my_roster = cockpit.build_my_roster(board, "My Team", league.roster_spots)
-            candidates = cockpit.view_best(
-                board, exclude=exclude,
-                limit_per_position=args.limit_per_position,
-                my_roster=my_roster,
-            )["name"].tolist()
+            if pick_name == "nearestsimadd":
+                candidates = cockpit.view_nearest(
+                    board, pick_overall=pick_num + 1, num_teams=num_teams,
+                    exclude=exclude, window_rounds=args.nearest_window,
+                    my_roster=my_roster,
+                )["name"].tolist()
+            elif pick_name == "bestballsimadd":
+                candidates = cockpit.view_bestball(
+                    board, exclude=exclude,
+                    limit_per_position=args.simadd_limit,
+                    my_roster=my_roster,
+                )["name"].tolist()
+            else:
+                candidates = cockpit.view_best(
+                    board, exclude=exclude,
+                    limit_per_position=args.simadd_limit,
+                    my_roster=my_roster,
+                )["name"].tolist()
+            candidates = [c for c in candidates
+                          if league.players.loc[league.players.name == c, "position"]
+                          .isin(["K", "DEF"]).sum() == 0]
             orig_num_sims = league.num_sims
             league.num_sims = 1000
-            print(f"Running baseline sim...")
+            print("Running baseline sim...")
             if _sim_baseline is None:
                 _sim_baseline = league.season_sims(payouts=payouts)[1]
             baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
