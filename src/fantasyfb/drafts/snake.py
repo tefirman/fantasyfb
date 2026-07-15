@@ -294,6 +294,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--simadd-limit", type=int, default=3,
                    dest="simadd_limit",
                    help="players per position to simulate in 'simadd' commands (default 3)")
+    p.add_argument("--bestball", nargs="?", const="underdog", default="",
+                   metavar="PLATFORM",
+                   help="enable best-ball scoring/roster settings. Optionally pass "
+                        "a platform name (underdog, dk). Bare --bestball defaults "
+                        "to 'underdog'. Switches sim and simadd to use bestball_sims.")
     p.add_argument("--nearest-window", type=int, default=2,
                    dest="nearest_window",
                    help="ADP window in rounds for 'nearest' view")
@@ -333,7 +338,8 @@ def main(argv=None) -> int:
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
 
-    league = fb.League(name=args.team, num_sims=10000, season=args.season, sfb=args.sfb)
+    league = fb.League(name=args.team, num_sims=10000, season=args.season, sfb=args.sfb,
+                       bestball=args.bestball)
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
         league.roster_spots.position != "IR", "count"
@@ -518,7 +524,10 @@ def main(argv=None) -> int:
             _sim_baseline = None
 
         elif pick_name == "sim":
-            _sim_baseline = league.season_sims(payouts=payouts)[1]
+            if args.bestball:
+                _sim_baseline = league.bestball_sims(payouts=payouts)
+            else:
+                _sim_baseline = league.season_sims(payouts=payouts)[1]
             print(_sim_baseline[["team", "points_avg", "wins_avg",
                                   "playoffs", "winner", "earnings"]]
                   .to_string(index=False))
@@ -546,11 +555,16 @@ def main(argv=None) -> int:
             candidates = [c for c in candidates
                           if league.players.loc[league.players.name == c, "position"]
                           .isin(["K", "DEF"]).sum() == 0]
+            def _run_sims():
+                if args.bestball:
+                    return league.bestball_sims(payouts=payouts)
+                return league.season_sims(payouts=payouts)[1]
+
             orig_num_sims = league.num_sims
             league.num_sims = 1000
             print("Running baseline sim...")
             if _sim_baseline is None:
-                _sim_baseline = league.season_sims(payouts=payouts)[1]
+                _sim_baseline = _run_sims()
             baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
             delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
             delta_cols = [c for c in delta_cols if c in _sim_baseline.columns]
@@ -558,7 +572,7 @@ def main(argv=None) -> int:
             for candidate in candidates:
                 print(f"  Simulating {candidate}...")
                 league.players.loc[league.players.name == candidate, "fantasy_team"] = "My Team"
-                new_standings = league.season_sims(payouts=payouts)[1]
+                new_standings = _run_sims()
                 league.players.loc[league.players.name == candidate, "fantasy_team"] = None
                 row = {"name": candidate}
                 for col in delta_cols:
@@ -636,7 +650,7 @@ def main(argv=None) -> int:
             print(f"Exiting draft. Progress saved to {output_path}.")
             return 0
 
-    standings = league.season_sims(payouts=payouts)[1]
+    standings = league.bestball_sims(payouts=payouts) if args.bestball else league.season_sims(payouts=payouts)[1]
     print(standings[["team", "points_avg", "wins_avg",
                      "playoffs", "winner", "earnings"]]
           .to_string(index=False))
