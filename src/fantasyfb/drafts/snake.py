@@ -121,7 +121,7 @@ Commands during the draft:
   exclude         Add a player to the per-session exclude list
   roster          Show My Team's current picks
   sim             Run a full season simulation with current rosters
-  simadd          Simulate adding a specific player to your team and show the delta
+  simadd          Sim top-N available per position; rank by win/playoff/earnings delta
   random          Auto-pick for the team currently on the clock
   random til me   Auto-pick for everyone until it's your turn again
   go back         Revert the previous pick
@@ -519,44 +519,38 @@ def main(argv=None) -> int:
                   .to_string(index=False))
 
         elif pick_name == "simadd":
-            _set_completion_candidates(
-                ["nevermind"]
-                + league.players.loc[league.players.fantasy_team.isnull(), "name"]
-                .dropna().tolist()
-            )
-            focus = check_pick_name(
-                league,
-                input("Which player would you like to simulate adding? "),
-                ("nevermind",),
-            )
-            while focus is None:
-                focus = check_pick_name(
-                    league,
-                    input("Which player would you like to simulate adding? "),
-                    ("nevermind",),
-                )
-            if focus != "nevermind":
-                orig_num_sims = league.num_sims
-                league.num_sims = 1000
-                print(f"Running baseline sim...")
-                if _sim_baseline is None:
-                    _sim_baseline = league.season_sims(payouts=payouts)[1]
-                baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
-                print(f"Simulating with {focus} on My Team...")
-                league.players.loc[league.players.name == focus, "fantasy_team"] = "My Team"
+            my_roster = cockpit.build_my_roster(board, "My Team", league.roster_spots)
+            candidates = cockpit.view_best(
+                board, exclude=exclude,
+                limit_per_position=args.limit_per_position,
+                my_roster=my_roster,
+            )["name"].tolist()
+            orig_num_sims = league.num_sims
+            league.num_sims = 1000
+            print(f"Running baseline sim...")
+            if _sim_baseline is None:
+                _sim_baseline = league.season_sims(payouts=payouts)[1]
+            baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
+            delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
+            delta_cols = [c for c in delta_cols if c in _sim_baseline.columns]
+            rows = []
+            for candidate in candidates:
+                print(f"  Simulating {candidate}...")
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = "My Team"
                 new_standings = league.season_sims(payouts=payouts)[1]
-                league.players.loc[league.players.name == focus, "fantasy_team"] = None
-                league.num_sims = orig_num_sims
-                new_row = new_standings.loc[new_standings.team == "My Team"]
-                delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
-                delta_cols = [c for c in delta_cols if c in new_row.columns]
-                print(f"\nSimulated impact of adding {focus}:")
-                print(f"  {'metric':<18} {'baseline':>10} {'with add':>10} {'delta':>10}")
-                print(f"  {'-'*52}")
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = None
+                row = {"name": candidate}
                 for col in delta_cols:
-                    base_val = baseline_row[col].values[0]
-                    new_val = new_row[col].values[0]
-                    print(f"  {col:<18} {base_val:>10.3f} {new_val:>10.3f} {new_val - base_val:>+10.3f}")
+                    row[col] = round(
+                        new_standings.loc[new_standings.team == "My Team", col].values[0]
+                        - baseline_row[col].values[0], 3
+                    )
+                rows.append(row)
+            league.num_sims = orig_num_sims
+            if rows:
+                sort_col = "winner" if "winner" in delta_cols else delta_cols[-1]
+                result = pd.DataFrame(rows).sort_values(sort_col, ascending=False)
+                _print_df(result, "Simulated impact of adding each player (delta from baseline):")
 
         elif pick_name == "roster":
             _print_df(cockpit.view_roster(board, "My Team"),
