@@ -56,7 +56,7 @@ from .tools import round_direction
 
 _PICK_COMMANDS = (
     "best", "nearest", "bestball", "nearestbestball",
-    "lookup", "exclude", "go back", "sim", "roster",
+    "lookup", "exclude", "go back", "sim", "simadd", "nearestsimadd", "bestballsimadd", "roster",
     "random", "random til me", "help", "exit",
 )
 
@@ -121,6 +121,9 @@ Commands during the draft:
   exclude         Add a player to the per-session exclude list
   roster          Show My Team's current picks
   sim             Run a full season simulation with current rosters
+  simadd          Sim top-N available per position; rank by win/playoff/earnings delta
+  nearestsimadd   Same as simadd but limited to players in the next ADP window
+  bestballsimadd  Same as simadd but uses best-ball upside-weighted candidates
   random          Auto-pick for the team currently on the clock
   random til me   Auto-pick for everyone until it's your turn again
   go back         Revert the previous pick
@@ -288,6 +291,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit-per-position", type=int, default=5,
                    dest="limit_per_position",
                    help="rows per position in 'best' view")
+    p.add_argument("--simadd-limit", type=int, default=3,
+                   dest="simadd_limit",
+                   help="players per position to simulate in 'simadd' commands (default 3)")
+    p.add_argument("--bestball", nargs="?", const="underdog", default="",
+                   metavar="PLATFORM",
+                   help="enable best-ball scoring/roster settings. Optionally pass "
+                        "a platform name (underdog, dk). Bare --bestball defaults "
+                        "to 'underdog'. Switches sim and simadd to use bestball_sims.")
     p.add_argument("--nearest-window", type=int, default=2,
                    dest="nearest_window",
                    help="ADP window in rounds for 'nearest' view")
@@ -327,7 +338,8 @@ def main(argv=None) -> int:
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
 
-    league = fb.League(name=args.team, num_sims=10000, season=args.season, sfb=args.sfb)
+    league = fb.League(name=args.team, num_sims=10000, season=args.season, sfb=args.sfb,
+                       bestball=args.bestball)
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
         league.roster_spots.position != "IR", "count"
@@ -373,6 +385,8 @@ def main(argv=None) -> int:
 
     _enable_completion()
 
+    _sim_baseline = None  # cached baseline standings for simadd; invalidated on each pick
+
     while pick_num < tot_picks:
         round_num = pick_num // num_teams + 1
         slot = snake_pick_slot(pick_num, num_teams, args.reversal_round)
@@ -400,6 +414,7 @@ def main(argv=None) -> int:
             )
             progress.to_csv(output_path, index=False)
             pick_num += 1
+            _sim_baseline = None
 
         elif pick_name == "best":
             my_roster = cockpit.build_my_roster(
@@ -506,12 +521,71 @@ def main(argv=None) -> int:
             progress = progress.iloc[:-1].reset_index(drop=True)
             progress.to_csv(output_path, index=False)
             pick_num -= 1
+            _sim_baseline = None
 
         elif pick_name == "sim":
-            standings = league.season_sims(payouts=payouts)[1]
-            print(standings[["team", "points_avg", "wins_avg",
-                             "playoffs", "winner", "earnings"]]
+            if args.bestball:
+                _sim_baseline = league.bestball_sims(payouts=payouts)
+            else:
+                _sim_baseline = league.season_sims(payouts=payouts)[1]
+            print(_sim_baseline[["team", "points_avg", "wins_avg",
+                                  "playoffs", "winner", "earnings"]]
                   .to_string(index=False))
+
+        elif pick_name in ("simadd", "nearestsimadd", "bestballsimadd"):
+            my_roster = cockpit.build_my_roster(board, "My Team", league.roster_spots)
+            if pick_name == "nearestsimadd":
+                candidates = cockpit.view_nearest(
+                    board, pick_overall=pick_num + 1, num_teams=num_teams,
+                    exclude=exclude, window_rounds=args.nearest_window,
+                    my_roster=my_roster,
+                )["name"].tolist()
+            elif pick_name == "bestballsimadd":
+                candidates = cockpit.view_bestball(
+                    board, exclude=exclude,
+                    limit_per_position=args.simadd_limit,
+                    my_roster=my_roster,
+                )["name"].tolist()
+            else:
+                candidates = cockpit.view_best(
+                    board, exclude=exclude,
+                    limit_per_position=args.simadd_limit,
+                    my_roster=my_roster,
+                )["name"].tolist()
+            candidates = [c for c in candidates
+                          if league.players.loc[league.players.name == c, "position"]
+                          .isin(["K", "DEF"]).sum() == 0]
+            def _run_sims():
+                if args.bestball:
+                    return league.bestball_sims(payouts=payouts)
+                return league.season_sims(payouts=payouts)[1]
+
+            orig_num_sims = league.num_sims
+            league.num_sims = 1000
+            print("Running baseline sim...")
+            if _sim_baseline is None:
+                _sim_baseline = _run_sims()
+            baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
+            delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
+            delta_cols = [c for c in delta_cols if c in _sim_baseline.columns]
+            rows = []
+            for candidate in candidates:
+                print(f"  Simulating {candidate}...")
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = "My Team"
+                new_standings = _run_sims()
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = None
+                row = {"name": candidate}
+                for col in delta_cols:
+                    row[col] = round(
+                        new_standings.loc[new_standings.team == "My Team", col].values[0]
+                        - baseline_row[col].values[0], 3
+                    )
+                rows.append(row)
+            league.num_sims = orig_num_sims
+            if rows:
+                sort_col = "winner" if "winner" in delta_cols else delta_cols[-1]
+                result = pd.DataFrame(rows).sort_values(sort_col, ascending=False)
+                _print_df(result, "Simulated impact of adding each player (delta from baseline):")
 
         elif pick_name == "roster":
             _print_df(cockpit.view_roster(board, "My Team"),
@@ -533,6 +607,7 @@ def main(argv=None) -> int:
             )
             progress.to_csv(output_path, index=False)
             pick_num += 1
+            _sim_baseline = None
 
         elif pick_name == "random til me":
             # Inner loop: auto-pick for every team until "My Team" is on
@@ -566,6 +641,7 @@ def main(argv=None) -> int:
                 print("It's already your pick.")
             else:
                 print(f"Auto-drafted {auto_count} picks. You're up.")
+                _sim_baseline = None
 
         elif pick_name == "help":
             print(_HELP_TEXT)
@@ -574,7 +650,7 @@ def main(argv=None) -> int:
             print(f"Exiting draft. Progress saved to {output_path}.")
             return 0
 
-    standings = league.season_sims(payouts=payouts)[1]
+    standings = league.bestball_sims(payouts=payouts) if args.bestball else league.season_sims(payouts=payouts)[1]
     print(standings[["team", "points_avg", "wins_avg",
                      "playoffs", "winner", "earnings"]]
           .to_string(index=False))
