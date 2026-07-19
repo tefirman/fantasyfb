@@ -6,11 +6,8 @@ Replaces the old per-pick possible_adds Monte Carlo (10k full-season sims
 per candidate) with a VORP/tier/ADP board that's instant on the clock.
 
 Removed vs V1:
-    --sfb / --superflex / --bestball          (one-format-at-a-time, simpler;
-                                               re-add as a follow-up)
     name_corrections.csv HTTP fetch           (Yahoo<->NFL linkage by id
                                                already happens upstream)
-    bestball / nearestbestball commands       (will return with bestball mode)
 
 New required arg:
     --adp PATH    FantasyPros-style ADP CSV
@@ -18,12 +15,15 @@ New required arg:
 
 Commands during the draft (also available via the `help` command):
     <player name>  Mark the player as taken by the active team
-    best           Top-N available per position by need-adjusted VORP
-    nearest        Available players in the next ~2 rounds of ADP, by VORP
+    best           Top-N available per position. Prompts for pool (best
+                   available vs. nearest ADP) and, outside --bestball
+                   drafts, for scoring (normal vs. bestball upside)
     lookup         Detailed view of a single player
     exclude        Add a player to the per-session exclude list
     roster         My current roster
     sim            Full season-sim of current rosters
+    simadd         Sim top-N available per position; ranks by win/playoff/
+                   earnings delta. Same pool/scoring prompts as 'best'
     random         Auto-pick for the team currently on the clock
     random til me  Auto-pick for every team until your turn
     go back        Revert the previous pick
@@ -55,8 +55,7 @@ from .tools import round_direction
 
 
 _PICK_COMMANDS = (
-    "best", "nearest", "bestball", "nearestbestball",
-    "lookup", "exclude", "go back", "sim", "simadd", "nearestsimadd", "bestballsimadd", "roster",
+    "best", "lookup", "exclude", "go back", "sim", "simadd", "roster",
     "random", "random til me", "help", "exit",
 )
 
@@ -113,17 +112,15 @@ def _set_completion_candidates(names: Iterable[str]) -> None:
 _HELP_TEXT = """
 Commands during the draft:
   <player name>   Draft this player for the team on the clock
-  best            Top-N available per position by need-adjusted VORP
-  nearest         Available players within next N rounds of ADP
-  bestball        Like 'best' but ranked by upside-weighted best-ball VORP
-  nearestbestball Like 'nearest' but ranked by best-ball VORP
+  best            Top-N available per position by need-adjusted VORP.
+                  Prompts for pool (best available / nearest ADP) and,
+                  outside --bestball drafts, scoring (normal / bestball)
   lookup          Detailed view of one player
   exclude         Add a player to the per-session exclude list
   roster          Show My Team's current picks
   sim             Run a full season simulation with current rosters
-  simadd          Sim top-N available per position; rank by win/playoff/earnings delta
-  nearestsimadd   Same as simadd but limited to players in the next ADP window
-  bestballsimadd  Same as simadd but uses best-ball upside-weighted candidates
+  simadd          Sim top-N available per position; rank by win/playoff/earnings delta.
+                  Same pool/scoring prompts as 'best'
   random          Auto-pick for the team currently on the clock
   random til me   Auto-pick for everyone until it's your turn again
   go back         Revert the previous pick
@@ -173,6 +170,20 @@ def check_pick_name(league, pick_name, exceptions=()):
                  .iloc[:3][["name", "position", "current_team"]]
                  .to_string(index=False))
     return None
+
+
+def _prompt_choice(question: str, choices: tuple, default: str) -> str:
+    """Prompt for one of `choices` (case-insensitive), re-prompting on
+    anything else. Blank input accepts `default`.
+    """
+    lowered_choices = {c.lower(): c for c in choices}
+    while True:
+        raw = input(question).strip().lower()
+        if not raw:
+            return default
+        if raw in lowered_choices:
+            return lowered_choices[raw]
+        print(f"Please enter one of: {', '.join(choices)}")
 
 
 def provide_pick_order(league, customize=False, already=()):
@@ -420,55 +431,39 @@ def main(argv=None) -> int:
             my_roster = cockpit.build_my_roster(
                 board, "My Team", league.roster_spots,
             )
-            _print_df(
-                cockpit.view_best(
-                    board, exclude=exclude,
-                    limit_per_position=args.limit_per_position,
-                    my_roster=my_roster,
-                ),
-                "Best available by need-adjusted VORP:",
+            pool = _prompt_choice(
+                "Pool -- best available or nearest ADP? [best] ",
+                ("best", "nearest"), "best",
             )
+            # Bestball scoring is mandatory once the whole draft is running
+            # in bestball mode; otherwise it's an optional upside lens.
+            if args.bestball:
+                bestball_scoring = True
+            else:
+                bestball_scoring = _prompt_choice(
+                    "Scoring -- normal or bestball (upside-weighted)? [normal] ",
+                    ("normal", "bestball"), "normal",
+                ) == "bestball"
 
-        elif pick_name == "nearest":
-            my_roster = cockpit.build_my_roster(
-                board, "My Team", league.roster_spots,
-            )
-            _print_df(
-                cockpit.view_nearest(
+            if pool == "nearest":
+                view_fn = cockpit.view_nearestbestball if bestball_scoring else cockpit.view_nearest
+                result = view_fn(
                     board, pick_overall=pick_num + 1, num_teams=num_teams,
                     exclude=exclude, window_rounds=args.nearest_window,
                     my_roster=my_roster,
-                ),
-                f"Available within next {args.nearest_window} rounds of ADP "
-                f"(need-adjusted):",
-            )
-
-        elif pick_name == "bestball":
-            my_roster = cockpit.build_my_roster(
-                board, "My Team", league.roster_spots,
-            )
-            _print_df(
-                cockpit.view_bestball(
+                )
+                label = (f"Available within next {args.nearest_window} rounds of ADP "
+                          f"({'best-ball VORP, upside-weighted' if bestball_scoring else 'need-adjusted'}):")
+            else:
+                view_fn = cockpit.view_bestball if bestball_scoring else cockpit.view_best
+                result = view_fn(
                     board, exclude=exclude,
                     limit_per_position=args.limit_per_position,
                     my_roster=my_roster,
-                ),
-                "Best available by need-adjusted best-ball VORP (upside-weighted):",
-            )
-
-        elif pick_name == "nearestbestball":
-            my_roster = cockpit.build_my_roster(
-                board, "My Team", league.roster_spots,
-            )
-            _print_df(
-                cockpit.view_nearestbestball(
-                    board, pick_overall=pick_num + 1, num_teams=num_teams,
-                    exclude=exclude, window_rounds=args.nearest_window,
-                    my_roster=my_roster,
-                ),
-                f"Available within next {args.nearest_window} rounds of ADP "
-                f"(best-ball VORP, upside-weighted):",
-            )
+                )
+                label = (f"Best available by need-adjusted "
+                          f"{'best-ball VORP (upside-weighted)' if bestball_scoring else 'VORP'}:")
+            _print_df(result, label)
 
         elif pick_name == "lookup":
             # Lookup completion includes drafted players too -- the
@@ -532,22 +527,33 @@ def main(argv=None) -> int:
                                   "playoffs", "winner", "earnings"]]
                   .to_string(index=False))
 
-        elif pick_name in ("simadd", "nearestsimadd", "bestballsimadd"):
+        elif pick_name == "simadd":
             my_roster = cockpit.build_my_roster(board, "My Team", league.roster_spots)
-            if pick_name == "nearestsimadd":
-                candidates = cockpit.view_nearest(
+            pool = _prompt_choice(
+                "Pool -- best available or nearest ADP? [best] ",
+                ("best", "nearest"), "best",
+            )
+            # Bestball scoring is mandatory once the whole draft is running
+            # in bestball mode; otherwise it's an optional upside lens for
+            # spotting bench-relevant players a normal sim can't tell apart.
+            if args.bestball:
+                bestball_scoring = True
+            else:
+                bestball_scoring = _prompt_choice(
+                    "Candidate ranking -- normal or bestball (upside-weighted)? [normal] ",
+                    ("normal", "bestball"), "normal",
+                ) == "bestball"
+
+            if pool == "nearest":
+                view_fn = cockpit.view_nearestbestball if bestball_scoring else cockpit.view_nearest
+                candidates = view_fn(
                     board, pick_overall=pick_num + 1, num_teams=num_teams,
                     exclude=exclude, window_rounds=args.nearest_window,
                     my_roster=my_roster,
                 )["name"].tolist()
-            elif pick_name == "bestballsimadd":
-                candidates = cockpit.view_bestball(
-                    board, exclude=exclude,
-                    limit_per_position=args.simadd_limit,
-                    my_roster=my_roster,
-                )["name"].tolist()
             else:
-                candidates = cockpit.view_best(
+                view_fn = cockpit.view_bestball if bestball_scoring else cockpit.view_best
+                candidates = view_fn(
                     board, exclude=exclude,
                     limit_per_position=args.simadd_limit,
                     my_roster=my_roster,
