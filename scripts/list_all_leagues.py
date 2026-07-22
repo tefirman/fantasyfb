@@ -95,7 +95,7 @@ MANUAL_MANAGER_OVERRIDES = {
 DISPLAY_NAMES = {
     "AJ": "AJ Fraiman",
     "Aaron": "Aaron Many",
-    "Connor": "Connor Parish",
+    "Connor": "Connor Parrish",
     "David": "David Dehart",
     "Drew": "Drew Sutton",
     "Kyle Stokes": "Kyle Stokes",
