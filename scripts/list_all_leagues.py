@@ -4,15 +4,18 @@ account, across all seasons, with a chain_id linking each league to its
 prior/future-season renewals (i.e. the "same" league year over year). Also
 lists every manager who ever played in a given league chain (defaults to the
 "Mariners Fans Anonymous" chain, 2003-present), builds head-to-head records
-and scoring records for the current roster (2010-present), and exports both
-as JSON for the league website's Managers page
+and scoring records from 2003-present, and exports both as JSON for the
+league website's Managers page
 (https://github.com/tefirman/mariners-fans-anonymous).
 
 Some leagues/managers can't be identified from the Yahoo API alone (privacy
 settings hide some nicknames, and pre-2010 seasons lack the renewal metadata
 used to auto-chain leagues year to year) -- MANUAL_CHAIN_OVERRIDES,
 MANUAL_MANAGER_OVERRIDES, EXTRA_LEAGUES, and DISPLAY_NAMES near the top of
-this file record what's been manually confirmed so far. Update them as more
+this file record what's been manually confirmed so far. Any manager missing
+from DISPLAY_NAMES (still-hidden teams, or names like Alex/Rich/Joel/Sam/
+Warren without a confirmed full name yet) is excluded from the exported
+records rather than shown under a bare nickname. Update them as more
 managers get identified.
 
 Run from the fantasyfb repo root:
@@ -20,8 +23,8 @@ Run from the fantasyfb repo root:
     uv run python scripts/list_all_leagues.py
 
 Outputs (gitignored -- contain full names/records for a private league):
-    notes/head_to_head_2010plus.json
-    notes/scoring_records_2010plus.json
+    notes/head_to_head_2003plus.json
+    notes/scoring_records_2003plus.json
 """
 
 import json
@@ -73,12 +76,22 @@ MANUAL_MANAGER_OVERRIDES = {
     ("79.l.127434", "8"): "Alex",     # 2003 "Mustangs"
     ("101.l.77574", "10"): "Joel",    # 2004 "big headed calvery"
     ("124.l.27721", "9"): "Joel",     # 2005 "Big Headed Cavelry"
+    ("222.l.42158", "10"): "Tyler T", # 2009 "Chassidy Belt"
+    ("222.l.42158", "1"): "Marc G",   # 2009 "Coming from Behind"
+    ("222.l.42158", "7"): "Kyle Stokes",  # 2009 "Fuck FantasyFootball"
+    ("222.l.42158", "2"): "Connor",   # 2009 "Short Bus All-stars"
+    # Tentative: fits Luke's known gap (only missing year in his 2010+ span)
+    # and "Rookie of the year" is a plausible name for an actual rookie
+    # manager's first season -- not confirmed like the others above.
+    ("222.l.42158", "9"): "LK",       # 2009 "Rookie of the year"
 }
 
 # Full names for the league website (mariners-fans-anonymous), taken from
 # docs/champions.md and docs/managers.md. Only covers the current 12-manager
-# roster (2010-present) -- Alex/Rich/Joel/Sam/Warren don't have confirmed full
-# names yet and aren't part of that roster anyway.
+# roster -- Alex/Rich/Joel/Sam/Warren don't have confirmed full names yet and
+# aren't part of that roster anyway, so their games are excluded from every
+# export below (win_pct comparisons stay fair; no manager is shown under a
+# bare nickname on the site).
 DISPLAY_NAMES = {
     "AJ": "AJ Fraiman",
     "Aaron": "Aaron Many",
@@ -198,10 +211,18 @@ def chain_managers(client: YahooFantasyClient, df: pd.DataFrame, chain_id: str) 
 
 def head_to_head(client: YahooFantasyClient, df: pd.DataFrame, chain_id: str, min_season: str) -> pd.DataFrame:
     """Every regular-season matchup in the chain from min_season onward, as
-    one row per matchup with both managers, the winner, and each side's score.
+    one row per matchup with both sides' manager, the winner, and each side's
+    score -- including matchups where one or both managers are still
+    unidentified ("--hidden--").
 
-    Matchups where either team's manager is still unidentified ("--hidden--")
-    are dropped, since they can't be attributed to a real head-to-head record.
+    This is intentionally unfiltered: a known manager's win or loss still
+    counts toward their real career record even when their opponent that
+    week isn't identified yet (dropping it would silently understate both
+    their win/loss totals and, if summed by season, their season point
+    total). Consumers that need *both* sides known -- the heatmap grid and
+    head_to_head_win_pct -- filter for that themselves; consumers that only
+    care about one manager's own result (career record, scoring records)
+    should just filter out "--hidden--" on the side(s) they read.
     """
     chain = df[(df["chain_id"] == chain_id) & (df["season"].astype(int) >= int(min_season))]
 
@@ -228,14 +249,10 @@ def head_to_head(client: YahooFantasyClient, df: pd.DataFrame, chain_id: str, mi
                 team_a, team_a_stats = teams["0"]["team"][0], teams["0"]["team"][1]
                 team_b, team_b_stats = teams["1"]["team"][0], teams["1"]["team"][1]
                 key_a = [v["team_key"] for v in team_a if "team_key" in v][0]
-                key_b = [v["team_key"] for v in team_b if "team_key" in v][0]
                 mgr_a = team_manager(row["league_id"], {"managers": [v["managers"][0] for v in team_a if "managers" in v]})
                 mgr_b = team_manager(row["league_id"], {"managers": [v["managers"][0] for v in team_b if "managers" in v]})
                 points_a = float(team_a_stats["team_points"]["total"])
                 points_b = float(team_b_stats["team_points"]["total"])
-
-                if mgr_a["nickname"] == "--hidden--" or mgr_b["nickname"] == "--hidden--":
-                    continue
 
                 winner = mgr_a["nickname"] if matchup["winner_team_key"] == key_a else mgr_b["nickname"]
                 loser = mgr_b["nickname"] if winner == mgr_a["nickname"] else mgr_a["nickname"]
@@ -251,16 +268,20 @@ def head_to_head(client: YahooFantasyClient, df: pd.DataFrame, chain_id: str, mi
 
 
 def head_to_head_win_pct(h2h_df: pd.DataFrame) -> pd.DataFrame:
-    """Manager x manager grid of win pct (row manager's win pct vs column manager)."""
-    managers = sorted(set(h2h_df["winner"]) | set(h2h_df["loser"]))
+    """Manager x manager grid of win pct (row manager's win pct vs column
+    manager). Only counts matchups where both sides are known -- a cell needs
+    both a row-manager and a column-manager identity to mean anything.
+    """
+    known = h2h_df[(h2h_df["winner"] != "--hidden--") & (h2h_df["loser"] != "--hidden--")]
+    managers = sorted(set(known["winner"]) | set(known["loser"]))
     grid = pd.DataFrame(index=managers, columns=managers, dtype=float)
 
     for row_mgr in managers:
         for col_mgr in managers:
             if row_mgr == col_mgr:
                 continue
-            wins = ((h2h_df["winner"] == row_mgr) & (h2h_df["loser"] == col_mgr)).sum()
-            losses = ((h2h_df["winner"] == col_mgr) & (h2h_df["loser"] == row_mgr)).sum()
+            wins = ((known["winner"] == row_mgr) & (known["loser"] == col_mgr)).sum()
+            losses = ((known["winner"] == col_mgr) & (known["loser"] == row_mgr)).sum()
             total = wins + losses
             if total:
                 grid.loc[row_mgr, col_mgr] = round(100 * wins / total, 1)
@@ -269,8 +290,16 @@ def head_to_head_win_pct(h2h_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def games_long(h2h_df: pd.DataFrame) -> pd.DataFrame:
-    """One row per team-game (each matchup contributes two rows), for
-    single-game and season-total scoring records.
+    """One row per team-game (each matchup contributes two rows) for every
+    *known* manager, keeping their own score regardless of whether that
+    week's opponent is identified -- used for single-game and season-total
+    scoring records, which only depend on one side's score.
+
+    Deliberately does not require the opponent to be known: dropping a
+    manager's game just because their opponent that week is still hidden
+    would silently understate their season total (e.g. a manager who faced
+    2 hidden-team opponents in an otherwise-full 14-game season would only
+    get 12 games counted, making a normal season look like a scoring low).
     """
     winners = h2h_df.rename(columns={"winner": "manager", "winner_points": "points"})[
         ["season", "week", "manager", "points"]
@@ -278,12 +307,18 @@ def games_long(h2h_df: pd.DataFrame) -> pd.DataFrame:
     losers = h2h_df.rename(columns={"loser": "manager", "loser_points": "points"})[
         ["season", "week", "manager", "points"]
     ]
-    return pd.concat([winners, losers], ignore_index=True)
+    games = pd.concat([winners, losers], ignore_index=True)
+    return games[games["manager"] != "--hidden--"].reset_index(drop=True)
 
 
 def scoring_records(h2h_df: pd.DataFrame, top_n: int = 5) -> dict:
     """League scoring records: single-game highs/lows, season-total
     highs/lows, biggest blowouts, and closest finishes.
+
+    Single-game/season-total records only need one side's score, so they're
+    built from every known manager's games (see games_long). Blowouts and
+    closest finishes are inherently a comparison between two scores, so they
+    need both sides known and are filtered down separately.
     """
     games = games_long(h2h_df)
 
@@ -294,7 +329,8 @@ def scoring_records(h2h_df: pd.DataFrame, top_n: int = 5) -> dict:
     season_high = season_totals.nlargest(top_n, "points")
     season_low = season_totals.nsmallest(top_n, "points")
 
-    margins = h2h_df.copy()
+    known = h2h_df[(h2h_df["winner"] != "--hidden--") & (h2h_df["loser"] != "--hidden--")]
+    margins = known.copy()
     margins["margin"] = margins["winner_points"] - margins["loser_points"]
     biggest_blowouts = margins.nlargest(top_n, "margin")
     closest_games = margins.nsmallest(top_n, "margin")
@@ -335,23 +371,36 @@ if __name__ == "__main__":
     print("\nManager count per season (sanity check -- should match league size each year):")
     print(managers_df.groupby("season").size().to_string())
 
-    print("\nBuilding head-to-head records (2010-present, regular season only)...")
-    h2h_df = head_to_head(yahoo_client, leagues_df, MARINERS_CHAIN_ID, min_season="2010")
+    print("\nBuilding head-to-head records (2003-present, regular season only)...")
+    h2h_df = head_to_head(yahoo_client, leagues_df, MARINERS_CHAIN_ID, min_season="2003")
 
-    print("\nCareer regular-season record, 2010-present:")
+    print("\nCareer regular-season record, 2003-present:")
     wins = h2h_df["winner"].value_counts()
     losses = h2h_df["loser"].value_counts()
     career = pd.DataFrame({"wins": wins, "losses": losses}).fillna(0).astype(int)
     career["win_pct"] = (100 * career["wins"] / (career["wins"] + career["losses"])).round(1)
     print(career.sort_values("win_pct", ascending=False).to_string())
 
-    print("\nHead-to-head win pct (row manager's win pct vs column manager), 2010-present:")
+    print("\nHead-to-head win pct (row manager's win pct vs column manager), 2003-present:")
     print(head_to_head_win_pct(h2h_df).to_string())
 
+    # Every export below sticks to the current, fully-identified roster.
+    # Managers without a confirmed full name (still-hidden teams, plus
+    # non-roster names like Alex/Rich/Joel/Sam/Warren) are treated exactly
+    # like "--hidden--" everywhere downstream -- games_long/scoring_records
+    # still credit the *known* side of such a matchup (so e.g. Marc G's
+    # score against a non-roster opponent still counts toward his season
+    # total), while the win/loss heatmap (which needs both sides on the
+    # roster) is built from a separate, stricter view below.
+    roster_h2h_df = h2h_df.copy()
+    roster_h2h_df.loc[~roster_h2h_df["winner"].isin(DISPLAY_NAMES), "winner"] = "--hidden--"
+    roster_h2h_df.loc[~roster_h2h_df["loser"].isin(DISPLAY_NAMES), "loser"] = "--hidden--"
+
+    known_h2h_df = roster_h2h_df[
+        (roster_h2h_df["winner"] != "--hidden--") & (roster_h2h_df["loser"] != "--hidden--")
+    ]
+
     # Export for the heatmap artifact: career record + per-pair win/loss counts.
-    # Displayed with full names (DISPLAY_NAMES) for the league website -- rows
-    # without a mapping (shouldn't happen for the current 12-manager roster
-    # this is scoped to) are skipped rather than shown under a bare nickname.
     managers_sorted = [
         m for m in career.sort_values("win_pct", ascending=False).index.tolist()
         if m in DISPLAY_NAMES
@@ -361,8 +410,8 @@ if __name__ == "__main__":
         for col_mgr in managers_sorted:
             if row_mgr == col_mgr:
                 continue
-            wins = int(((h2h_df["winner"] == row_mgr) & (h2h_df["loser"] == col_mgr)).sum())
-            losses = int(((h2h_df["winner"] == col_mgr) & (h2h_df["loser"] == row_mgr)).sum())
+            wins = int(((known_h2h_df["winner"] == row_mgr) & (known_h2h_df["loser"] == col_mgr)).sum())
+            losses = int(((known_h2h_df["winner"] == col_mgr) & (known_h2h_df["loser"] == row_mgr)).sum())
             if wins + losses:
                 cells.append({
                     "row": DISPLAY_NAMES[row_mgr], "col": DISPLAY_NAMES[col_mgr],
@@ -378,19 +427,27 @@ if __name__ == "__main__":
         ],
         "cells": cells,
     }
-    with open("notes/head_to_head_2010plus.json", "w") as f:
+    with open("notes/head_to_head_2003plus.json", "w") as f:
         json.dump(export, f, indent=2)
-    print("\nExported notes/head_to_head_2010plus.json for the heatmap artifact.")
+    print("\nExported notes/head_to_head_2003plus.json for the heatmap artifact.")
 
-    print("\nScoring records, 2010-present (regular season only):")
-    records = scoring_records(h2h_df)
+    print("\nScoring records, 2003-present (regular season only):")
+    # Pass roster_h2h_df (not known_h2h_df) -- single-game/season-total
+    # records only need one side to be a roster manager (see games_long), so
+    # requiring "both sides known/roster" here would silently understate a
+    # manager's season total whenever an opponent that year is still hidden
+    # or isn't on the current roster, and could let a non-roster manager's
+    # score bump a real roster manager out of the top N entirely.
+    records = scoring_records(roster_h2h_df)
     for label, rec_df in records.items():
         print(f"\n{label}:")
         print(rec_df.to_string(index=False))
 
     def record_rows(rec_df: pd.DataFrame, kind: str) -> list[dict]:
-        # Skip rows involving a manager without a confirmed full name -- the
-        # site export sticks to the current, fully-identified roster.
+        # records was built from roster_h2h_df, which already collapses any
+        # non-roster manager to "--hidden--" (dropped upstream), so every row
+        # here should have a DISPLAY_NAMES entry -- these checks are just a
+        # defensive backstop.
         out = []
         if kind == "single_game":
             for _, r in rec_df.iterrows():
@@ -422,9 +479,9 @@ if __name__ == "__main__":
         "biggest_blowouts": record_rows(records["biggest_blowouts"], "matchup"),
         "closest_games": record_rows(records["closest_games"], "matchup"),
     }
-    with open("notes/scoring_records_2010plus.json", "w") as f:
+    with open("notes/scoring_records_2003plus.json", "w") as f:
         json.dump(records_export, f, indent=2)
-    print("\nExported notes/scoring_records_2010plus.json.")
+    print("\nExported notes/scoring_records_2003plus.json.")
 
     print("\nStill-unidentified teams (season, team name) -- for tracking down real managers:")
     hidden = managers_df[managers_df["manager"] == "--hidden--"][["season", "team_name"]]
