@@ -367,6 +367,7 @@ class TestArgParser:
         assert args.min_bid == 1
         assert args.limit_per_position == 5
         assert args.nominate_limit == 10
+        assert args.simadd_limit == 3
         assert args.season is None
 
     def test_salary_cap_and_min_bid_override(self):
@@ -403,6 +404,11 @@ class TestArgParser:
         args = parser.parse_args(["--team", "X", "--keeper-surcharge", "0"])
         assert args.keeper_surcharge == 0
 
+    def test_simadd_limit_override(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--simadd-limit", "5"])
+        assert args.simadd_limit == 5
+
 
 # --------------------------------------------------------------------- #
 # Command list / help alignment
@@ -415,7 +421,7 @@ class TestPickCommands:
         _PICK_COMMANDS and _HELP_TEXT, this catches it before
         draft night."""
         for cmd in ("best", "nominate", "whatif", "lookup", "roster",
-                    "budgets", "exclude", "sim", "random",
+                    "budgets", "exclude", "sim", "simadd", "random",
                     "random til full", "go back", "help", "exit"):
             assert cmd in _PICK_COMMANDS, f"missing from _PICK_COMMANDS: {cmd}"
             assert cmd in _HELP_TEXT, f"missing from _HELP_TEXT: {cmd}"

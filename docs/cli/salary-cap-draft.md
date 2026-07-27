@@ -63,6 +63,7 @@ salary-cap-draft --team "My Team" --inprogress DraftProgressSalaryCap.csv
 | ---------------------- | ------- | ------------------------------------------------------------------------ |
 | `--limit-per-position` | 5       | Rows per position in the `best` view                                     |
 | `--nominate-limit`     | 10      | Rows in the `nominate` drain-score view                                  |
+| `--simadd-limit`       | 3       | Default players per position simulated by `simadd` (also prompted per-run) |
 
 ## Interactive commands
 
@@ -79,6 +80,7 @@ Once running, the prompt accepts:
 | `budgets`          | Per-team budget status — remaining $, slots filled, max bid                            |
 | `exclude`          | Add a player to the per-session exclude list                                           |
 | `sim`              | Run a full season simulation with current rosters                                      |
+| `simadd`           | Sim top-N available per position, each at its `max_my_bid`; ranks by win/playoff/earnings delta from baseline |
 | `random`           | Auto-simulate one nomination + bidding round (Vickrey-style)                           |
 | `random til full`  | Auto-simulate the rest of the draft to completion                                      |
 | `go back`          | Revert the previous pick                                                               |

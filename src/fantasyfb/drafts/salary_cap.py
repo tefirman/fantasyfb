@@ -31,6 +31,8 @@ Commands at the prompt (also via the ``help`` command):
     budgets        Every team's spent / remaining / max-bid snapshot
     exclude        Add a player to the per-session exclude list
     sim            Run a full season simulation with current rosters
+    simadd         Sim top-N available per position at each one's max
+                   legal bid; ranks by win/playoff/earnings delta
     go back        Revert the previous pick
     help           Show this command list
     exit           Save progress and exit (no final summary)
@@ -53,6 +55,7 @@ except ImportError:  # pragma: no cover -- Windows fallback
 from . import salary_cap_cockpit as cockpit
 from .snake import (
     _enable_completion,
+    _prompt_int,
     _set_completion_candidates,
     check_pick_name,
     parse_payouts,
@@ -66,7 +69,7 @@ from .tools import (
 
 _PICK_COMMANDS = (
     "best", "nominate", "whatif", "lookup", "roster", "budgets",
-    "exclude", "sim", "random", "random til full", "go back",
+    "exclude", "sim", "simadd", "random", "random til full", "go back",
     "help", "exit",
 )
 
@@ -82,6 +85,8 @@ Commands at the 'Player Up For Grabs' prompt:
   budgets           Per-team budget status snapshot
   exclude           Add a player to the per-session exclude list
   sim               Run a season simulation with current rosters
+  simadd            Sim top-N available per position at each one's max legal
+                    bid; rank by win/playoff/earnings delta
   random            Auto-simulate one nomination + bidding round
   random til full   Auto-simulate the rest of the draft to completion
   go back           Revert the previous pick
@@ -263,6 +268,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--nominate-limit", type=int, default=10,
                    dest="nominate_limit",
                    help="rows in 'nominate' drain-score view")
+    p.add_argument("--simadd-limit", type=int, default=3,
+                   dest="simadd_limit",
+                   help="default players per position to simulate in 'simadd' "
+                        "(default 3); 'simadd' also prompts per-run to override this")
     return p
 
 
@@ -423,6 +432,8 @@ def main(argv=None) -> int:
 
     _enable_completion()
 
+    _sim_baseline = None  # cached baseline standings for simadd; invalidated on each pick
+
     while not all_rosters_full(board, num_teams, roster_size):
         available_names = league.players.loc[
             league.players.fantasy_team.isnull(), "name"
@@ -562,6 +573,7 @@ def main(argv=None) -> int:
                 "name": name, "fantasy_team": winner, "winning_bid": price,
             }])], ignore_index=True)
             _save_progress(progress, output_path)
+            _sim_baseline = None
 
         elif pick_name == "random til full":
             # Single RNG so the burst feels coherent (the seeds in
@@ -587,6 +599,8 @@ def main(argv=None) -> int:
                 auto_count += 1
             _save_progress(progress, output_path)
             print(f"Auto-simulated {auto_count} nominations.")
+            if auto_count:
+                _sim_baseline = None
 
         elif pick_name == "go back":
             if progress.empty:
@@ -596,12 +610,70 @@ def main(argv=None) -> int:
             _revert_pick(league, board, last["name"])
             progress = progress.iloc[:-1].reset_index(drop=True)
             _save_progress(progress, output_path)
+            _sim_baseline = None
 
         elif pick_name == "sim":
-            standings = league.season_sims(payouts=payouts)[1]
-            print(standings[["team", "points_avg", "wins_avg",
-                             "playoffs", "winner", "earnings"]]
+            _sim_baseline = league.season_sims(payouts=payouts)[1]
+            print(_sim_baseline[["team", "points_avg", "wins_avg",
+                                 "playoffs", "winner", "earnings"]]
                   .to_string(index=False))
+
+        elif pick_name == "simadd":
+            sim_limit = _prompt_int(
+                "Players per position to simulate?", args.simadd_limit,
+            )
+            candidates = cockpit.view_best(
+                board, my_team="My Team",
+                salary_cap=args.salary_cap, num_teams=num_teams,
+                roster_spec=league.roster_spots,
+                exclude=exclude, limit_per_position=sim_limit,
+                min_bid=args.min_bid,
+            )
+            candidates = candidates[~candidates["position"].isin(["K", "DEF"])]
+
+            def _run_sims():
+                return league.season_sims(payouts=payouts)[1]
+
+            orig_num_sims = league.num_sims
+            league.num_sims = 1000
+            print("Running baseline sim...")
+            if _sim_baseline is None:
+                _sim_baseline = _run_sims()
+            baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
+            delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
+            delta_cols = [c for c in delta_cols if c in _sim_baseline.columns]
+            rows = []
+            for _, cand in candidates.iterrows():
+                candidate = cand["name"]
+                # Assume each candidate costs what the user could actually
+                # legally pay for them -- inflated market value clipped to
+                # the user's own remaining budget -- rather than treating
+                # the pick as free like a snake-draft slot would be.
+                assumed_bid = cand.get("max_my_bid")
+                price = int(round(assumed_bid)) if pd.notna(assumed_bid) else args.min_bid
+                price = max(price, args.min_bid)
+                print(f"  Simulating {candidate} at ${price}...")
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = "My Team"
+                league.players.loc[league.players.name == candidate, "actual_salary"] = price
+                new_standings = _run_sims()
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = None
+                league.players.loc[league.players.name == candidate, "actual_salary"] = np.nan
+                row = {"name": candidate, "assumed_bid": price}
+                for col in delta_cols:
+                    row[col] = round(
+                        new_standings.loc[new_standings.team == "My Team", col].values[0]
+                        - baseline_row[col].values[0], 3
+                    )
+                rows.append(row)
+            league.num_sims = orig_num_sims
+            if rows:
+                sort_col = "winner" if "winner" in delta_cols else delta_cols[-1]
+                result = pd.DataFrame(rows).sort_values(sort_col, ascending=False)
+                _print_df(
+                    result,
+                    "Simulated impact of adding each player at their assumed "
+                    "bid (delta from baseline):",
+                )
 
         elif pick_name == "help":
             print(_HELP_TEXT)
@@ -646,6 +718,7 @@ def main(argv=None) -> int:
                 "winning_bid": bid,
             }])], ignore_index=True)
             _save_progress(progress, output_path)
+            _sim_baseline = None
 
     standings = league.season_sims(payouts=payouts)[1]
     print(standings[["team", "points_avg", "wins_avg",
