@@ -23,7 +23,8 @@ Commands during the draft (also available via the `help` command):
     roster         My current roster
     sim            Full season-sim of current rosters
     simadd         Sim top-N available per position; ranks by win/playoff/
-                   earnings delta. Same pool/scoring prompts as 'best'
+                   earnings delta. Same pool/scoring prompts as 'best',
+                   plus a players-per-position count (best-available pool only)
     random         Auto-pick for the team currently on the clock
     random til me  Auto-pick for every team until your turn
     go back        Revert the previous pick
@@ -120,7 +121,8 @@ Commands during the draft:
   roster          Show My Team's current picks
   sim             Run a full season simulation with current rosters
   simadd          Sim top-N available per position; rank by win/playoff/earnings delta.
-                  Same pool/scoring prompts as 'best'
+                  Same pool/scoring prompts as 'best', plus players-per-position count
+                  (best-available pool only)
   random          Auto-pick for the team currently on the clock
   random til me   Auto-pick for everyone until it's your turn again
   go back         Revert the previous pick
@@ -174,16 +176,33 @@ def check_pick_name(league, pick_name, exceptions=()):
 
 def _prompt_choice(question: str, choices: tuple, default: str) -> str:
     """Prompt for one of `choices` (case-insensitive), re-prompting on
-    anything else. Blank input accepts `default`.
+    anything else. Blank input accepts `default`. The literal choice words
+    are appended to `question` so it's always clear exactly what to type,
+    e.g. "Pool? (best/nearest) [best] ".
     """
     lowered_choices = {c.lower(): c for c in choices}
+    prompt = f"{question} ({'/'.join(choices)}) [{default}] "
     while True:
-        raw = input(question).strip().lower()
+        raw = input(prompt).strip().lower()
         if not raw:
             return default
         if raw in lowered_choices:
             return lowered_choices[raw]
         print(f"Please enter one of: {', '.join(choices)}")
+
+
+def _prompt_int(question: str, default: int) -> int:
+    """Prompt for a positive integer, re-prompting on anything else.
+    Blank input accepts `default`.
+    """
+    prompt = f"{question} [{default}] "
+    while True:
+        raw = input(prompt).strip()
+        if not raw:
+            return default
+        if raw.isdigit() and int(raw) > 0:
+            return int(raw)
+        print("Please enter a positive whole number.")
 
 
 def provide_pick_order(league, customize=False, already=()):
@@ -304,7 +323,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="rows per position in 'best' view")
     p.add_argument("--simadd-limit", type=int, default=3,
                    dest="simadd_limit",
-                   help="players per position to simulate in 'simadd' commands (default 3)")
+                   help="default players per position to simulate in 'simadd' "
+                        "(default 3); 'simadd' also prompts per-run to override this")
     p.add_argument("--bestball", nargs="?", const="underdog", default="",
                    metavar="PLATFORM",
                    help="enable best-ball scoring/roster settings. Optionally pass "
@@ -432,7 +452,7 @@ def main(argv=None) -> int:
                 board, "My Team", league.roster_spots,
             )
             pool = _prompt_choice(
-                "Pool -- best available or nearest ADP? [best] ",
+                "Pool -- best available or nearest ADP?",
                 ("best", "nearest"), "best",
             )
             # Bestball scoring is mandatory once the whole draft is running
@@ -441,7 +461,7 @@ def main(argv=None) -> int:
                 bestball_scoring = True
             else:
                 bestball_scoring = _prompt_choice(
-                    "Scoring -- normal or bestball (upside-weighted)? [normal] ",
+                    "Scoring -- normal or bestball (upside-weighted)?",
                     ("normal", "bestball"), "normal",
                 ) == "bestball"
 
@@ -530,7 +550,7 @@ def main(argv=None) -> int:
         elif pick_name == "simadd":
             my_roster = cockpit.build_my_roster(board, "My Team", league.roster_spots)
             pool = _prompt_choice(
-                "Pool -- best available or nearest ADP? [best] ",
+                "Pool -- best available or nearest ADP?",
                 ("best", "nearest"), "best",
             )
             # Bestball scoring is mandatory once the whole draft is running
@@ -540,7 +560,7 @@ def main(argv=None) -> int:
                 bestball_scoring = True
             else:
                 bestball_scoring = _prompt_choice(
-                    "Candidate ranking -- normal or bestball (upside-weighted)? [normal] ",
+                    "Candidate ranking -- normal or bestball (upside-weighted)?",
                     ("normal", "bestball"), "normal",
                 ) == "bestball"
 
@@ -552,10 +572,13 @@ def main(argv=None) -> int:
                     my_roster=my_roster,
                 )["name"].tolist()
             else:
+                sim_limit = _prompt_int(
+                    "Players per position to simulate?", args.simadd_limit,
+                )
                 view_fn = cockpit.view_bestball if bestball_scoring else cockpit.view_best
                 candidates = view_fn(
                     board, exclude=exclude,
-                    limit_per_position=args.simadd_limit,
+                    limit_per_position=sim_limit,
                     my_roster=my_roster,
                 )["name"].tolist()
             candidates = [c for c in candidates
