@@ -1,22 +1,48 @@
 """
 Sleeper Fantasy API client.
 
-Sleeper's league-settings API is public and read-only -- no OAuth, no app
+Sleeper's read API is public and unauthenticated -- no OAuth, no app
 registration, just a league ID off the league's URL
-(sleeper.com/leagues/<league_id>/...). This module only covers pulling
-scoring/roster settings (e.g. for Scott Fish Bowl, which runs on Sleeper);
-it is intentionally not a full replacement for YahooFantasyClient (no
-roster/matchup/standings pulls) -- that's a separate follow-up.
+(sleeper.com/leagues/<league_id>/...). Two things live here:
+
+- Module-level functions for pulling a league's scoring/roster settings
+  (used to bootstrap e.g. Scott Fish Bowl scoring, which runs on Sleeper).
+- `SleeperClient`, a full client covering the same surface as
+  `YahooFantasyClient` (teams, rosters, schedule, player pool) so a
+  Sleeper-only league doesn't need a Yahoo league underneath it. It's
+  intentionally standalone rather than wired into `League.__init__` --
+  see issue #37 for the follow-up `FantasyPlatformClient` abstraction
+  that would let `League` pick either backend.
+
+Sleeper has no public write API (no transactions, no lineup changes), so
+`SleeperClient` is read-only regardless of scope.
 """
 
 from __future__ import annotations
 
+import json
+import os
+import time
 from typing import Dict, List
 
 import pandas as pd
 import requests
 
 BASE_URL = "https://api.sleeper.app/v1"
+
+# Fantasy-relevant positions kept from Sleeper's full /players/nfl map;
+# everything else (LS, coaches, practice-squad-only entries, etc.) is
+# noise for fantasyfb's purposes.
+_FANTASY_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DEF"}
+
+# Sleeper's /players/nfl payload is the full static player map (~11k
+# players, several MB) and Sleeper asks integrators not to hit it more
+# than once a day: https://docs.sleeper.com/#fetch-all-players. Cached
+# locally rather than re-fetched every run.
+DEFAULT_PLAYERS_CACHE_PATH = os.path.join(
+    os.path.expanduser("~"), ".cache", "fantasyfb", "sleeper_players.json"
+)
+PLAYERS_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 # Direct 1:1 mappings from Sleeper scoring_settings keys to fantasyfb's
 # internal scoring schema (see FantasyScorer / configs.apply_default_scoring_categories).
@@ -226,3 +252,343 @@ def get_reversal_round(league_id: str) -> int:
     league = fetch_league(league_id)
     draft = fetch_draft(league["draft_id"])
     return draft["settings"].get("reversal_round", 0)
+
+
+def fetch_users(league_id: str) -> List[Dict]:
+    """
+    Pull raw league membership (one entry per Sleeper account) from Sleeper's public API.
+
+    Args:
+        league_id: numeric Sleeper league ID (from the league URL).
+
+    Returns:
+        List of user JSON objects, including 'user_id', 'display_name', and
+        'metadata' (which may carry a commissioner-set 'team_name').
+    """
+    resp = requests.get(f"{BASE_URL}/league/{league_id}/users")
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_rosters(league_id: str) -> List[Dict]:
+    """
+    Pull raw current rosters from Sleeper's public API.
+
+    Args:
+        league_id: numeric Sleeper league ID (from the league URL).
+
+    Returns:
+        List of roster JSON objects, including 'roster_id', 'owner_id',
+        'players' (full roster), 'starters', and 'reserve' (IR-tagged players).
+    """
+    resp = requests.get(f"{BASE_URL}/league/{league_id}/rosters")
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_matchups(league_id: str, week: int) -> List[Dict]:
+    """
+    Pull raw per-team matchup data for a single week from Sleeper's public API.
+
+    Args:
+        league_id: numeric Sleeper league ID (from the league URL).
+        week: week number to pull matchups for.
+
+    Returns:
+        List of per-roster matchup JSON objects, including 'roster_id',
+        'matchup_id' (shared by the two rosters facing off), 'points', and
+        that week's 'starters'/'players'. Empty list for weeks with no
+        matchup data yet (e.g. future weeks, preseason).
+    """
+    resp = requests.get(f"{BASE_URL}/league/{league_id}/matchups/{week}")
+    resp.raise_for_status()
+    return resp.json() or []
+
+
+def fetch_nfl_state() -> Dict:
+    """
+    Pull the current NFL/fantasy week from Sleeper's public API.
+
+    Returns:
+        Raw state JSON, including 'week' (the actual NFL week) and
+        'display_week' (the week Sleeper recommends leagues use for
+        fantasy purposes, which can lead 'week' during preseason).
+    """
+    resp = requests.get(f"{BASE_URL}/state/nfl")
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_all_players(
+    cache_path: str = DEFAULT_PLAYERS_CACHE_PATH,
+    max_age_seconds: int = PLAYERS_CACHE_TTL_SECONDS,
+    force_refresh: bool = False,
+) -> Dict[str, Dict]:
+    """
+    Fetch Sleeper's full static player map, using a local on-disk cache.
+
+    Args:
+        cache_path: where to read/write the cached JSON.
+        max_age_seconds: how long a cached copy is considered fresh.
+        force_refresh: bypass the cache and re-fetch unconditionally.
+
+    Returns:
+        Dict keyed by Sleeper player_id (numeric string for individual
+        players, team abbreviation for DEF entries).
+    """
+    if not force_refresh and os.path.exists(cache_path):
+        age = time.time() - os.path.getmtime(cache_path)
+        if age < max_age_seconds:
+            with open(cache_path) as f:
+                return json.load(f)
+
+    resp = requests.get(f"{BASE_URL}/players/nfl")
+    resp.raise_for_status()
+    players = resp.json()
+
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    with open(cache_path, "w") as f:
+        json.dump(players, f)
+
+    return players
+
+
+def _starting_slots(roster_positions: List[str]) -> List[str]:
+    """
+    Reduce a league's roster_positions list to just the starting slots, in order.
+
+    Sleeper's per-team 'starters' arrays (from /rosters and /matchups) are
+    ordered to line up 1:1 with these slots, so zipping starters against
+    this list recovers each starter's selected_position.
+    """
+    return [
+        _POSITION_MAP.get(slot, slot)
+        for slot in roster_positions
+        if slot not in ("BN", "IR")
+    ]
+
+
+class SleeperClient:
+    """
+    Client for interacting with Sleeper's public Fantasy API.
+
+    Covers the same surface as YahooFantasyClient (teams, rosters,
+    schedule, player pool) for leagues that live entirely on Sleeper.
+    Sleeper's read API needs no authentication, so there's no OAuth
+    handshake or token refresh to manage; there's also no public write
+    API, so this client is read-only.
+    """
+
+    def __init__(self, league_id: str):
+        """
+        Args:
+            league_id: numeric Sleeper league ID (from the league URL).
+        """
+        self.league_id = league_id
+
+    def get_current_week(self) -> int:
+        """
+        Get the current fantasy week.
+
+        Returns:
+            Sleeper's 'display_week' (falling back to 'week' if absent) --
+            the week Sleeper recommends leagues use for fantasy purposes.
+        """
+        state = fetch_nfl_state()
+        return int(state.get("display_week") or state.get("week") or 1)
+
+    def get_fantasy_teams(self) -> List[Dict]:
+        """
+        Get list of all teams in the league.
+
+        Returns:
+            List of team dictionaries with keys: team_key, name, manager.
+            team_key is the Sleeper roster_id (as a string), which the
+            other methods on this client use to identify a team.
+        """
+        users = {user["user_id"]: user for user in fetch_users(self.league_id)}
+        rosters = fetch_rosters(self.league_id)
+
+        teams = []
+        for roster in rosters:
+            user = users.get(roster.get("owner_id"), {})
+            manager = user.get("display_name") or "Unknown"
+            team_name = (user.get("metadata") or {}).get("team_name") or manager
+            teams.append({
+                "team_key": str(roster["roster_id"]),
+                "name": team_name,
+                "manager": manager,
+            })
+        return teams
+
+    def get_all_players(self, injury_tries: int = 10) -> pd.DataFrame:
+        """
+        Get all fantasy-relevant players with position, team, and injury status.
+
+        Args:
+            injury_tries: accepted for signature parity with
+                YahooFantasyClient.get_all_players; unused here since
+                Sleeper's static player map already carries injury_status
+                (no separate polling/retry needed).
+
+        Returns:
+            DataFrame with columns: player_id, name, position,
+            editorial_team_abbr, status, eligible_positions, player_id_sr,
+            yahoo_id. player_id_sr is populated from Sleeper's gsis_id
+            when present, which is the same ID nflreadpy's rosters/stats/
+            depth-charts feeds use -- so it can be joined directly against
+            NflreadpyProvider output without a name-matching fallback.
+        """
+        raw = fetch_all_players()
+
+        records = []
+        for player_id, info in raw.items():
+            if not isinstance(info, dict):
+                continue
+            position = info.get("position")
+            if position not in _FANTASY_POSITIONS:
+                continue
+            name = info.get("full_name") or " ".join(
+                part for part in (info.get("first_name"), info.get("last_name")) if part
+            )
+            records.append({
+                "player_id": player_id,
+                "name": name,
+                "position": position,
+                "editorial_team_abbr": info.get("team"),
+                "status": info.get("injury_status") or info.get("status"),
+                "eligible_positions": info.get("fantasy_positions") or [position],
+                "player_id_sr": info.get("gsis_id"),
+                "yahoo_id": info.get("yahoo_id"),
+            })
+
+        return pd.DataFrame(records, columns=[
+            "player_id", "name", "position", "editorial_team_abbr",
+            "status", "eligible_positions", "player_id_sr", "yahoo_id",
+        ])
+
+    def get_team_rosters(self, teams: List[Dict], week: int) -> pd.DataFrame:
+        """
+        Get rosters for all teams for a given week.
+
+        Args:
+            teams: List of team dictionaries from get_fantasy_teams().
+            week: Week number to get rosters for.
+
+        Returns:
+            DataFrame with columns: player_id, selected_position,
+            fantasy_team. Prefers that week's actual starters (from
+            /matchups/{week}) so historical lineups are reflected
+            accurately; falls back to the current live roster (from
+            /rosters) when the week has no matchup data yet (e.g. the
+            upcoming week, or before the season starts).
+        """
+        team_names = {team["team_key"]: team["name"] for team in teams}
+        league = fetch_league(self.league_id)
+        slot_order = _starting_slots(league["roster_positions"])
+
+        current_rosters = fetch_rosters(self.league_id)
+        reserve_by_roster = {
+            str(roster["roster_id"]): set(roster.get("reserve") or [])
+            for roster in current_rosters
+        }
+
+        matchups = fetch_matchups(self.league_id, week)
+        if not matchups or not any(entry.get("starters") for entry in matchups):
+            matchups = [
+                {
+                    "roster_id": roster["roster_id"],
+                    "starters": roster.get("starters") or [],
+                    "players": roster.get("players") or [],
+                }
+                for roster in current_rosters
+            ]
+
+        rows = []
+        for entry in matchups:
+            roster_id = str(entry["roster_id"])
+            team_name = team_names.get(roster_id)
+            if team_name is None:
+                continue
+            starters = entry.get("starters") or []
+            players = entry.get("players") or []
+            reserve = reserve_by_roster.get(roster_id, set())
+
+            for slot_ind, player_id in enumerate(starters):
+                if not player_id or player_id == "0":
+                    continue
+                position = slot_order[slot_ind] if slot_ind < len(slot_order) else "BN"
+                rows.append({
+                    "player_id": player_id,
+                    "selected_position": position,
+                    "fantasy_team": team_name,
+                })
+
+            for player_id in players:
+                if player_id in starters:
+                    continue
+                position = "IR" if player_id in reserve else "BN"
+                rows.append({
+                    "player_id": player_id,
+                    "selected_position": position,
+                    "fantasy_team": team_name,
+                })
+
+        return pd.DataFrame(
+            rows, columns=["player_id", "selected_position", "fantasy_team"]
+        )
+
+    def get_schedule(
+        self, teams: List[Dict], current_week: int, playoff_start_week: int
+    ) -> pd.DataFrame:
+        """
+        Get the fantasy league schedule and scores.
+
+        Args:
+            teams: List of team dictionaries from get_fantasy_teams().
+            current_week: Current week number.
+            playoff_start_week: Week when playoffs start.
+
+        Returns:
+            DataFrame with columns: week, team_1, team_2, score_1, score_2.
+        """
+        team_names = {team["team_key"]: team["name"] for team in teams}
+        limit = max(playoff_start_week, current_week + 1)
+
+        rows = []
+        for week in range(1, limit):
+            matchups = fetch_matchups(self.league_id, week)
+            if not matchups:
+                continue
+
+            by_matchup: Dict[int, List[Dict]] = {}
+            for entry in matchups:
+                matchup_id = entry.get("matchup_id")
+                if matchup_id is None:
+                    continue
+                by_matchup.setdefault(matchup_id, []).append(entry)
+
+            for pair in by_matchup.values():
+                if len(pair) != 2:
+                    # Byes (odd team count) surface as a single-entry
+                    # matchup_id; skip since there's no opponent to pair.
+                    continue
+                team_1, team_2 = pair
+                name_1 = team_names.get(str(team_1["roster_id"]))
+                name_2 = team_names.get(str(team_2["roster_id"]))
+                if name_1 is None or name_2 is None:
+                    continue
+                rows.append({
+                    "week": week,
+                    "team_1": name_1,
+                    "team_2": name_2,
+                    "score_1": float(team_1.get("points") or 0.0),
+                    "score_2": float(team_2.get("points") or 0.0),
+                })
+
+        schedule = pd.DataFrame(
+            rows, columns=["week", "team_1", "team_2", "score_1", "score_2"]
+        )
+        schedule["score_1"] = schedule["score_1"].astype(float)
+        schedule["score_2"] = schedule["score_2"].astype(float)
+        return schedule
