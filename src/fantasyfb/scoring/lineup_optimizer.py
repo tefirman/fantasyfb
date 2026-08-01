@@ -8,23 +8,25 @@ roster constraints, injuries, and bye weeks.
 import datetime
 import pandas as pd
 
+from ..data.platform_client import FantasyPlatformClient
+
 class LineupOptimizer:
     """
     Handles optimal lineup selection for fantasy football teams.
     """
 
-    def __init__(self, roster_spots, teams, yahoo_client):
+    def __init__(self, roster_spots, teams, client: FantasyPlatformClient):
         """
         Initialize the lineup optimizer.
-        
+
         Args:
             roster_spots: DataFrame with roster position requirements
             teams: List of team dictionaries
-            yahoo_client: YahooFantasyClient instance
+            client: FantasyPlatformClient instance
         """
         self.roster_spots = roster_spots
         self.teams = teams
-        self.yahoo_client = yahoo_client
+        self.client = client
 
     def set_optimal_lineup(self, players, week, season, current_week, latest_season,
                         nfl_schedule, matchup_model):
@@ -47,7 +49,7 @@ class LineupOptimizer:
             DataFrame with players marked as starters and injury/game factors added
         """
         as_of = season * 100 + week
-        self.yahoo_client.refresh_oauth()
+        self.client.refresh_oauth()
 
         players = matchup_model.apply_factors(players, nfl_schedule, as_of=as_of)
         # Backfill the Vegas join columns when a player's team is on bye

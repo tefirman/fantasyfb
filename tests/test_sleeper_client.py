@@ -519,3 +519,87 @@ class TestSleeperClientGetSchedule:
         schedule = client.get_schedule(TEAMS, current_week=1, playoff_start_week=1)
         assert schedule.empty
         assert list(schedule.columns) == ["week", "team_1", "team_2", "score_1", "score_2"]
+
+    @patch("fantasyfb.data.sleeper_client.fetch_matchups")
+    def test_end_week_caps_query_range(self, mock_matchups):
+        mock_matchups.return_value = []
+        client = sleeper_client.SleeperClient("123")
+        client.get_schedule(TEAMS, current_week=1, playoff_start_week=20, end_week=3)
+        queried_weeks = sorted({call.args[1] for call in mock_matchups.call_args_list})
+        assert queried_weeks == [1, 2, 3]
+
+
+class TestSleeperClientGetLeagueConfig:
+    @patch("fantasyfb.data.sleeper_client.fetch_league")
+    def test_derives_settings_from_raw_playoff_fields(self, mock_fetch):
+        mock_fetch.return_value = {
+            "scoring_settings": SFB16_SCORING_SETTINGS,
+            "roster_positions": SFB16_ROSTER_POSITIONS,
+            "settings": {"playoff_week_start": 14, "playoff_teams": 4},
+        }
+        client = sleeper_client.SleeperClient("123")
+        config = client.get_league_config()
+        assert config["settings"]["playoff_start_week"] == 14
+        assert config["settings"]["num_playoff_teams"] == 4
+        assert config["settings"]["end_week"] == 15
+        assert config["scoring"]["Pass TD"] == 6.0
+        assert config["roster_spots"]["count"].sum() == 20
+
+    @patch("fantasyfb.data.sleeper_client.fetch_league")
+    def test_six_team_playoffs_gets_two_week_cushion(self, mock_fetch):
+        mock_fetch.return_value = {
+            "scoring_settings": {}, "roster_positions": [],
+            "settings": {"playoff_week_start": 14, "playoff_teams": 6},
+        }
+        client = sleeper_client.SleeperClient("123")
+        config = client.get_league_config()
+        assert config["settings"]["end_week"] == 16
+
+    @patch("fantasyfb.data.sleeper_client.fetch_league")
+    def test_unset_playoff_week_start_falls_back_to_default(self, mock_fetch):
+        mock_fetch.return_value = {
+            "scoring_settings": {}, "roster_positions": [],
+            "settings": {"playoff_week_start": 0, "playoff_teams": 0},
+        }
+        client = sleeper_client.SleeperClient("123")
+        config = client.get_league_config()
+        assert config["settings"]["playoff_start_week"] == 15
+        assert config["settings"]["num_playoff_teams"] == 6
+
+
+class TestSleeperClientGetMyTeamKey:
+    @patch("fantasyfb.data.sleeper_client.fetch_rosters")
+    @patch("fantasyfb.data.sleeper_client.fetch_users")
+    def test_matches_by_team_name(self, mock_users, mock_rosters):
+        mock_users.return_value = USERS
+        mock_rosters.return_value = ROSTERS
+        client = sleeper_client.SleeperClient("123", my_team_name="Team Alice")
+        assert client.get_my_team_key() == "1"
+
+    @patch("fantasyfb.data.sleeper_client.fetch_rosters")
+    @patch("fantasyfb.data.sleeper_client.fetch_users")
+    def test_falls_back_to_manager_name(self, mock_users, mock_rosters):
+        # "Team Alice" (team_key "1") has manager "Alice" -- distinct from
+        # its team name, so matching on manager only works via the fallback.
+        mock_users.return_value = USERS
+        mock_rosters.return_value = ROSTERS
+        client = sleeper_client.SleeperClient("123", my_team_name="Alice")
+        assert client.get_my_team_key() == "1"
+
+    def test_returns_none_when_no_team_name_given(self):
+        client = sleeper_client.SleeperClient("123")
+        assert client.get_my_team_key() is None
+
+    @patch("fantasyfb.data.sleeper_client.fetch_rosters")
+    @patch("fantasyfb.data.sleeper_client.fetch_users")
+    def test_returns_none_when_no_match(self, mock_users, mock_rosters):
+        mock_users.return_value = USERS
+        mock_rosters.return_value = ROSTERS
+        client = sleeper_client.SleeperClient("123", my_team_name="Nonexistent Team")
+        assert client.get_my_team_key() is None
+
+
+class TestSleeperClientGetRosterPercentages:
+    def test_always_returns_none(self):
+        client = sleeper_client.SleeperClient("123")
+        assert client.get_roster_percentages(None) is None

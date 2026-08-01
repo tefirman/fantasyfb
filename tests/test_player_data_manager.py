@@ -15,10 +15,9 @@ from fantasyfb.data.player_data_manager import PlayerDataManager
 
 @pytest.fixture
 def manager(provider) -> PlayerDataManager:
-    # yahoo_client=None is fine here; the methods under test never reach
-    # for it.
+    # client=None is fine here; the methods under test never reach for it.
     return PlayerDataManager(
-        yahoo_client=None, season=2024, current_week=4, nfl_provider=provider,
+        client=None, season=2024, current_week=4, nfl_provider=provider,
     )
 
 
@@ -129,3 +128,69 @@ class TestAddByeWeeks:
         result = manager.add_bye_weeks(players, schedule)
         # NFL bye weeks fall between weeks 5 and 14.
         assert result["bye_week"].between(5, 14).all()
+
+
+class FakeClientNoRosterPercentages:
+    """Stands in for a client backend with no ownership-% concept (Sleeper)."""
+
+    def get_roster_percentages(self, players_df, chunk_size=25):
+        return None
+
+
+class FakeClientWithRosterPercentages:
+    """Stands in for a client backend that does return roster percentages (Yahoo)."""
+
+    def __init__(self, roster_pcts: pd.DataFrame):
+        self._roster_pcts = roster_pcts
+
+    def get_roster_percentages(self, players_df, chunk_size=25):
+        return self._roster_pcts
+
+
+class TestAddRosterPercentages:
+    def test_defaults_to_zero_when_client_returns_none(self, provider) -> None:
+        manager = PlayerDataManager(
+            client=FakeClientNoRosterPercentages(),
+            season=2024, current_week=4, nfl_provider=provider,
+        )
+        players = pd.DataFrame({
+            "player_id": [1, 2],
+            "name": ["A", "B"],
+            "player_id_sr": ["a", "b"],
+            "fantasy_team": [None, None],
+        })
+        result = manager.add_roster_percentages(players)
+        assert (result["pct_rostered"] == 0.0).all()
+
+    def test_merges_percentages_when_client_returns_data(self, provider) -> None:
+        roster_pcts = pd.DataFrame({"player_id": [1, 2], "pct_rostered": [0.9, 0.1]})
+        manager = PlayerDataManager(
+            client=FakeClientWithRosterPercentages(roster_pcts),
+            season=2024, current_week=4, nfl_provider=provider,
+        )
+        players = pd.DataFrame({
+            "player_id": [1, 2],
+            "name": ["A", "B"],
+            "player_id_sr": ["x", "y"],
+            "fantasy_team": [None, None],
+        })
+        result = manager.add_roster_percentages(players)
+        by_id = result.set_index("player_id")
+        assert by_id.loc[1, "pct_rostered"] == 0.9
+        assert by_id.loc[2, "pct_rostered"] == 0.1
+
+    def test_missing_players_default_to_zero_pct(self, provider) -> None:
+        roster_pcts = pd.DataFrame({"player_id": [1], "pct_rostered": [0.5]})
+        manager = PlayerDataManager(
+            client=FakeClientWithRosterPercentages(roster_pcts),
+            season=2024, current_week=4, nfl_provider=provider,
+        )
+        players = pd.DataFrame({
+            "player_id": [1, 2],
+            "name": ["A", "B"],
+            "player_id_sr": ["x", "y"],
+            "fantasy_team": [None, None],
+        })
+        result = manager.add_roster_percentages(players)
+        by_id = result.set_index("player_id")
+        assert by_id.loc[2, "pct_rostered"] == 0.0
