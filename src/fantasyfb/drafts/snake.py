@@ -296,7 +296,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Interactive snake-draft cockpit (redraft, V2).",
     )
     p.add_argument("--team", required=True,
-                   help="Yahoo team name to draft for")
+                   help="team to draft for -- Yahoo team name (--platform "
+                        "yahoo), or the Sleeper team/manager display name "
+                        "to identify your roster (--platform sleeper)")
     p.add_argument("--adp", required=True,
                    help="path to ADP CSV (FantasyPros-style by default)")
     p.add_argument("--season", type=int, default=None,
@@ -304,7 +306,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "fantasyfb.League's auto-detect, which targets the "
                         "most recently completed season -- pass the upcoming "
                         "season explicitly when drafting before the NFL "
-                        "season starts (e.g. --season 2026 in May 2026).")
+                        "season starts (e.g. --season 2026 in May 2026). "
+                        "Ignored with --platform sleeper, since a Sleeper "
+                        "league ID is already season-scoped.")
+    p.add_argument("--platform", default="yahoo", choices=["yahoo", "sleeper"],
+                   help="fantasy platform backend to draft against, "
+                        "defaults to yahoo")
+    p.add_argument("--sleeper-league-id", default=None,
+                   dest="sleeper_league_id",
+                   help="numeric Sleeper league ID (from the league URL), "
+                        "required with --platform sleeper")
     p.add_argument("--exclude", default=None,
                    help="comma-separated players to exclude from views")
     p.add_argument("--inprogress", default=None,
@@ -365,12 +376,19 @@ def _print_df(df: pd.DataFrame, header: str) -> None:
 def main(argv=None) -> int:
     args = build_arg_parser().parse_args(argv)
 
+    if args.platform == "sleeper" and not args.sleeper_league_id:
+        print("--sleeper-league-id is required with --platform sleeper")
+        return 1
+
     # Lazy import so `--help` and the helper unit tests work without
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
 
-    league = fb.League(name=args.team, num_sims=10000, season=args.season, sfb=args.sfb,
-                       bestball=args.bestball)
+    league = fb.League(
+        name=args.team, num_sims=10000, season=args.season, sfb=args.sfb,
+        bestball=args.bestball, platform=args.platform,
+        sleeper_league_id=args.sleeper_league_id,
+    )
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
         league.roster_spots.position != "IR", "count"

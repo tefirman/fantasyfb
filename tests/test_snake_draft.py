@@ -16,6 +16,7 @@ from fantasyfb.drafts.snake import (
     _completer,
     _set_completion_candidates,
     build_arg_parser,
+    main,
     parse_payouts,
     snake_pick_slot,
 )
@@ -127,6 +128,37 @@ class TestArgParser:
         assert args.adp_name_col == "FullName"
         assert args.adp_pos_col == "Pos"
         assert args.adp_avg_col == "Avg"
+
+    def test_platform_defaults_to_yahoo(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--adp", "ADP.csv"])
+        assert args.platform == "yahoo"
+        assert args.sleeper_league_id is None
+
+    def test_platform_sleeper_with_league_id(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--adp", "ADP.csv",
+            "--platform", "sleeper", "--sleeper-league-id", "123456789",
+        ])
+        assert args.platform == "sleeper"
+        assert args.sleeper_league_id == "123456789"
+
+    def test_rejects_unknown_platform(self):
+        parser = build_arg_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args([
+                "--team", "X", "--adp", "ADP.csv", "--platform", "espn",
+            ])
+
+
+class TestMainPlatformValidation:
+    def test_sleeper_without_league_id_errors_before_connecting(self, capsys):
+        # Guard fires before the lazy `import fantasyfb` / League() call,
+        # so this must not require any credentials or network access.
+        code = main(["--team", "X", "--adp", "ADP.csv", "--platform", "sleeper"])
+        assert code == 1
+        assert "sleeper-league-id" in capsys.readouterr().out
 
 
 class TestPickCommands:
