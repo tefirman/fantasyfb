@@ -316,6 +316,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    dest="sleeper_league_id",
                    help="numeric Sleeper league ID (from the league URL), "
                         "required with --platform sleeper")
+    p.add_argument("--fresh-draft", action="store_true", dest="fresh_draft",
+                   help="ignore each team's current roster and treat every "
+                        "player as available. Existing rosters are normally "
+                        "preserved as keepers (useful for an in-progress "
+                        "Yahoo league); pass this to mock-draft against a "
+                        "league that's already mid-season -- e.g. a Sleeper "
+                        "league you're borrowing settings/player-pool from "
+                        "but that already has real rosters from its own "
+                        "draft.")
     p.add_argument("--exclude", default=None,
                    help="comma-separated players to exclude from views")
     p.add_argument("--inprogress", default=None,
@@ -398,8 +407,14 @@ def main(argv=None) -> int:
     exclude = [v.strip() for v in args.exclude.split(",")] if args.exclude else []
 
     # Preserve existing fantasy_team values (keepers / restored picks
-    # from --inprogress) before build_board snapshots the pool.
-    league.players["fantasy_team"] = league.players.get("fantasy_team")
+    # from --inprogress) before build_board snapshots the pool -- unless
+    # --fresh-draft says to disregard whatever's currently rostered
+    # (e.g. mock-drafting against a Sleeper league that's already
+    # mid-season and has real, non-keeper rosters from its own draft).
+    if args.fresh_draft:
+        league.players["fantasy_team"] = None
+    else:
+        league.players["fantasy_team"] = league.players.get("fantasy_team")
 
     if args.inprogress and os.path.exists(args.inprogress):
         progress = pd.read_csv(args.inprogress)

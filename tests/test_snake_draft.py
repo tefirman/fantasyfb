@@ -151,6 +151,18 @@ class TestArgParser:
                 "--team", "X", "--adp", "ADP.csv", "--platform", "espn",
             ])
 
+    def test_fresh_draft_defaults_to_false(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--adp", "ADP.csv"])
+        assert args.fresh_draft is False
+
+    def test_fresh_draft_flag(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--adp", "ADP.csv", "--fresh-draft",
+        ])
+        assert args.fresh_draft is True
+
 
 class TestMainPlatformValidation:
     def test_sleeper_without_league_id_errors_before_connecting(self, capsys):
