@@ -260,13 +260,25 @@ def random_pick(
     rounds). Returns the picked player's name -- the caller applies the
     pick the same way it would for a typed name.
 
-    The selection is need-adjusted to avoid pathological auto-picks: the
-    on-the-clock team's roster is rebuilt from the board so positions
+    The candidate pool is need-adjusted to avoid pathological auto-picks:
+    the on-the-clock team's roster is rebuilt from the board so positions
     they've already filled get demoted, then the top ``pool_size``
-    available players by adjusted VORP are sampled with probability
-    proportional to their adjusted VORP. The top option is heavily
-    favored but not deterministic, so re-running the same draft with
-    the auto-pilot produces different (but always plausible) outcomes.
+    available players by adjusted VORP form the pool -- this keeps the
+    pool sensible (e.g. never proposes a 3rd QB) regardless of market ADP.
+
+    Within that pool, sampling weight blends the model's opinion (VORP)
+    with the market's (ADP): weight = vorp_adjusted * (1 / adp), so a
+    player needs to look good by both signals to get picked often. A
+    model-favorite the market has cooled on, or a market darling the
+    model doesn't love, both still get picked sometimes -- just less
+    often than a player both signals agree on. Players missing ADP (not
+    in the ADP source at all -- deep depth) fall back to the pool's
+    worst real ADP plus a penalty, so they're not mistaken for a market
+    consensus top pick.
+
+    The top option is heavily favored but not deterministic, so
+    re-running the same draft with the auto-pilot produces different
+    (but always plausible) outcomes.
 
     Negative VORP values are clipped to a small epsilon so a fully-
     saturated roster (everyone's adjusted VORP near zero) still picks
@@ -291,7 +303,22 @@ def random_pick(
         raise ValueError(
             f"No available players to auto-pick for {team_name!r}."
         )
-    weights = pool["vorp_adjusted"].fillna(0).clip(lower=0.01).to_numpy()
+    vorp_weights = pool["vorp_adjusted"].fillna(0).clip(lower=0.01).to_numpy()
+
+    if "adp" in avail.columns and avail["adp"].notna().any():
+        # Undrafted-by-ADP players (not in the ADP source at all -- deep
+        # depth) fall back to double the worst real ADP across the whole
+        # available pool, not just this small top-N pool -- a fixed small
+        # offset isn't a strong enough penalty when the pool is tiny, and
+        # anchoring to the full available pool keeps the fallback stable
+        # regardless of pool_size.
+        adp_fallback = avail["adp"].max() * 2
+        adp = pool["adp"].fillna(adp_fallback).clip(lower=1).to_numpy()
+        adp_weights = 1.0 / adp
+    else:
+        adp_weights = np.ones(len(pool))
+
+    weights = vorp_weights * adp_weights
     weights = weights / weights.sum()
     idx = int(rng.choice(len(pool), p=weights))
     return str(pool.iloc[idx]["name"])

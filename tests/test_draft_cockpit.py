@@ -532,3 +532,61 @@ class TestRandomPick:
         b_rb = sum(p == "RB" for p in b_positions)
         # Team B (no RBs yet) should pick RB much more often than A.
         assert b_rb > a_rb
+
+    def test_favors_better_adp_among_similar_vorp(
+        self, standard_roster_spec,
+    ):
+        """Two RBs with near-identical VORP but very different ADP should
+        not be picked equally often -- the better-ADP one (the market's
+        favorite) should win more often once ADP is blended in."""
+        pool = pd.DataFrame([
+            _make_projection("GoodADP", "RB", 30.0, vorp_flex_per_game=10.0, adp=1.0),
+            _make_projection("BadADP", "RB", 29.9, vorp_flex_per_game=9.9, adp=200.0),
+        ])
+        pool["fantasy_team"] = pd.NA
+        picks = [
+            random_pick(
+                pool, team_name="My Team", roster_spec=standard_roster_spec,
+                pool_size=2, rng=np.random.default_rng(seed),
+            )
+            for seed in range(200)
+        ]
+        good_count = picks.count("GoodADP")
+        bad_count = picks.count("BadADP")
+        assert good_count > bad_count
+
+    def test_missing_adp_falls_back_past_worst_real_adp(
+        self, standard_roster_spec,
+    ):
+        """A player absent from the ADP source shouldn't be mistaken for
+        a market-consensus top pick -- it should be picked less often
+        than a player with real (even mediocre) ADP, all else equal."""
+        pool = pd.DataFrame([
+            _make_projection("HasADP", "RB", 20.0, vorp_flex_per_game=5.0, adp=50.0),
+            _make_projection("NoADP", "RB", 20.0, vorp_flex_per_game=5.0, adp=np.nan),
+        ])
+        pool["fantasy_team"] = pd.NA
+        picks = [
+            random_pick(
+                pool, team_name="My Team", roster_spec=standard_roster_spec,
+                pool_size=2, rng=np.random.default_rng(seed),
+            )
+            for seed in range(200)
+        ]
+        assert picks.count("HasADP") > picks.count("NoADP")
+
+    def test_works_without_adp_column_at_all(
+        self, standard_roster_spec,
+    ):
+        """random_pick shouldn't require ADP -- boards built without an
+        ADP CSV (no --adp source) should fall back to pure VORP weighting."""
+        pool = pd.DataFrame([
+            _make_projection("A", "RB", 20.0, vorp_flex_per_game=5.0),
+            _make_projection("B", "RB", 19.0, vorp_flex_per_game=4.0),
+        ])
+        pool["fantasy_team"] = pd.NA
+        name = random_pick(
+            pool, team_name="My Team", roster_spec=standard_roster_spec,
+            pool_size=2, rng=np.random.default_rng(0),
+        )
+        assert name in {"A", "B"}
