@@ -18,22 +18,25 @@ from dotenv import load_dotenv
 from pytz import timezone
 from yahoo_oauth import OAuth2
 
+from .platform_client import FantasyPlatformClient
 
-class YahooFantasyClient:
+
+class YahooFantasyClient(FantasyPlatformClient):
     """
     Client for interacting with Yahoo Fantasy API.
-    
+
     Handles OAuth authentication, rate limiting, and provides clean methods
     for common fantasy football operations.
     """
-    
+
     def __init__(self):
         """Initialize the Yahoo client with credentials and OAuth."""
         self.oauth = None
         self.gm = None
         self.lg = None
         self.lg_id = None
-        
+        self._my_team_key = None
+
         self._load_credentials()
         self._load_oauth()
     
@@ -194,8 +197,48 @@ class YahooFantasyClient:
         self.lg_id = name_to_lg_id[team_name]
         # Create league object
         self.lg = self.gm.to_league(self.lg_id)
+        self._my_team_key = self.lg.team_key()
         return team_name, self.lg_id
-    
+
+    def get_current_week(self) -> int:
+        """
+        Get the current fantasy week.
+
+        Returns:
+            The league's current week, per Yahoo.
+        """
+        if not self.lg:
+            raise ValueError("Must connect to league first")
+        return self.lg.current_week()
+
+    def get_my_team_key(self) -> Optional[str]:
+        """
+        Get the team_key of the team this client is connected as.
+
+        Returns:
+            The team_key resolved during connect_to_league(), or None if
+            not yet connected.
+        """
+        return self._my_team_key
+
+    def get_league_config(self) -> Dict:
+        """
+        Get league settings, scoring, and roster composition in the shape
+        FantasyPlatformClient callers expect.
+
+        Returns:
+            Dict with 'settings' (including playoff_start_week,
+            num_playoff_teams, end_week), 'scoring', and 'roster_spots' keys.
+        """
+        settings, roster_spots, scoring = self.get_league_settings()
+        if "end_week" in settings:
+            settings["end_week"] = int(settings["end_week"])
+        else:
+            settings["end_week"] = settings["playoff_start_week"] + (
+                2 if settings["num_playoff_teams"] == 6 else 1
+            )
+        return {"settings": settings, "scoring": scoring, "roster_spots": roster_spots}
+
     def get_league_settings(self) -> Tuple[Dict, pd.DataFrame, Dict]:
         """
         Get league settings including roster spots and scoring.
@@ -458,28 +501,39 @@ class YahooFantasyClient:
         
         return roster_pcts
     
-    def get_schedule(self, teams: List[Dict], current_week: int, playoff_start_week: int) -> pd.DataFrame:
+    def get_schedule(
+        self,
+        teams: List[Dict],
+        current_week: int,
+        playoff_start_week: int,
+        end_week: Optional[int] = None,
+    ) -> pd.DataFrame:
         """
         Get fantasy league schedule.
-        
+
         Args:
             teams: List of team dictionaries
             current_week: Current week number
             playoff_start_week: Week when playoffs start
-            
+            end_week: Last playable week of the season, if known. Caps the
+                query range so requesting a schedule past the end of the
+                season doesn't retry against nonexistent weeks.
+
         Returns:
             DataFrame with schedule information
         """
         if not self.lg:
             raise ValueError("Must connect to league first")
-        
+
         self.refresh_oauth()
         schedule = pd.DataFrame()
-        
+
         for team in teams:
             tm = self.lg.to_team(team["team_key"])
             limit = max(playoff_start_week, current_week + 1)
-            
+            if end_week:
+                limit = min(limit, end_week + 1)
+
             for week in range(1, limit):
                 while True:
                     try:

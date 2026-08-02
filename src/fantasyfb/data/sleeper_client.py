@@ -23,10 +23,12 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 import requests
+
+from .platform_client import FantasyPlatformClient
 
 BASE_URL = "https://api.sleeper.app/v1"
 
@@ -368,7 +370,7 @@ def _starting_slots(roster_positions: List[str]) -> List[str]:
     ]
 
 
-class SleeperClient:
+class SleeperClient(FantasyPlatformClient):
     """
     Client for interacting with Sleeper's public Fantasy API.
 
@@ -379,12 +381,18 @@ class SleeperClient:
     API, so this client is read-only.
     """
 
-    def __init__(self, league_id: str):
+    def __init__(self, league_id: str, my_team_name: Optional[str] = None):
         """
         Args:
             league_id: numeric Sleeper league ID (from the league URL).
+            my_team_name: team or manager display name identifying which
+                roster is "mine" -- Sleeper's public API has no OAuth
+                "logged in as" concept, so this is the only way to resolve
+                get_my_team_key(). Optional; leave unset for read-only
+                league-wide analysis with no "my team" concept.
         """
         self.league_id = league_id
+        self.my_team_name = my_team_name
 
     def get_current_week(self) -> int:
         """
@@ -396,6 +404,62 @@ class SleeperClient:
         """
         state = fetch_nfl_state()
         return int(state.get("display_week") or state.get("week") or 1)
+
+    def get_league_config(self) -> Dict:
+        """
+        Get league settings, scoring, and roster composition in the shape
+        FantasyPlatformClient callers expect.
+
+        Returns:
+            Dict with 'settings' (playoff_start_week, num_playoff_teams,
+            end_week), 'scoring', and 'roster_spots' keys.
+        """
+        league = fetch_league(self.league_id)
+        config = get_league_config(self.league_id)
+
+        raw_settings = league.get("settings") or {}
+        # playoff_week_start is 0 for leagues that haven't configured it
+        # (observed on SFB16 mid-season) -- not a valid week, so fall back
+        # to fantasyfb's own default rather than deriving a bogus end_week.
+        playoff_start_week = int(raw_settings.get("playoff_week_start") or 0) or 15
+        num_playoff_teams = int(raw_settings.get("playoff_teams") or 0) or 6
+        settings = {
+            "playoff_start_week": playoff_start_week,
+            "num_playoff_teams": num_playoff_teams,
+            "end_week": playoff_start_week + (2 if num_playoff_teams == 6 else 1),
+        }
+        config["settings"] = settings
+        return config
+
+    def get_my_team_key(self) -> Optional[str]:
+        """
+        Get the team_key of the team identified by my_team_name.
+
+        Returns:
+            The matched team's team_key (matching name first, then
+            manager), or None if my_team_name wasn't set or didn't match
+            any team.
+        """
+        if not self.my_team_name:
+            return None
+        for team in self.get_fantasy_teams():
+            if team["name"] == self.my_team_name:
+                return team["team_key"]
+        for team in self.get_fantasy_teams():
+            if team["manager"] == self.my_team_name:
+                return team["team_key"]
+        return None
+
+    def get_roster_percentages(
+        self, players_df: pd.DataFrame, chunk_size: int = 25
+    ) -> Optional[pd.DataFrame]:
+        """
+        Sleeper's public API exposes no roster/ownership-percentage data.
+
+        Returns:
+            None, always.
+        """
+        return None
 
     def get_fantasy_teams(self) -> List[Dict]:
         """
@@ -539,7 +603,11 @@ class SleeperClient:
         )
 
     def get_schedule(
-        self, teams: List[Dict], current_week: int, playoff_start_week: int
+        self,
+        teams: List[Dict],
+        current_week: int,
+        playoff_start_week: int,
+        end_week: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         Get the fantasy league schedule and scores.
@@ -548,12 +616,17 @@ class SleeperClient:
             teams: List of team dictionaries from get_fantasy_teams().
             current_week: Current week number.
             playoff_start_week: Week when playoffs start.
+            end_week: Last playable week of the season, if known. Caps the
+                query range so requesting a schedule past the end of the
+                season doesn't query nonexistent weeks.
 
         Returns:
             DataFrame with columns: week, team_1, team_2, score_1, score_2.
         """
         team_names = {team["team_key"]: team["name"] for team in teams}
         limit = max(playoff_start_week, current_week + 1)
+        if end_week:
+            limit = min(limit, end_week + 1)
 
         rows = []
         for week in range(1, limit):

@@ -46,14 +46,17 @@ class MoveAnalyzer:
             team_name (str, optional): name of team to analyze trades for, defaults to None (and therefore team of interest).  
             postseason (bool, optional): whether to analyze postseason gains or just regular season, defaults to True.  
             verbose (bool, optional): whether to print out a status report as the code runs, defaults to True.  
-            payouts (list, optional): list of payout amounts for top three finishers, defaults to [800, 300, 100].  
+            payouts (list, optional): list of payout amounts for top three finishers, defaults to [800, 300, 100].
             bestball (bool, optional): whether to use best ball settings during simulation, defaults to False.
+            min_rostership (float, optional): minimum roster percentage for a free agent to be considered,
+                defaults to 0.05. Sleeper-backed leagues have no roster-percentage data, so pct_rostered
+                is always 0.0 there -- pass min_rostership=0.0 explicitly or every free agent is filtered out.
 
         Returns:
             pd.DataFrame: dataframe containing the impact and value of every add & drop combination analyzed.
         """
         as_of = self.league.season * 100 + self.league.week
-        self.league.yahoo_client.refresh_oauth()
+        self.league.client.refresh_oauth()
         if bestball:
             orig_standings = self.league.bestball_sims(payouts)
         else:
@@ -80,7 +83,7 @@ class MoveAnalyzer:
             team_name = [
                 team["name"]
                 for team in self.league.teams
-                if team["team_key"] == self.league.lg.team_key()
+                if team["team_key"] == self.league.my_team_key
             ][0]
         players_to_drop = self.league.players.loc[self.league.players.fantasy_team == team_name]
         if players_to_drop.name.isin(focus_on).sum() > 0:
@@ -91,7 +94,7 @@ class MoveAnalyzer:
         & (self.league.players.until.isnull() | (self.league.players.until < 17)) \
         & (self.league.players.pct_rostered >= min_rostership)].reset_index(drop=True)
         for my_player in players_to_drop.name:
-            self.league.yahoo_client.refresh_oauth(55)
+            self.league.client.refresh_oauth(55)
             if (
                 players_to_drop.loc[players_to_drop.name == my_player, "until"].values[
                     0
@@ -202,14 +205,17 @@ class MoveAnalyzer:
             team_name (str, optional): name of team to analyze trades for, defaults to None (and therefore team of interest).  
             postseason (bool, optional): whether to analyze postseason gains or just regular season, defaults to True.  
             verbose (bool, optional): whether to print out a status report as the code runs, defaults to True.  
-            payouts (list, optional): list of payout amounts for top three finishers, defaults to [800, 300, 100].  
+            payouts (list, optional): list of payout amounts for top three finishers, defaults to [800, 300, 100].
             bestball (bool, optional): whether to use best ball settings during simulation, defaults to False.
+            min_rostership (float, optional): minimum roster percentage for a free agent to be considered,
+                defaults to 0.05. Sleeper-backed leagues have no roster-percentage data, so pct_rostered
+                is always 0.0 there -- pass min_rostership=0.0 explicitly or every free agent is filtered out.
 
         Returns:
             pd.DataFrame: dataframe containing the impact and value of every possible add analyzed.
         """
         as_of = self.league.season * 100 + self.league.week
-        self.league.yahoo_client.refresh_oauth()
+        self.league.client.refresh_oauth()
         if bestball:
             orig_standings = self.league.bestball_sims(payouts)
         else:
@@ -235,7 +241,7 @@ class MoveAnalyzer:
             team_name = [
                 team["name"]
                 for team in self.league.teams
-                if team["team_key"] == self.league.lg.team_key()
+                if team["team_key"] == self.league.my_team_key
             ][0]
         available = self.league.players.loc[self.league.players.fantasy_team.isnull() \
         & (self.league.players.until.isnull() | (self.league.players.until < 17)) \
@@ -326,7 +332,7 @@ class MoveAnalyzer:
         Returns:
             pd.DataFrame: dataframe containing the impact and value of every possible drop analyzed.
         """
-        self.league.yahoo_client.refresh_oauth()
+        self.league.client.refresh_oauth()
         if bestball:
             orig_standings = self.league.bestball_sims(payouts)
         else:
@@ -352,7 +358,7 @@ class MoveAnalyzer:
             team_name = [
                 team["name"]
                 for team in self.league.teams
-                if team["team_key"] == self.league.lg.team_key()
+                if team["team_key"] == self.league.my_team_key
             ][0]
         players_to_drop = self.league.players.loc[self.league.players.fantasy_team == team_name]
         if players_to_drop.name.isin(focus_on).sum() > 0:
@@ -433,12 +439,12 @@ class MoveAnalyzer:
         Returns:
             pd.DataFrame: dataframe containing the impact and value of every possible trade analyzed.
         """
-        self.league.yahoo_client.refresh_oauth()
+        self.league.client.refresh_oauth()
         if not team_name:
             team_name = [
                 team["name"]
                 for team in self.league.teams
-                if team["team_key"] == self.league.lg.team_key()
+                if team["team_key"] == self.league.my_team_key
             ][0]
         my_players = self.league.players.loc[
             (self.league.players.fantasy_team == team_name)
@@ -492,7 +498,7 @@ class MoveAnalyzer:
         my_rows = []
         their_rows = []
         for my_player in my_players.name:
-            self.league.yahoo_client.refresh_oauth(55)
+            self.league.client.refresh_oauth(55)
             if their_players.name.isin(focus_on).any():
                 possible = their_players.copy()
             else:
