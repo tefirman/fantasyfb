@@ -129,11 +129,39 @@ class TestArgParser:
         assert args.adp_pos_col == "Pos"
         assert args.adp_avg_col == "Avg"
 
-    def test_platform_defaults_to_yahoo(self):
+    def test_platform_defaults_to_generic(self):
+        # Omitting --platform means a fully synthetic mock draft (issue
+        # #47), not Yahoo -- a deliberate behavior change from before
+        # generic mode existed. Pass --platform yahoo explicitly to draft
+        # against a real Yahoo league.
         parser = build_arg_parser()
         args = parser.parse_args(["--team", "X", "--adp", "ADP.csv"])
-        assert args.platform == "yahoo"
+        assert args.platform == "generic"
         assert args.sleeper_league_id is None
+
+    def test_platform_yahoo_explicit(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--adp", "ADP.csv", "--platform", "yahoo",
+        ])
+        assert args.platform == "yahoo"
+
+    def test_platform_generic_with_num_teams_and_scoring(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--adp", "ADP.csv", "--platform", "generic",
+            "--num-teams", "10", "--mock-scoring", "half_ppr",
+        ])
+        assert args.platform == "generic"
+        assert args.num_teams == 10
+        assert args.mock_scoring == "half_ppr"
+
+    def test_generic_num_teams_and_scoring_default_to_none(self):
+        # None means "prompt interactively" -- see main()'s generic branch.
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--adp", "ADP.csv"])
+        assert args.num_teams is None
+        assert args.mock_scoring is None
 
     def test_platform_sleeper_with_league_id(self):
         parser = build_arg_parser()
