@@ -6,14 +6,13 @@ bye weeks, roster percentages, and depth chart integration.
 """
 
 import datetime
-import time
-import traceback
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 
 from .nfl_provider import NFLDataProvider
+from .platform_client import FantasyPlatformClient
 
 
 class PlayerDataManager:
@@ -21,18 +20,18 @@ class PlayerDataManager:
     Manages all player data operations including ID mapping, corrections, and enrichment.
     """
     
-    def __init__(self, yahoo_client, season: int, current_week: int,
+    def __init__(self, client: FantasyPlatformClient, season: int, current_week: int,
                  nfl_provider: NFLDataProvider):
         """
         Initialize the player data manager.
 
         Args:
-            yahoo_client: YahooFantasyClient instance
+            client: FantasyPlatformClient instance
             season: Current NFL season
             current_week: Current week in season
             nfl_provider: Pluggable NFL data backend.
         """
-        self.yahoo_client = yahoo_client
+        self.client = client
         self.season = season
         self.current_week = current_week
         self.nfl_provider = nfl_provider
@@ -73,7 +72,7 @@ class PlayerDataManager:
 
     def map_player_ids(self, players: pd.DataFrame) -> pd.DataFrame:
         """
-        Map Yahoo player IDs to NFL player IDs.
+        Map platform player IDs to NFL player IDs.
 
         nflreadpy's weekly roster feed carries the Yahoo player ID directly,
         so we can join on that instead of the legacy name-matching cascade.
@@ -81,40 +80,54 @@ class PlayerDataManager:
         be required because Pro Football Reference and Yahoo disagreed on
         player spellings.
 
+        Non-Yahoo clients (e.g. Sleeper) already resolve player_id_sr
+        themselves (via gsis_id) and use real NFL team codes directly in
+        editorial_team_abbr rather than Yahoo's own abbreviations, so the
+        Yahoo-team-code translation and yahoo_id join are skipped for them;
+        the name+team fallback below still runs to backfill anyone their
+        client-side ID resolution missed.
+
         Args:
-            players: DataFrame with Yahoo player data
+            players: DataFrame with player data from the active platform client
 
         Returns:
             DataFrame with mapped player IDs
         """
         nfl_rosters = self.nfl_provider.get_rosters(self.season - 1, self.latest_season)
+        client_resolved_ids = "player_id_sr" in players.columns and players["player_id_sr"].notna().any()
 
-        # Map Yahoo team abbreviations -> NFL team abbreviations.
-        players = pd.merge(
-            left=players,
-            right=self.nfl_teams[["real_abbrev", "yahoo"]].rename(
-                columns={"yahoo": "editorial_team_abbr", "real_abbrev": "current_team"}
-            ),
-            how="inner",
-            on="editorial_team_abbr",
-        )
-
-        if "yahoo_id" in nfl_rosters.columns:
-            # Preferred path: exact ID join. Take the most recent roster
-            # entry per yahoo_id to handle mid-season team changes.
-            roster_by_yid = (
-                nfl_rosters.dropna(subset=["yahoo_id"])
-                .assign(yahoo_id=lambda d: d["yahoo_id"].astype(str))
-                .sort_values("season")
-                .drop_duplicates(subset=["yahoo_id"], keep="last")
-                [["yahoo_id", "player_id_sr"]]
-            )
-            players = players.assign(yahoo_id=players["player_id"].astype(str)).merge(
-                roster_by_yid, on="yahoo_id", how="left"
-            )
-            del players["yahoo_id"]
+        if client_resolved_ids:
+            # editorial_team_abbr is already a real NFL code (Sleeper); no
+            # Yahoo-team-code translation or yahoo_id join needed -- the
+            # client already populated player_id_sr via its own native ID.
+            players = players.rename(columns={"editorial_team_abbr": "current_team"})
         else:
-            players["player_id_sr"] = pd.NA
+            # Map Yahoo team abbreviations -> NFL team abbreviations.
+            players = pd.merge(
+                left=players,
+                right=self.nfl_teams[["real_abbrev", "yahoo"]].rename(
+                    columns={"yahoo": "editorial_team_abbr", "real_abbrev": "current_team"}
+                ),
+                how="inner",
+                on="editorial_team_abbr",
+            )
+
+            if "yahoo_id" in nfl_rosters.columns:
+                # Preferred path: exact ID join. Take the most recent roster
+                # entry per yahoo_id to handle mid-season team changes.
+                roster_by_yid = (
+                    nfl_rosters.dropna(subset=["yahoo_id"])
+                    .assign(yahoo_id=lambda d: d["yahoo_id"].astype(str))
+                    .sort_values("season")
+                    .drop_duplicates(subset=["yahoo_id"], keep="last")
+                    [["yahoo_id", "player_id_sr"]]
+                )
+                players = players.assign(yahoo_id=players["player_id"].astype(str)).merge(
+                    roster_by_yid, on="yahoo_id", how="left"
+                )
+                del players["yahoo_id"]
+            else:
+                players["player_id_sr"] = pd.NA
 
         # Name+team fallback for anyone the primary join missed. The
         # yahoo_id column comes from a static cross-reference inside
@@ -266,76 +279,31 @@ class PlayerDataManager:
         
         return players
 
-    def add_roster_percentages(self, players: pd.DataFrame, lg_id: str, inc: int = 25) -> pd.DataFrame:
+    def add_roster_percentages(self, players: pd.DataFrame, inc: int = 25) -> pd.DataFrame:
         """
         Pull the percentage of leagues each player is rostered in.
-        
+
         Args:
             players: DataFrame with player data
-            lg_id: League ID for Yahoo API
             inc: Number of players to pull per API call
-            
+
         Returns:
-            DataFrame with roster percentage information added
+            DataFrame with roster percentage information added. Backends
+            with no ownership-percentage concept (e.g. Sleeper) get
+            pct_rostered = 0.0 for every player -- callers filtering on
+            min_rostership should pass 0.0 explicitly for those leagues.
         """
-        self.yahoo_client.refresh_oauth()
-        roster_pcts = pd.DataFrame()
-        
-        for ind in range(players.shape[0] // inc + 1):
-            while True:
-                try:
-                    self.yahoo_client.refresh_oauth()
-                    chunk = players.iloc[inc * ind : inc * (ind + 1)]
-                    
-                    if chunk.shape[0] == 0:
-                        pcts = {"count": 0}
-                        break
-                    
-                    player_ids = chunk.player_id.astype(str).tolist()
-                    player_ids = [val.split(".")[0] for val in player_ids if val != "nan"]
-                    
-                    if len(player_ids) > 0:
-                        pcts = self.yahoo_client.lg.yhandler.get(
-                            "league/{}/players;player_keys={}.p.{}/percent_owned".format(
-                                lg_id, 
-                                lg_id.split('.')[0], 
-                                ",{}.p.".format(lg_id.split('.')[0]).join(player_ids)
-                            )
-                        )["fantasy_content"]["league"][1]["players"]
-                    else:
-                        pcts = {"count": 0}
-                    break
-                    
-                except:
-                    err_message = traceback.format_exc()
-                    print(err_message)
-                    print("Roster percentage query failed... Waiting 30 seconds and trying again...")
-                    time.sleep(30)
-            
-            for player_ind in range(pcts["count"]):
-                player = pcts[str(player_ind)]["player"]
-                player_id = [int(val["player_id"]) for val in player[0] if "player_id" in val]
-                pct_owned = [
-                    float(val["value"]) / 100.0
-                    for val in player[1]["percent_owned"]
-                    if "value" in val
-                ]
-                if len(pct_owned) == 0:
-                    pct_owned = [0.0]
-                
-                roster_pcts = pd.concat([
-                    roster_pcts,
-                    pd.DataFrame({
-                        "player_id": player_id,
-                        "pct_rostered": pct_owned,
-                    })
-                ], ignore_index=True, sort=False)
-        
+        roster_pcts = self.client.get_roster_percentages(players, chunk_size=inc)
+        if roster_pcts is None:
+            players = players.copy()
+            players["pct_rostered"] = 0.0
+            return players
+
         players = pd.merge(
             left=players, right=roster_pcts, how="left", on=["player_id"]
         )
         players.pct_rostered = players.pct_rostered.fillna(0.0)
-        
+
         # Check for unmapped players
         not_found = (
             (players.player_id == players.player_id_sr) 
@@ -403,37 +371,36 @@ class PlayerDataManager:
 
         return players
 
-    def process_players(self, players: pd.DataFrame, stats: pd.DataFrame, 
-                       nfl_schedule: pd.DataFrame, lg_id: str, week: int) -> pd.DataFrame:
+    def process_players(self, players: pd.DataFrame, stats: pd.DataFrame,
+                       nfl_schedule: pd.DataFrame, week: int) -> pd.DataFrame:
         """
         Run the complete player data processing pipeline.
-        
+
         Args:
-            players: Raw Yahoo player data
+            players: Raw player data from the active platform client
             stats: NFL stats from the active provider, used by the
                    legacy name-correction step
             nfl_schedule: NFL schedule for bye weeks
-            lg_id: League ID for roster percentages
             week: Current week being analyzed
-            
+
         Returns:
             Fully processed player DataFrame
         """
         print("Applying name corrections...")
         players = self.apply_name_corrections(players, stats)
-        
+
         print("Mapping player IDs...")
         players = self.map_player_ids(players)
-        
+
         print("Adding injury information...")
         players = self.add_injuries(players, week)
-        
+
         print("Adding bye weeks...")
         players = self.add_bye_weeks(players, nfl_schedule)
-        
+
         print("Adding roster percentages...")
-        players = self.add_roster_percentages(players, lg_id)
-        
+        players = self.add_roster_percentages(players)
+
         print("Adding depth charts...")
         players = self.add_depth_charts(players, week)
         

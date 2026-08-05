@@ -4,31 +4,31 @@ Fantasy league schedule management.
 Handles fetching fantasy schedules and preparing schedule data for simulations.
 """
 
-import pandas as pd
+from ..data.platform_client import FantasyPlatformClient
 
 
 class ScheduleManager:
     """
     Manages fantasy league schedule operations including regular season and postseason.
     """
-    
-    def __init__(self, yahoo_client, teams, settings, lg_id, latest_season):
+
+    def __init__(self, client: FantasyPlatformClient, teams, settings, lg_id, latest_season):
         """
         Initialize the schedule manager.
-        
+
         Args:
-            yahoo_client: YahooFantasyClient instance
+            client: FantasyPlatformClient instance
             teams: List of team dictionaries
             settings: League settings dictionary
             lg_id: League ID
             latest_season: The most recent NFL season year
         """
-        self.yahoo_client = yahoo_client
+        self.client = client
         self.teams = teams
         self.settings = settings
         self.lg_id = lg_id
         self.latest_season = latest_season
-    
+
     def get_schedule(self, season, week, current_week, team_key=None):
         """
         Pulls the fantasy schedule for the season in question as well as
@@ -46,68 +46,44 @@ class ScheduleManager:
             DataFrame with fantasy schedule
         """
         as_of = season * 100 + week
-        self.yahoo_client.refresh_oauth()
+        self.client.refresh_oauth()
 
         schedule = self._pull_basic_schedule(as_of)
         schedule = self._clean_schedule(schedule, as_of, team_key)
 
         return schedule
-    
+
     def _pull_basic_schedule(self, as_of):
-        """Pull the basic fantasy schedule from Yahoo API."""
-        schedule = pd.DataFrame()
-        
-        for team in self.teams:
-            tm = self.yahoo_client.lg.to_team(team["team_key"])
-            limit = (
-                max(self.settings["playoff_start_week"], as_of % 100 + 1)
-                if as_of
-                else self.settings["playoff_start_week"]
-            )
-            # Cap at the league's end_week + 1 so --week N > end_week
-            # doesn't infinite-retry pulling matchups for a week that
-            # doesn't exist in Yahoo.
-            limit = min(limit, self.settings["end_week"] + 1)
-            
-            for week in range(1, limit):
-                while True:
-                    try:
-                        matchup = tm.yhandler.get_matchup_raw(tm.team_key, week)
-                        matchup = matchup["fantasy_content"]["team"][1]["matchups"]
-                        break
-                    except:
-                        print("Matchup query failed... Waiting 30 seconds and trying again...")
-                        import time
-                        time.sleep(30)
-                
-                if "0" in matchup.keys():
-                    team_1 = matchup["0"]["matchup"]["0"]["teams"]["0"]["team"]
-                    team_2 = matchup["0"]["matchup"]["0"]["teams"]["1"]["team"]
-                    schedule = pd.concat([schedule,
-                        pd.DataFrame({
-                            "week": [week],
-                            "team_1": [team_1[0][2]["name"]],
-                            "team_2": [team_2[0][2]["name"]],
-                            "score_1": [team_1[1]["team_points"]["total"]],
-                            "score_2": [team_2[1]["team_points"]["total"]],
-                        })],
-                        ignore_index=True,
-                    )
-        
-        schedule.score_1 = schedule.score_1.astype(float)
-        schedule.score_2 = schedule.score_2.astype(float)
-        
-        return schedule
-    
+        """Pull the basic fantasy schedule from the active platform client."""
+        limit_week = (
+            max(self.settings["playoff_start_week"], as_of % 100 + 1)
+            if as_of
+            else self.settings["playoff_start_week"]
+        )
+        # client.get_schedule computes its own limit as
+        # max(playoff_start_week, current_week + 1); passing limit_week - 1
+        # as current_week reproduces limit_week exactly.
+        return self.client.get_schedule(
+            self.teams,
+            limit_week - 1,
+            self.settings["playoff_start_week"],
+            end_week=self.settings["end_week"],
+        )
+
     def _clean_schedule(self, schedule, as_of, team_key):
         """Clean and format the schedule DataFrame."""
         # Standardize team order (alphabetical)
         switch = schedule.team_1 > schedule.team_2
+        # .values below must be copied: since score_1/score_2 are adjacent
+        # same-dtype columns, pandas' block manager can return a view into
+        # the same underlying block being assigned into, so an uncopied
+        # .values silently aliases source and destination mid-assignment
+        # (observed: both score_1 and score_2 end up with score_2's value).
         schedule.loc[switch, ["team_1", "team_2"]] = (
-            schedule.loc[switch, ["team_2", "team_1"]].values
+            schedule.loc[switch, ["team_2", "team_1"]].values.copy()
         )
         schedule.loc[switch, ["score_1", "score_2"]] = (
-            schedule.loc[switch, ["score_2", "score_1"]].values
+            schedule.loc[switch, ["score_2", "score_1"]].values.copy()
         )
         
         # Remove duplicates and sort

@@ -21,6 +21,8 @@ from .projections.engine_v2 import ProjectionEngineV2
 from .scoring.matchup_model import MatchupModel
 from .sim.season_simulator import SeasonSimulator
 from .data.yahoo_client import YahooFantasyClient
+from .data.sleeper_client import SleeperClient
+from .data.platform_client import FantasyPlatformClient
 from .io.excel_exporter import FantasyExcelExporter
 from .analysis.war_calculator import WARCalculator
 from .data.player_data_manager import PlayerDataManager
@@ -69,24 +71,32 @@ class League:
         bestball: str = "",
         nfl_provider: NFLDataProvider = None,
         fit_matchup: bool = True,
+        platform: str = "yahoo",
+        sleeper_league_id: str = None,
+        client: FantasyPlatformClient = None,
     ):
         """
         Initializes a League object using the parameters provided and class functions defined below.
 
         Args:
-            name (str, optional): string describing the name of the fantasy team in question, defaults to None.  
-            season (int, optional): integer specifying the season of interest, defaults to None.  
-            week (int, optional): integer specifiying the week of interest, defaults to None.  
-            injurytries (int, optional): integer specifying the number of attempts to pull injury statuses, defaults to 10.  
-            num_sims (int, optional): integer specifying the number of Monte Carlo simulations to run, defaults to 10000.  
-            earliest (int, optional): integer describing the earliest week to pull statistics from (YYYYWW), defaults to None.  
-            reference_games (int, optional): integer describing the number of games to use as a prior for rates, defaults to None.  
-            basaloppstringtime (list, optional): list of the four weighting factors when calculating rates, defaults to an empty list.  
+            name (str, optional): string describing the name of the fantasy team in question, defaults to None.
+                For platform="sleeper", this identifies "my team" by matching against a Sleeper
+                team's name or manager display name (raises ValueError if given but unmatched).
+            season (int, optional): integer specifying the season of interest, defaults to None.
+            week (int, optional): integer specifiying the week of interest, defaults to None.
+            injurytries (int, optional): integer specifying the number of attempts to pull injury statuses, defaults to 10.
+            num_sims (int, optional): integer specifying the number of Monte Carlo simulations to run, defaults to 10000.
+            earliest (int, optional): integer describing the earliest week to pull statistics from (YYYYWW), defaults to None.
+            reference_games (int, optional): integer describing the number of games to use as a prior for rates, defaults to None.
+            basaloppstringtime (list, optional): list of the four weighting factors when calculating rates, defaults to an empty list.
             sfb (bool or str, optional): whether to implement Scott Fish Bowl settings and scoring,
                 defaults to False. Pass a Sleeper league ID (from the league URL) instead of True
                 to pull the current year's scoring/roster settings live from Sleeper rather than
                 the static snapshot in fantasyfb.configs.
             bestball (str, optional): which platform to use when implementing best ball settings/scoring, defaults to a blank string (no bestball).
+            platform (str, optional): which fantasy platform backend to use, "yahoo" or "sleeper", defaults to "yahoo".
+            sleeper_league_id (str, optional): numeric Sleeper league ID (from the league URL), required when platform="sleeper".
+            client (FantasyPlatformClient, optional): pre-constructed client instance, bypasses platform/sleeper_league_id. Mainly for testing.
         """
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         """ Year of the most recent season """
@@ -94,42 +104,56 @@ class League:
         """ Pluggable NFL data backend; defaults to nflreadpy """
         self.season = season if type(season) == int else self.latest_season
         """ Season of interest, defaults to most recent season when no value is provided """
-        self.yahoo_client = YahooFantasyClient()
-        self.name, self.lg_id = self.yahoo_client.connect_to_league(self.season, name)
-        self.lg = self.yahoo_client.lg
-        self.current_week = self.lg.current_week()
+        if client is not None:
+            self.client = client
+        elif platform == "sleeper":
+            if not sleeper_league_id:
+                raise ValueError("sleeper_league_id is required when platform='sleeper'")
+            self.client = SleeperClient(sleeper_league_id, my_team_name=name)
+            self.name = name
+            self.lg_id = sleeper_league_id
+        elif platform == "yahoo":
+            self.client = YahooFantasyClient()
+            self.name, self.lg_id = self.client.connect_to_league(self.season, name)
+        else:
+            raise ValueError(f"Unknown platform: {platform!r}")
+        self.current_week = self.client.get_current_week()
         """ Most recent week of the season of interest """
+        self.my_team_key = self.client.get_my_team_key()
+        """ team_key of the team identified by `name`, if resolvable """
+        if platform == "sleeper" and name and self.my_team_key is None:
+            raise ValueError(f"No Sleeper team found matching name/manager {name!r}")
         self.week = week if type(week) == int else self.current_week
         """ Week of interest during the season of interest, defaults to most recent week """
         self.load_settings(sfb, bestball)
         self.load_fantasy_teams()
         self.schedule_manager = ScheduleManager(
-            self.yahoo_client, 
-            self.teams, 
-            self.settings, 
+            self.client,
+            self.teams,
+            self.settings,
             self.lg_id,
             self.latest_season
         )
         self.load_nfl_abbrevs()
         self.load_nfl_schedule()
-        self.players = self.yahoo_client.get_all_players(injurytries)
+        self.players = self.client.get_all_players(injurytries)
         # Yahoo only has rosters for weeks within the season; clamp the
         # fetch so that --week N > end_week (e.g. "show final standings")
         # doesn't infinite-retry against a nonexistent week.
         roster_week = min(self.week, self.settings["end_week"])
-        selected = self.yahoo_client.get_team_rosters(self.teams, roster_week)
+        selected = self.client.get_team_rosters(self.teams, roster_week)
         self.players = pd.merge(
-            left=self.players, 
-            right=selected, 
-            how="left", 
+            left=self.players,
+            right=selected,
+            how="left",
             on="player_id"
         )
-        self.lineup_optimizer = LineupOptimizer(self.roster_spots, self.teams, self.yahoo_client)
+        self.lineup_optimizer = LineupOptimizer(self.roster_spots, self.teams, self.client)
         self.move_analyzer = MoveAnalyzer(self)
-        
+
         # Initialize player data manager and process all player data
         player_manager = PlayerDataManager(
-            self.yahoo_client, self.season, self.current_week, self.nfl_provider
+            self.client, self.season, self.current_week, self.nfl_provider
         )
 
         # We need stats for name corrections, so load them first
@@ -140,10 +164,9 @@ class League:
         
         # Process all player data in one call
         self.players = player_manager.process_players(
-            self.players, 
-            self.stats, 
-            self.nfl_schedule, 
-            self.lg_id, 
+            self.players,
+            self.stats,
+            self.nfl_schedule,
             self.week
         )
         
@@ -169,36 +192,10 @@ class League:
             bestball (str, optional): which best ball settings to use if desired, defaults to "" (redraft).
         """
         # Pulling league settings
-        settings_json = self.lg.yhandler.get_settings_raw(self.lg_id)
-        self.settings = settings_json["fantasy_content"]["league"][1]["settings"][0]
-        self.settings["playoff_start_week"] = int(self.settings["playoff_start_week"])
-        self.settings["num_playoff_teams"] = int(self.settings["num_playoff_teams"])
-        # Last playable week of the season: championship week. Used to clamp
-        # Yahoo API calls when callers pass --week beyond the season end (to
-        # view "everything locked" final state — see PR #17).
-        if "end_week" in self.settings:
-            self.settings["end_week"] = int(self.settings["end_week"])
-        else:
-            self.settings["end_week"] = (
-                self.settings["playoff_start_week"]
-                + (2 if self.settings["num_playoff_teams"] == 6 else 1)
-            )
-        self.roster_spots = pd.DataFrame([pos["roster_position"] for pos in self.settings["roster_positions"]])
-        self.roster_spots['count'] = self.roster_spots['count'].astype(int)
-        categories = pd.DataFrame(
-            [stat["stat"] for stat in self.settings["stat_categories"]["stats"]]
-        )
-        modifiers = pd.DataFrame(
-            [stat["stat"] for stat in self.settings["stat_modifiers"]["stats"]]
-        )
-        self.scoring = pd.merge(
-            left=categories,
-            right=modifiers,
-            how="inner",
-            on="stat_id",
-        )[["display_name", "value"]].astype({"value": float})
-        self.scoring.loc[(self.scoring.display_name == "Int") & (self.scoring.value <= 0),"display_name"] = "Int Thrown"
-        self.scoring = self.scoring.drop_duplicates(subset=["display_name"]).set_index("display_name")['value'].to_dict()
+        config = self.client.get_league_config()
+        self.settings = config["settings"]
+        self.roster_spots = config["roster_spots"]
+        self.scoring = config["scoring"]
 
         # Check for predefined platform configurations
         config = None
@@ -228,16 +225,7 @@ class League:
         Pulls a list of all fantasy team names and ids for the league in question.
         """
         # Pulling list of teams in the fantasy league
-        league_info = self.lg.yhandler.get_standings_raw(self.lg_id)["fantasy_content"]
-        teams_info = league_info["league"][1]["standings"][0]["teams"]
-        self.teams = [
-            {
-                "team_key": teams_info[str(ind)]["team"][0][0]["team_key"],
-                "name": teams_info[str(ind)]["team"][0][2]["name"],
-                "manager": teams_info[str(ind)]["team"][0][-1]['managers'][0]['manager']['nickname'],
-            }
-            for ind in range(teams_info["count"])
-        ]
+        self.teams = self.client.get_fantasy_teams()
 
     def load_nfl_abbrevs(self):
         """
@@ -465,10 +453,10 @@ class League:
         scores for all matchups up to the week in question.
         """
         self.schedule = self.schedule_manager.get_schedule(
-            self.season, 
+            self.season,
             self.week,
             self.current_week,
-            self.lg.team_key()
+            self.my_team_key
         )
 
     def starters(self, week: int):
@@ -500,7 +488,7 @@ class League:
         Returns:
             standings (pd.DataFrame): simulated results for the final season standings and playoff projections.
         """
-        self.yahoo_client.refresh_oauth()
+        self.client.refresh_oauth()
         projections = pd.DataFrame(columns=["fantasy_team", "week", "points_avg", "points_stdev"])
         for week in range(self.week,self.settings['playoff_start_week']):
             self.starters(week)
@@ -569,8 +557,8 @@ class League:
             schedule (pd.DataFrame): simulated results for each matchup throughout the season in question  
             standings (pd.DataFrame): simulated results for the final season standings and playoff projections
         """
-        self.yahoo_client.refresh_oauth()
-        
+        self.client.refresh_oauth()
+
         # Calculate team projections for each week (your existing logic)
         self.players["points_var"] = self.players.points_stdev**2
         projections_list = []
@@ -695,12 +683,12 @@ class League:
             pd.DataFrame: dataframe containing the impact and value of every matchup during the week of interest.
         """
         as_of = self.season * 100 + self.week
-        self.yahoo_client.refresh_oauth()
+        self.client.refresh_oauth()
         if not team_name:
             team_name = [
                 team["name"]
                 for team in self.teams
-                if team["team_key"] == self.lg.team_key()
+                if team["team_key"] == self.my_team_key
             ][0]
         deltas = self.season_sims(postseason, payouts)[1][["team", "earnings"]]
         for team in self.players.fantasy_team.unique():
