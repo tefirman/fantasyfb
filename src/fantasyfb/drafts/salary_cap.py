@@ -231,7 +231,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Interactive salary cap draft cockpit (V2).",
     )
     p.add_argument("--team", required=True,
-                   help="Yahoo team name to draft for")
+                   help="team to draft for -- Yahoo team name (--platform "
+                        "yahoo), or the Sleeper team/manager display name "
+                        "to identify your roster (--platform sleeper)")
     p.add_argument("--salary-cap", type=int, default=200, dest="salary_cap",
                    help="per-team salary cap (default $200)")
     p.add_argument("--min-bid", type=int, default=1, dest="min_bid",
@@ -240,7 +242,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="Yahoo season year. Defaults to League's "
                         "auto-detect, which targets the most recently "
                         "completed season -- pass the upcoming season "
-                        "explicitly when drafting pre-season.")
+                        "explicitly when drafting pre-season. Ignored "
+                        "with --platform sleeper, since a Sleeper league "
+                        "ID is already season-scoped.")
+    p.add_argument("--platform", default="yahoo", choices=["yahoo", "sleeper"],
+                   help="fantasy platform backend to draft against, "
+                        "defaults to yahoo")
+    p.add_argument("--sleeper-league-id", default=None,
+                   dest="sleeper_league_id",
+                   help="numeric Sleeper league ID (from the league URL), "
+                        "required with --platform sleeper")
+    p.add_argument("--fresh-draft", action="store_true", dest="fresh_draft",
+                   help="ignore each team's current roster and treat every "
+                        "player as available. Existing rosters are normally "
+                        "preserved as keepers (useful for an in-progress "
+                        "Yahoo league); pass this to mock-draft against a "
+                        "league that's already mid-season -- e.g. a Sleeper "
+                        "league you're borrowing settings/player-pool from "
+                        "but that already has real rosters from its own "
+                        "draft.")
     p.add_argument("--keepers", default=None,
                    help="path to a keepers CSV (columns: name, "
                         "fantasy_team, salary -- last year's winning "
@@ -306,10 +326,17 @@ def _load_progress(path: str) -> pd.DataFrame:
 def main(argv=None) -> int:
     args = build_arg_parser().parse_args(argv)
 
+    if args.platform == "sleeper" and not args.sleeper_league_id:
+        print("--sleeper-league-id is required with --platform sleeper")
+        return 1
+
     # Lazy import so --help and helper unit tests work without Yahoo creds.
     import fantasyfb as fb
 
-    league = fb.League(name=args.team, num_sims=10000, season=args.season)
+    league = fb.League(
+        name=args.team, num_sims=10000, season=args.season,
+        platform=args.platform, sleeper_league_id=args.sleeper_league_id,
+    )
     num_teams = len(league.teams)
     spec = _roster_spec_to_dict(league.roster_spots)
     bench = _bench_slots_from_spec(league.roster_spots)
@@ -317,7 +344,15 @@ def main(argv=None) -> int:
     payouts = parse_payouts(args.payouts, num_teams)
     exclude = [v.strip() for v in args.exclude.split(",")] if args.exclude else []
 
-    league.players["fantasy_team"] = league.players.get("fantasy_team")
+    # Preserve existing fantasy_team values (keepers / restored picks from
+    # --inprogress) -- unless --fresh-draft says to disregard whatever's
+    # currently rostered (e.g. mock-drafting against a Sleeper league
+    # that's already mid-season and has real, non-keeper rosters from its
+    # own draft).
+    if args.fresh_draft:
+        league.players["fantasy_team"] = None
+    else:
+        league.players["fantasy_team"] = league.players.get("fantasy_team")
     if "actual_salary" not in league.players.columns:
         league.players["actual_salary"] = np.nan
 

@@ -26,6 +26,7 @@ from fantasyfb.drafts.salary_cap import (
     check_bid,
     check_team_name,
     compute_max_legal_bid,
+    main,
     setup_teams,
 )
 
@@ -408,6 +409,45 @@ class TestArgParser:
         parser = build_arg_parser()
         args = parser.parse_args(["--team", "X", "--simadd-limit", "5"])
         assert args.simadd_limit == 5
+
+    def test_platform_defaults_to_yahoo(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X"])
+        assert args.platform == "yahoo"
+        assert args.sleeper_league_id is None
+
+    def test_platform_sleeper_with_league_id(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--platform", "sleeper",
+            "--sleeper-league-id", "123456789",
+        ])
+        assert args.platform == "sleeper"
+        assert args.sleeper_league_id == "123456789"
+
+    def test_rejects_unknown_platform(self):
+        parser = build_arg_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--team", "X", "--platform", "espn"])
+
+    def test_fresh_draft_defaults_to_false(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X"])
+        assert args.fresh_draft is False
+
+    def test_fresh_draft_flag(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--fresh-draft"])
+        assert args.fresh_draft is True
+
+
+class TestMainPlatformValidation:
+    def test_sleeper_without_league_id_errors_before_connecting(self, capsys):
+        # Guard fires before the lazy `import fantasyfb` / League() call,
+        # so this must not require any credentials or network access.
+        code = main(["--team", "X", "--platform", "sleeper"])
+        assert code == 1
+        assert "sleeper-league-id" in capsys.readouterr().out
 
 
 # --------------------------------------------------------------------- #
