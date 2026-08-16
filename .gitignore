@@ -210,6 +210,7 @@ cache/
 
 # Local data storage
 *.csv
+!examples/*.csv
 
 # personal notes/documentation
 notes/
