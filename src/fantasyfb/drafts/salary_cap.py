@@ -31,6 +31,8 @@ Commands at the prompt (also via the ``help`` command):
     budgets        Every team's spent / remaining / max-bid snapshot
     exclude        Add a player to the per-session exclude list
     sim            Run a full season simulation with current rosters
+    simadd         Sim top-N available per position at each one's max
+                   legal bid; ranks by win/playoff/earnings delta
     go back        Revert the previous pick
     help           Show this command list
     exit           Save progress and exit (no final summary)
@@ -53,6 +55,8 @@ except ImportError:  # pragma: no cover -- Windows fallback
 from . import salary_cap_cockpit as cockpit
 from .snake import (
     _enable_completion,
+    _prompt_choice,
+    _prompt_int,
     _set_completion_candidates,
     check_pick_name,
     parse_payouts,
@@ -66,7 +70,7 @@ from .tools import (
 
 _PICK_COMMANDS = (
     "best", "nominate", "whatif", "lookup", "roster", "budgets",
-    "exclude", "sim", "random", "random til full", "go back",
+    "exclude", "sim", "simadd", "random", "random til full", "go back",
     "help", "exit",
 )
 
@@ -82,6 +86,8 @@ Commands at the 'Player Up For Grabs' prompt:
   budgets           Per-team budget status snapshot
   exclude           Add a player to the per-session exclude list
   sim               Run a season simulation with current rosters
+  simadd            Sim top-N available per position at each one's max legal
+                    bid; rank by win/playoff/earnings delta
   random            Auto-simulate one nomination + bidding round
   random til full   Auto-simulate the rest of the draft to completion
   go back           Revert the previous pick
@@ -226,7 +232,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Interactive salary cap draft cockpit (V2).",
     )
     p.add_argument("--team", required=True,
-                   help="Yahoo team name to draft for")
+                   help="team to draft for -- Yahoo team name (--platform "
+                        "yahoo), the Sleeper team/manager display name "
+                        "to identify your roster (--platform sleeper), or "
+                        "whatever you want to call your team (--platform "
+                        "generic)")
     p.add_argument("--salary-cap", type=int, default=200, dest="salary_cap",
                    help="per-team salary cap (default $200)")
     p.add_argument("--min-bid", type=int, default=1, dest="min_bid",
@@ -235,7 +245,40 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="Yahoo season year. Defaults to League's "
                         "auto-detect, which targets the most recently "
                         "completed season -- pass the upcoming season "
-                        "explicitly when drafting pre-season.")
+                        "explicitly when drafting pre-season. Ignored "
+                        "with --platform sleeper/generic, since neither "
+                        "is tied to a real, season-scoped league.")
+    p.add_argument("--platform", default="generic",
+                   choices=["yahoo", "sleeper", "generic"],
+                   help="fantasy platform backend to draft against. "
+                        "Defaults to 'generic' -- a fully synthetic mock "
+                        "draft with no real Yahoo/Sleeper league, useful "
+                        "for sanity-checking salary values against a "
+                        "scoring system you already have intuition for "
+                        "(see issue #47). Pass 'yahoo' or 'sleeper' to "
+                        "draft against a real league instead.")
+    p.add_argument("--sleeper-league-id", default=None,
+                   dest="sleeper_league_id",
+                   help="numeric Sleeper league ID (from the league URL), "
+                        "required with --platform sleeper")
+    p.add_argument("--num-teams", type=int, default=None, dest="num_teams",
+                   help="number of teams for a --platform generic mock "
+                        "draft (default 12). Prompted for interactively "
+                        "if not given.")
+    p.add_argument("--mock-scoring", default=None, dest="mock_scoring",
+                   choices=["standard", "half_ppr", "ppr"],
+                   help="scoring system for a --platform generic mock "
+                        "draft (default ppr). Prompted for interactively "
+                        "if not given.")
+    p.add_argument("--fresh-draft", action="store_true", dest="fresh_draft",
+                   help="ignore each team's current roster and treat every "
+                        "player as available. Existing rosters are normally "
+                        "preserved as keepers (useful for an in-progress "
+                        "Yahoo league); pass this to mock-draft against a "
+                        "league that's already mid-season -- e.g. a Sleeper "
+                        "league you're borrowing settings/player-pool from "
+                        "but that already has real rosters from its own "
+                        "draft.")
     p.add_argument("--keepers", default=None,
                    help="path to a keepers CSV (columns: name, "
                         "fantasy_team, salary -- last year's winning "
@@ -263,6 +306,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--nominate-limit", type=int, default=10,
                    dest="nominate_limit",
                    help="rows in 'nominate' drain-score view")
+    p.add_argument("--simadd-limit", type=int, default=3,
+                   dest="simadd_limit",
+                   help="default players per position to simulate in 'simadd' "
+                        "(default 3); 'simadd' also prompts per-run to override this")
     return p
 
 
@@ -297,10 +344,28 @@ def _load_progress(path: str) -> pd.DataFrame:
 def main(argv=None) -> int:
     args = build_arg_parser().parse_args(argv)
 
+    if args.platform == "sleeper" and not args.sleeper_league_id:
+        print("--sleeper-league-id is required with --platform sleeper")
+        return 1
+
+    num_teams_arg = args.num_teams
+    mock_scoring = args.mock_scoring
+    if args.platform == "generic":
+        if num_teams_arg is None:
+            num_teams_arg = _prompt_int("How many teams?", 12)
+        if mock_scoring is None:
+            mock_scoring = _prompt_choice(
+                "Scoring system?", ("standard", "half_ppr", "ppr"), "ppr",
+            )
+
     # Lazy import so --help and helper unit tests work without Yahoo creds.
     import fantasyfb as fb
 
-    league = fb.League(name=args.team, num_sims=10000, season=args.season)
+    league = fb.League(
+        name=args.team, num_sims=10000, season=args.season,
+        platform=args.platform, sleeper_league_id=args.sleeper_league_id,
+        num_teams=num_teams_arg or 12, mock_scoring=mock_scoring or "ppr",
+    )
     num_teams = len(league.teams)
     spec = _roster_spec_to_dict(league.roster_spots)
     bench = _bench_slots_from_spec(league.roster_spots)
@@ -308,7 +373,15 @@ def main(argv=None) -> int:
     payouts = parse_payouts(args.payouts, num_teams)
     exclude = [v.strip() for v in args.exclude.split(",")] if args.exclude else []
 
-    league.players["fantasy_team"] = league.players.get("fantasy_team")
+    # Preserve existing fantasy_team values (keepers / restored picks from
+    # --inprogress) -- unless --fresh-draft says to disregard whatever's
+    # currently rostered (e.g. mock-drafting against a Sleeper league
+    # that's already mid-season and has real, non-keeper rosters from its
+    # own draft).
+    if args.fresh_draft:
+        league.players["fantasy_team"] = None
+    else:
+        league.players["fantasy_team"] = league.players.get("fantasy_team")
     if "actual_salary" not in league.players.columns:
         league.players["actual_salary"] = np.nan
 
@@ -324,20 +397,28 @@ def main(argv=None) -> int:
                         bid=int(row["winning_bid"]))
         output_path = args.output or args.inprogress
     else:
-        use_yahoo = input(
-            "Use Yahoo team names? (y/n, default y) "
-        ).strip().lower()
-        if use_yahoo in ("n", "no"):
+        if args.platform == "generic":
+            # No real league to name teams after -- just offer manual
+            # customization of the synthetic "Team #N" names.
             custom = input("Customize team names manually? (y/n) ")
             league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
         else:
-            # Pass Yahoo names in the order setup_teams will process them
-            # (user's team first, then all others) so each team gets its
-            # real Yahoo name instead of the generic "Team #N" fallback.
-            my_entry = next(t for t in league.teams if t["name"] == league.name)
-            other_entries = [t for t in league.teams if t["name"] != league.name]
-            yahoo_names = [t["name"] for t in [my_entry] + other_entries]
-            league = setup_teams(league, already=yahoo_names)
+            platform_label = "Yahoo" if args.platform == "yahoo" else "Sleeper"
+            use_platform_names = input(
+                f"Use {platform_label} team names? (y/n, default y) "
+            ).strip().lower()
+            if use_platform_names in ("n", "no"):
+                custom = input("Customize team names manually? (y/n) ")
+                league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
+            else:
+                # Pass platform names in the order setup_teams will
+                # process them (user's team first, then all others) so
+                # each team gets its real platform name instead of the
+                # generic "Team #N" fallback.
+                my_entry = next(t for t in league.teams if t["name"] == league.name)
+                other_entries = [t for t in league.teams if t["name"] != league.name]
+                platform_names = [t["name"] for t in [my_entry] + other_entries]
+                league = setup_teams(league, already=platform_names)
         progress = pd.DataFrame(columns=["name", "fantasy_team", "winning_bid"])
         output_path = args.output or "DraftProgressSalaryCap.csv"
 
@@ -422,6 +503,8 @@ def main(argv=None) -> int:
         board.loc[mask, "winning_bid"] = int(row["winning_bid"])
 
     _enable_completion()
+
+    _sim_baseline = None  # cached baseline standings for simadd; invalidated on each pick
 
     while not all_rosters_full(board, num_teams, roster_size):
         available_names = league.players.loc[
@@ -562,6 +645,7 @@ def main(argv=None) -> int:
                 "name": name, "fantasy_team": winner, "winning_bid": price,
             }])], ignore_index=True)
             _save_progress(progress, output_path)
+            _sim_baseline = None
 
         elif pick_name == "random til full":
             # Single RNG so the burst feels coherent (the seeds in
@@ -587,6 +671,8 @@ def main(argv=None) -> int:
                 auto_count += 1
             _save_progress(progress, output_path)
             print(f"Auto-simulated {auto_count} nominations.")
+            if auto_count:
+                _sim_baseline = None
 
         elif pick_name == "go back":
             if progress.empty:
@@ -596,12 +682,70 @@ def main(argv=None) -> int:
             _revert_pick(league, board, last["name"])
             progress = progress.iloc[:-1].reset_index(drop=True)
             _save_progress(progress, output_path)
+            _sim_baseline = None
 
         elif pick_name == "sim":
-            standings = league.season_sims(payouts=payouts)[1]
-            print(standings[["team", "points_avg", "wins_avg",
-                             "playoffs", "winner", "earnings"]]
+            _sim_baseline = league.season_sims(payouts=payouts)[1]
+            print(_sim_baseline[["team", "points_avg", "wins_avg",
+                                 "playoffs", "winner", "earnings"]]
                   .to_string(index=False))
+
+        elif pick_name == "simadd":
+            sim_limit = _prompt_int(
+                "Players per position to simulate?", args.simadd_limit,
+            )
+            candidates = cockpit.view_best(
+                board, my_team="My Team",
+                salary_cap=args.salary_cap, num_teams=num_teams,
+                roster_spec=league.roster_spots,
+                exclude=exclude, limit_per_position=sim_limit,
+                min_bid=args.min_bid,
+            )
+            candidates = candidates[~candidates["position"].isin(["K", "DEF"])]
+
+            def _run_sims():
+                return league.season_sims(payouts=payouts)[1]
+
+            orig_num_sims = league.num_sims
+            league.num_sims = 1000
+            print("Running baseline sim...")
+            if _sim_baseline is None:
+                _sim_baseline = _run_sims()
+            baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
+            delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
+            delta_cols = [c for c in delta_cols if c in _sim_baseline.columns]
+            rows = []
+            for _, cand in candidates.iterrows():
+                candidate = cand["name"]
+                # Assume each candidate costs what the user could actually
+                # legally pay for them -- inflated market value clipped to
+                # the user's own remaining budget -- rather than treating
+                # the pick as free like a snake-draft slot would be.
+                assumed_bid = cand.get("max_my_bid")
+                price = int(round(assumed_bid)) if pd.notna(assumed_bid) else args.min_bid
+                price = max(price, args.min_bid)
+                print(f"  Simulating {candidate} at ${price}...")
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = "My Team"
+                league.players.loc[league.players.name == candidate, "actual_salary"] = price
+                new_standings = _run_sims()
+                league.players.loc[league.players.name == candidate, "fantasy_team"] = None
+                league.players.loc[league.players.name == candidate, "actual_salary"] = np.nan
+                row = {"name": candidate, "assumed_bid": price}
+                for col in delta_cols:
+                    row[col] = round(
+                        new_standings.loc[new_standings.team == "My Team", col].values[0]
+                        - baseline_row[col].values[0], 3
+                    )
+                rows.append(row)
+            league.num_sims = orig_num_sims
+            if rows:
+                sort_col = "winner" if "winner" in delta_cols else delta_cols[-1]
+                result = pd.DataFrame(rows).sort_values(sort_col, ascending=False)
+                _print_df(
+                    result,
+                    "Simulated impact of adding each player at their assumed "
+                    "bid (delta from baseline):",
+                )
 
         elif pick_name == "help":
             print(_HELP_TEXT)
@@ -646,6 +790,7 @@ def main(argv=None) -> int:
                 "winning_bid": bid,
             }])], ignore_index=True)
             _save_progress(progress, output_path)
+            _sim_baseline = None
 
     standings = league.season_sims(payouts=payouts)[1]
     print(standings[["team", "points_avg", "wins_avg",
