@@ -55,6 +55,7 @@ except ImportError:  # pragma: no cover -- Windows fallback
 from . import salary_cap_cockpit as cockpit
 from .snake import (
     _enable_completion,
+    _prompt_choice,
     _prompt_int,
     _set_completion_candidates,
     check_pick_name,
@@ -232,8 +233,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--team", required=True,
                    help="team to draft for -- Yahoo team name (--platform "
-                        "yahoo), or the Sleeper team/manager display name "
-                        "to identify your roster (--platform sleeper)")
+                        "yahoo), the Sleeper team/manager display name "
+                        "to identify your roster (--platform sleeper), or "
+                        "whatever you want to call your team (--platform "
+                        "generic)")
     p.add_argument("--salary-cap", type=int, default=200, dest="salary_cap",
                    help="per-team salary cap (default $200)")
     p.add_argument("--min-bid", type=int, default=1, dest="min_bid",
@@ -243,15 +246,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "auto-detect, which targets the most recently "
                         "completed season -- pass the upcoming season "
                         "explicitly when drafting pre-season. Ignored "
-                        "with --platform sleeper, since a Sleeper league "
-                        "ID is already season-scoped.")
-    p.add_argument("--platform", default="yahoo", choices=["yahoo", "sleeper"],
-                   help="fantasy platform backend to draft against, "
-                        "defaults to yahoo")
+                        "with --platform sleeper/generic, since neither "
+                        "is tied to a real, season-scoped league.")
+    p.add_argument("--platform", default="generic",
+                   choices=["yahoo", "sleeper", "generic"],
+                   help="fantasy platform backend to draft against. "
+                        "Defaults to 'generic' -- a fully synthetic mock "
+                        "draft with no real Yahoo/Sleeper league, useful "
+                        "for sanity-checking salary values against a "
+                        "scoring system you already have intuition for "
+                        "(see issue #47). Pass 'yahoo' or 'sleeper' to "
+                        "draft against a real league instead.")
     p.add_argument("--sleeper-league-id", default=None,
                    dest="sleeper_league_id",
                    help="numeric Sleeper league ID (from the league URL), "
                         "required with --platform sleeper")
+    p.add_argument("--num-teams", type=int, default=None, dest="num_teams",
+                   help="number of teams for a --platform generic mock "
+                        "draft (default 12). Prompted for interactively "
+                        "if not given.")
+    p.add_argument("--mock-scoring", default=None, dest="mock_scoring",
+                   choices=["standard", "half_ppr", "ppr"],
+                   help="scoring system for a --platform generic mock "
+                        "draft (default ppr). Prompted for interactively "
+                        "if not given.")
     p.add_argument("--fresh-draft", action="store_true", dest="fresh_draft",
                    help="ignore each team's current roster and treat every "
                         "player as available. Existing rosters are normally "
@@ -330,12 +348,23 @@ def main(argv=None) -> int:
         print("--sleeper-league-id is required with --platform sleeper")
         return 1
 
+    num_teams_arg = args.num_teams
+    mock_scoring = args.mock_scoring
+    if args.platform == "generic":
+        if num_teams_arg is None:
+            num_teams_arg = _prompt_int("How many teams?", 12)
+        if mock_scoring is None:
+            mock_scoring = _prompt_choice(
+                "Scoring system?", ("standard", "half_ppr", "ppr"), "ppr",
+            )
+
     # Lazy import so --help and helper unit tests work without Yahoo creds.
     import fantasyfb as fb
 
     league = fb.League(
         name=args.team, num_sims=10000, season=args.season,
         platform=args.platform, sleeper_league_id=args.sleeper_league_id,
+        num_teams=num_teams_arg or 12, mock_scoring=mock_scoring or "ppr",
     )
     num_teams = len(league.teams)
     spec = _roster_spec_to_dict(league.roster_spots)
@@ -368,20 +397,28 @@ def main(argv=None) -> int:
                         bid=int(row["winning_bid"]))
         output_path = args.output or args.inprogress
     else:
-        use_yahoo = input(
-            "Use Yahoo team names? (y/n, default y) "
-        ).strip().lower()
-        if use_yahoo in ("n", "no"):
+        if args.platform == "generic":
+            # No real league to name teams after -- just offer manual
+            # customization of the synthetic "Team #N" names.
             custom = input("Customize team names manually? (y/n) ")
             league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
         else:
-            # Pass Yahoo names in the order setup_teams will process them
-            # (user's team first, then all others) so each team gets its
-            # real Yahoo name instead of the generic "Team #N" fallback.
-            my_entry = next(t for t in league.teams if t["name"] == league.name)
-            other_entries = [t for t in league.teams if t["name"] != league.name]
-            yahoo_names = [t["name"] for t in [my_entry] + other_entries]
-            league = setup_teams(league, already=yahoo_names)
+            platform_label = "Yahoo" if args.platform == "yahoo" else "Sleeper"
+            use_platform_names = input(
+                f"Use {platform_label} team names? (y/n, default y) "
+            ).strip().lower()
+            if use_platform_names in ("n", "no"):
+                custom = input("Customize team names manually? (y/n) ")
+                league = setup_teams(league, customize=custom.lower() in ("yes", "y"))
+            else:
+                # Pass platform names in the order setup_teams will
+                # process them (user's team first, then all others) so
+                # each team gets its real platform name instead of the
+                # generic "Team #N" fallback.
+                my_entry = next(t for t in league.teams if t["name"] == league.name)
+                other_entries = [t for t in league.teams if t["name"] != league.name]
+                platform_names = [t["name"] for t in [my_entry] + other_entries]
+                league = setup_teams(league, already=platform_names)
         progress = pd.DataFrame(columns=["name", "fantasy_team", "winning_bid"])
         output_path = args.output or "DraftProgressSalaryCap.csv"
 

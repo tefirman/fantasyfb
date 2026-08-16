@@ -410,11 +410,19 @@ class TestArgParser:
         args = parser.parse_args(["--team", "X", "--simadd-limit", "5"])
         assert args.simadd_limit == 5
 
-    def test_platform_defaults_to_yahoo(self):
+    def test_platform_defaults_to_generic(self):
+        # Omitting --platform means a fully synthetic mock draft (issue
+        # #47), not Yahoo -- matches snake_draft's default. Pass
+        # --platform yahoo explicitly to draft against a real league.
         parser = build_arg_parser()
         args = parser.parse_args(["--team", "X"])
-        assert args.platform == "yahoo"
+        assert args.platform == "generic"
         assert args.sleeper_league_id is None
+
+    def test_platform_yahoo_explicit(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--platform", "yahoo"])
+        assert args.platform == "yahoo"
 
     def test_platform_sleeper_with_league_id(self):
         parser = build_arg_parser()
@@ -424,6 +432,23 @@ class TestArgParser:
         ])
         assert args.platform == "sleeper"
         assert args.sleeper_league_id == "123456789"
+
+    def test_platform_generic_with_num_teams_and_scoring(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--platform", "generic",
+            "--num-teams", "10", "--mock-scoring", "half_ppr",
+        ])
+        assert args.platform == "generic"
+        assert args.num_teams == 10
+        assert args.mock_scoring == "half_ppr"
+
+    def test_generic_num_teams_and_scoring_default_to_none(self):
+        # None means "prompt interactively" -- see main()'s generic branch.
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X"])
+        assert args.num_teams is None
+        assert args.mock_scoring is None
 
     def test_rejects_unknown_platform(self):
         parser = build_arg_parser()
