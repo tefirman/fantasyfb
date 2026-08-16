@@ -154,24 +154,79 @@ UNDERDOG_CONFIG = {
 }
 
 
+# Shared base for the three generic (no Yahoo/Sleeper) mock-draft scoring
+# presets -- standard 4pt passing TD / 6pt rushing+receiving TD, no
+# yardage-bonus tiers, standard kicker/defense scoring. Only 'Rec' differs
+# between the three (0 / 0.5 / 1 point per reception).
+#
+# Note: FantasyScorer only ever reads the 'FG 0-19' key for made field
+# goals -- it doesn't have per-distance box-score stats to bucket kicks by
+# range (same limitation noted on SFB_CONFIG above) -- so the other 'FG
+# *-*' keys below are unused; kept populated for schema completeness.
+_GENERIC_SCORING_BASE = {
+    'Pass Yds': 0.04, 'Pass Comp': 0.0, 'Pass TD': 4.0, 'Pass 1D': 0.0, 'Pass 300+': 0.0, 'Pass 400+': 0.0,
+    'Int Thrown': -1.0, 'Rush Yds': 0.1, 'Rush Att': 0.0, 'Rush TD': 6.0, 'Rush 1D': 0.0, 'Rush 100+': 0.0, 'Rush 200+': 0.0,
+    'Rec Yds': 0.1, 'Rec TD': 6.0, 'Rec 1D': 0.0, 'Rec 100+': 0.0, 'Rec 200+': 0.0,
+    'Rush+Rec 100+': 0.0, 'Rush+Rec 200+': 0.0, 'Ret Yds': 0.0, 'Ret TD': 6.0,
+    'TE Rec Bonus': 0.0, 'TE 1D Bonus': 0.0, '2-PT': 2.0, 'Fum Lost': -2.0, 'Fum Ret TD': 6.0,
+    'FG 0-19': 3.0, 'FG 20-29': 3.0, 'FG 30-39': 3.0, 'FG 40-49': 4.0, 'FG 50+': 5.0, 'PAT Made': 1.0,
+    'Sack': 1.0, 'Int': 2.0, 'Fum Rec': 2.0, 'TD': 6.0, 'Safe': 2.0, 'Blk Kick': 2.0,
+    'Pts Allow 0': 10.0, 'Pts Allow 1-6': 7.0, 'Pts Allow 7-13': 4.0, 'Pts Allow 14-20': 1.0,
+    'Pts Allow 21-27': 0.0, 'Pts Allow 28-34': -1.0, 'Pts Allow 35+': -4.0, 'XPR': 0.0,
+}
+
+# Fixed roster shape for all three generic-draft presets (see issue #47):
+# 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 K, 1 DEF, 7 BN. No custom roster editor
+# in v1.
+_GENERIC_ROSTER_SPOTS = pd.DataFrame({
+    'position': ['QB', 'RB', 'WR', 'TE', 'W/R/T', 'K', 'DEF', 'BN'],
+    'count': [1, 2, 2, 1, 1, 1, 1, 7]
+})
+
+# Standard (non-PPR) scoring for a generic mock draft.
+STANDARD_CONFIG = {
+    'scoring': {**_GENERIC_SCORING_BASE, 'Rec': 0.0},
+    'roster_spots': _GENERIC_ROSTER_SPOTS.copy()
+}
+
+# Half-PPR scoring for a generic mock draft.
+HALF_PPR_CONFIG = {
+    'scoring': {**_GENERIC_SCORING_BASE, 'Rec': 0.5},
+    'roster_spots': _GENERIC_ROSTER_SPOTS.copy()
+}
+
+# Full-PPR scoring for a generic mock draft.
+PPR_CONFIG = {
+    'scoring': {**_GENERIC_SCORING_BASE, 'Rec': 1.0},
+    'roster_spots': _GENERIC_ROSTER_SPOTS.copy()
+}
+
+
 def get_league_config(platform: str):
     """
     Get predefined configuration for a specific platform.
-    
+
     Args:
-        platform: Platform name ('sfb', 'draftkings'/'dk', 'underdog')
-        
+        platform: Platform name ('sfb', 'draftkings'/'dk', 'underdog',
+            'standard', 'half_ppr'/'half-ppr', 'ppr')
+
     Returns:
         Dict containing scoring and roster configuration, or None if not found
     """
     platform_lower = platform.lower()
-    
+
     if platform_lower == 'sfb':
         return SFB_CONFIG
     elif platform_lower in ['dk', 'draftkings']:
         return DRAFTKINGS_CONFIG
     elif platform_lower == 'underdog':
         return UNDERDOG_CONFIG
+    elif platform_lower in ['standard', 'std']:
+        return STANDARD_CONFIG
+    elif platform_lower in ['half_ppr', 'half-ppr', 'halfppr']:
+        return HALF_PPR_CONFIG
+    elif platform_lower == 'ppr':
+        return PPR_CONFIG
     else:
         return None
 

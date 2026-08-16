@@ -22,6 +22,7 @@ from .scoring.matchup_model import MatchupModel
 from .sim.season_simulator import SeasonSimulator
 from .data.yahoo_client import YahooFantasyClient
 from .data.sleeper_client import SleeperClient
+from .data.generic_client import GenericClient
 from .data.platform_client import FantasyPlatformClient
 from .io.excel_exporter import FantasyExcelExporter
 from .analysis.war_calculator import WARCalculator
@@ -74,6 +75,8 @@ class League:
         platform: str = "yahoo",
         sleeper_league_id: str = None,
         client: FantasyPlatformClient = None,
+        num_teams: int = 12,
+        mock_scoring: str = "ppr",
     ):
         """
         Initializes a League object using the parameters provided and class functions defined below.
@@ -94,9 +97,13 @@ class League:
                 to pull the current year's scoring/roster settings live from Sleeper rather than
                 the static snapshot in fantasyfb.configs.
             bestball (str, optional): which platform to use when implementing best ball settings/scoring, defaults to a blank string (no bestball).
-            platform (str, optional): which fantasy platform backend to use, "yahoo" or "sleeper", defaults to "yahoo".
+            platform (str, optional): which fantasy platform backend to use, "yahoo", "sleeper", or "generic"
+                (a fully synthetic mock draft with no real league -- see issue #47), defaults to "yahoo".
             sleeper_league_id (str, optional): numeric Sleeper league ID (from the league URL), required when platform="sleeper".
             client (FantasyPlatformClient, optional): pre-constructed client instance, bypasses platform/sleeper_league_id. Mainly for testing.
+            num_teams (int, optional): number of teams to synthesize, only used when platform="generic", defaults to 12.
+            mock_scoring (str, optional): generic scoring preset ("standard", "half_ppr", or "ppr"),
+                only used when platform="generic", defaults to "ppr".
         """
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         """ Year of the most recent season """
@@ -115,6 +122,13 @@ class League:
         elif platform == "yahoo":
             self.client = YahooFantasyClient()
             self.name, self.lg_id = self.client.connect_to_league(self.season, name)
+        elif platform == "generic":
+            self.client = GenericClient(
+                num_teams=num_teams, scoring=mock_scoring, my_team_name=name,
+                season=self.season, nfl_provider=self.nfl_provider,
+            )
+            self.name = name
+            self.lg_id = None
         else:
             raise ValueError(f"Unknown platform: {platform!r}")
         self.current_week = self.client.get_current_week()
@@ -123,6 +137,8 @@ class League:
         """ team_key of the team identified by `name`, if resolvable """
         if platform == "sleeper" and name and self.my_team_key is None:
             raise ValueError(f"No Sleeper team found matching name/manager {name!r}")
+        if platform == "generic" and name and self.my_team_key is None:
+            raise ValueError(f"No generic-draft team found matching name {name!r}")
         self.week = week if type(week) == int else self.current_week
         """ Week of interest during the season of interest, defaults to most recent week """
         self.load_settings(sfb, bestball)
