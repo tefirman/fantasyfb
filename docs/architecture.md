@@ -139,6 +139,17 @@ hitting the network again. In practice this means:
   offline `draft-prep`/`snake-draft`/`salary-cap-draft` run still
   completes — draft prep just proceeds without depth-chart data for
   that run.
+- `PlayerDataManager.add_injuries`'s manual injury-timespan overrides pull
+  a small CSV straight from `raw.githubusercontent.com`, entirely outside
+  `NflreadpyProvider` and nflreadpy's caching. A dead network there is
+  caught and skipped with a warning rather than raising, same as the
+  depth-chart case above — an offline run just proceeds without that
+  enrichment. (A parallel `apply_name_corrections` step used to carry the
+  same uncached fetch, but it was dead weight left over from the
+  pre-nflreadpy, name-matching era — `map_player_ids` has linked players
+  by `yahoo_id`/`gsis_id` instead of name for a while now, same as
+  `snake-draft`/`salary-cap-draft` already assumed in their V2 rewrites — so
+  it was removed rather than given a fallback.)
 
 ## Projection engine
 
