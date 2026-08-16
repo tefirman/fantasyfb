@@ -129,6 +129,16 @@ hitting the network again. In practice this means:
   `_pyarrow_fallback` used when polars rejects a parquet file for
   invalid UTF-8 (see the module docstring in `nflreadpy_provider.py`)
   downloads directly via `urllib` and is not cached.
+- `get_depth_charts` always asks for the *current calendar year's* file
+  rather than going through the season-clamping every other method
+  uses, since depth charts are a live/current-roster feed rather than a
+  historical one and nflverse's publish timing for it doesn't track
+  `nflreadpy.get_current_season()`. A cold cache with no network (or a
+  season whose depth-chart file nflverse hasn't published yet) degrades
+  to an empty depth-chart frame instead of raising, so a second,
+  offline `draft-prep`/`snake-draft`/`salary-cap-draft` run still
+  completes — draft prep just proceeds without depth-chart data for
+  that run.
 
 ## Projection engine
 

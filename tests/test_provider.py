@@ -263,6 +263,64 @@ class TestCacheConfig:
         assert cleared == []
 
 
+class TestDepthChartsOfflineFallback:
+    """get_depth_charts, unlike get_schedule/get_rosters/get_player_stats,
+    never goes through _clamp_seasons -- it always asks for the current
+    calendar year's depth chart file directly, which nflverse may not have
+    published yet, or which may be unreachable if offline with a cold
+    cache. Confirms it degrades to an empty frame instead of raising in
+    both cases, matching the empty-dataframe fallback already used when
+    nflreadpy legitimately has no rows for a season.
+    """
+
+    def test_connection_error_on_latest_season_falls_back_to_prior_year(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls = []
+
+        def loader(**kwargs):
+            season = kwargs["seasons"][0]
+            calls.append(season)
+            if season == mod.pd.Timestamp.now(tz="UTC").year:
+                raise ConnectionError("simulated offline / cache miss")
+            raise ValueError("unexpectedly reached second fallback")
+
+        monkeypatch.setattr(mod.nfl, "load_depth_charts", loader)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+        out = provider._try_load_depth_charts(mod.pd.Timestamp.now(tz="UTC").year)
+        assert out.empty
+        assert calls == [mod.pd.Timestamp.now(tz="UTC").year]
+
+    def test_get_depth_charts_returns_empty_frame_when_fully_unreachable(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def loader(**kwargs):
+            raise ConnectionError("simulated offline / cache miss")
+
+        monkeypatch.setattr(mod.nfl, "load_depth_charts", loader)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+        out = provider.get_depth_charts()
+        assert out.empty
+        assert list(out.columns) == [
+            "name", "current_team", "position", "string", "player_id_sr",
+        ]
+
+    def test_missing_season_file_falls_back_without_raising(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # nflreadpy raises ValueError (not the polars-UTF8 flavor _load_pandas
+        # special-cases) when a requested season's parquet doesn't exist
+        # upstream yet -- e.g. depth charts for a season that hasn't
+        # started. That must also degrade gracefully, not propagate.
+        def loader(**kwargs):
+            raise ValueError("404: season not published")
+
+        monkeypatch.setattr(mod.nfl, "load_depth_charts", loader)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+        out = provider._try_load_depth_charts(2099)
+        assert out.empty
+
+
 class TestLoadPandasFallback:
     """`_load_pandas` shields callers from the polars-strict UTF-8 error
     nflverse intermittently triggers (see provider module-level comment).
