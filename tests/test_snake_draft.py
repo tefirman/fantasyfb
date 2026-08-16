@@ -191,6 +191,18 @@ class TestArgParser:
         ])
         assert args.fresh_draft is True
 
+    def test_refresh_cache_defaults_to_false(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--adp", "ADP.csv"])
+        assert args.refresh_cache is False
+
+    def test_refresh_cache_flag(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--adp", "ADP.csv", "--refresh-cache",
+        ])
+        assert args.refresh_cache is True
+
 
 class TestMainPlatformValidation:
     def test_sleeper_without_league_id_errors_before_connecting(self, capsys):

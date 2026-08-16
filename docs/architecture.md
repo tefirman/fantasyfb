@@ -96,6 +96,40 @@ stats, schedules, and depth charts in the expected shape will work —
 useful for testing without hitting the network or wiring in a
 different data source.
 
+## nflreadpy caching
+
+`nflreadpy` downloads pre-built parquet files from nflverse's GitHub
+releases and caches every download itself (`nflreadpy.cache`), but its
+own default is an in-memory cache that's wiped when the process exits.
+Since each `fantasyfb`/`draft-prep`/`snake-draft`/`salary-cap-draft`
+invocation is a fresh process, that default bought nothing across
+runs — a multi-hour draft-prep session re-downloaded the same
+stats/schedule/roster parquet on every single command.
+
+`NflreadpyProvider.__init__` switches nflreadpy to **filesystem**
+caching by default (24h TTL, same as nflreadpy's own default duration),
+so a pull made by one command is reused by the next one instead of
+hitting the network again. In practice this means:
+
+- The first pull of a session needs a live connection; every
+  subsequent pull within the cache window can run offline.
+- Past weeks' stats are immutable, so a stale cache is only a concern
+  for the current week's in-progress data (live box scores) and depth
+  charts, which change during the week.
+- Pass `--refresh-cache` to `draft-prep`, `snake-draft`, or
+  `salary-cap-draft` to bypass the cache and force a fresh download
+  for that run (calls `nflreadpy.clear_cache()` under the hood).
+- An explicit `NFLREADPY_CACHE` env var (or a prior
+  `nflreadpy.update_config()` call) always wins over the
+  filesystem-cache default — set it to `memory` or `off` to restore
+  nflreadpy's out-of-the-box behavior, or construct
+  `NflreadpyProvider(cache_mode=..., cache_duration=...)` directly for
+  per-instance control.
+- This only covers nflreadpy's normal download path. The rare
+  `_pyarrow_fallback` used when polars rejects a parquet file for
+  invalid UTF-8 (see the module docstring in `nflreadpy_provider.py`)
+  downloads directly via `urllib` and is not cached.
+
 ## Projection engine
 
 `ProjectionEngineV2` (`projections/engine_v2.py`) is the sole projection

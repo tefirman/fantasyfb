@@ -388,6 +388,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "instead of flipping back, then normal alternation "
                         "resumes -- matches Sleeper's draft 'reversal_round' "
                         "setting). Default 0 = disabled, plain snake.")
+    p.add_argument("--refresh-cache", action="store_true", dest="refresh_cache",
+                   help="bypass the local nflreadpy cache and force a fresh "
+                        "download of stats/schedule/roster data for this run")
     return p
 
 
@@ -419,12 +422,14 @@ def main(argv=None) -> int:
     # Lazy import so `--help` and the helper unit tests work without
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
+    from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
 
     league = fb.League(
         name=args.team, num_sims=10000, season=args.season, sfb=args.sfb,
         bestball=args.bestball, platform=args.platform,
         sleeper_league_id=args.sleeper_league_id,
         num_teams=num_teams or 12, mock_scoring=mock_scoring or "ppr",
+        nfl_provider=NflreadpyProvider(refresh=args.refresh_cache),
     )
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[

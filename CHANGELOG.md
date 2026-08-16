@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Persistent nflreadpy caching for offline draft prep** (#50): `NflreadpyProvider` now defaults nflreadpy's cache to filesystem mode (24h TTL) instead of its own in-memory default, which was wiped at the end of every process and therefore provided no benefit across the many separate CLI invocations a draft-prep session runs. Once a pull succeeds, subsequent pulls within the cache window reuse it without a network connection. `draft-prep`, `snake-draft`, and `salary-cap-draft` gain a `--refresh-cache` flag to force a fresh download for a single run; an explicit `NFLREADPY_CACHE` env var (or a caller's own `nflreadpy.update_config()`) still takes precedence over the new default.
 - **`YahooFantasyClient.list_team_names(season)`**: lists the user's fantasy team name(s) for a season without connecting to a league or picking one. Lets a caller (e.g. a UI) offer a picker *before* `connect_to_league`/`League(name=...)` needs one — previously, an account with multiple teams for a season could only be resolved via `connect_to_league`'s interactive `input()` prompt, which hangs in any non-interactive context (e.g. a Streamlit app). `connect_to_league` now shares its league-lookup logic with the new method via a private `_find_nfl_league_teams` helper instead of duplicating it, and now raises a clear `ValueError` when no NFL league is found for the season instead of silently falling through with a stale/`None` league id.
 
 ### Fixed

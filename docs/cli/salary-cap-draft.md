@@ -77,6 +77,7 @@ salary-cap-draft --team "My Team" --inprogress DraftProgressSalaryCap.csv
 | `--inprogress`          | —                                    | Path to a `DraftProgressSalaryCap.csv` from a paused draft. Also accepts the legacy V1 format (`salary` column)                |
 | `--output`              | `DraftProgressSalaryCap.csv` (or `--inprogress` path) | Where to save the running pick log                                                                       |
 | `--payouts`             | —                                    | Comma-separated 1st/2nd/3rd payouts                                                                                            |
+| `--refresh-cache`       | off                                  | Bypass the local nflreadpy cache and force a fresh download of stats/schedule/roster data for this run (see [caching](../architecture.md#nflreadpy-caching)) |
 
 ## View tuning
 
