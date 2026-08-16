@@ -46,6 +46,12 @@ draft-prep values --team "My Team" --adp ADP.csv
 draft-prep values --team "My Team" --adp ADP.csv --top 60 --min-vorp 1.5
 ```
 
+`--adp` expects a CSV with `Player`, `POS`, and `AVG` columns (`Team`
+is optional). See
+[`examples/adp_sample.csv`](../../examples/adp_sample.csv) for the
+expected shape — export ADP data from FantasyPros, Sleeper, or Yahoo
+and rename columns to match if needed.
+
 | Flag             | Default  | Meaning                                                              |
 | ---------------- | -------- | -------------------------------------------------------------------- |
 | `--team`         | —        | Yahoo team name                                                      |
