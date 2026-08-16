@@ -1,11 +1,12 @@
 # `salary-cap-draft`
 
-Interactive salary-cap (auction) draft cockpit (V2). Loads your Yahoo
-league, builds a board with VORP-driven dollar values + market
-inflation, and presents a snake-parity REPL: nomination drain-score,
-hypothetical bid analysis, per-team budget tracking, and an
-auto-pilot mock simulator. Persists pick history to a CSV so you can
-pause and resume.
+Interactive salary-cap (auction) draft cockpit (V2). Loads your league
+from Yahoo or Sleeper, or synthesizes a fully mock league with no
+real platform (`--platform generic`, the default), builds a board
+with VORP-driven dollar values + market inflation, and presents a
+snake-parity REPL: nomination drain-score, hypothetical bid analysis,
+per-team budget tracking, and an auto-pilot mock simulator. Persists
+pick history to a CSV so you can pause and resume.
 
 ## Usage
 
@@ -13,21 +14,36 @@ pause and resume.
 salary-cap-draft --team "My Team" [options]
 ```
 
-The first time it asks whether you want to use your Yahoo team names
-or customize them; subsequent resumes pick up team names from the
-in-progress CSV.
+The first time it asks whether you want to use your Yahoo/Sleeper
+team names or customize them (skipped for `--platform generic`, which
+has no real team names to offer); subsequent resumes pick up team
+names from the in-progress CSV.
 
 ## Common recipes
 
 ```bash
-# Live auction from scratch, default $200 cap
+# Live mock auction from scratch, default $200 cap (--platform generic,
+# 12 teams, PPR scoring -- prompts for both if not passed)
 salary-cap-draft --team "My Team"
 
 # Custom cap and minimum bid
 salary-cap-draft --team "My Team" --salary-cap 300 --min-bid 2
 
-# Pre-draft for an upcoming season
-salary-cap-draft --team "My Team" --season 2026
+# Mock auction with a specific team count and scoring system
+salary-cap-draft --team "My Team" --num-teams 10 --mock-scoring half_ppr
+
+# Draft against your real Yahoo league instead of a mock
+salary-cap-draft --team "My Team" --platform yahoo
+
+# Pre-draft for an upcoming season (--platform yahoo)
+salary-cap-draft --team "My Team" --platform yahoo --season 2026
+
+# Draft against a Sleeper league instead
+salary-cap-draft --team "My Team" --platform sleeper --sleeper-league-id 123456789
+
+# Mock-draft against a Sleeper league that's already mid-season (its real
+# rosters would otherwise look like keepers)
+salary-cap-draft --team "My Team" --platform sleeper --sleeper-league-id 123456789 --fresh-draft
 
 # Keeper league: CSV with name,fantasy_team,salary (last year's price)
 # Final keeper price = salary + --keeper-surcharge (default $5)
@@ -41,21 +57,26 @@ salary-cap-draft --team "My Team" --inprogress DraftProgressSalaryCap.csv
 
 | Flag      | Meaning                                          |
 | --------- | ------------------------------------------------ |
-| `--team`  | Yahoo team name to draft for                     |
+| `--team`  | Team to draft for — Yahoo team name (`--platform yahoo`), the Sleeper team/manager display name (`--platform sleeper`), or whatever you want to call your team (`--platform generic`) |
 
 ## Common flags
 
-| Flag                 | Default                              | Meaning                                                                                                                       |
-| -------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `--salary-cap`       | 200                                  | Per-team auction cap                                                                                                          |
-| `--min-bid`          | 1                                    | Minimum bid per player                                                                                                        |
-| `--season`           | most recent completed                | Yahoo season year. **Pass explicitly before the season starts** (e.g. `--season 2026` in May 2026)                            |
-| `--keepers`          | —                                    | Path to keepers CSV. Columns: `name`, `fantasy_team`, `salary` (last year's winning price)                                    |
-| `--keeper-surcharge` | 5                                    | Dollars added to each keeper's last-year salary. Set to `0` to treat the CSV `salary` as the final keeper price                |
-| `--exclude`          | —                                    | Comma-separated player names to filter out of views                                                                            |
-| `--inprogress`       | —                                    | Path to a `DraftProgressSalaryCap.csv` from a paused draft. Also accepts the legacy V1 format (`salary` column)                |
-| `--output`           | `DraftProgressSalaryCap.csv` (or `--inprogress` path) | Where to save the running pick log                                                                       |
-| `--payouts`          | —                                    | Comma-separated 1st/2nd/3rd payouts                                                                                            |
+| Flag                   | Default                              | Meaning                                                                                                                       |
+| ----------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--salary-cap`          | 200                                  | Per-team auction cap                                                                                                          |
+| `--min-bid`             | 1                                    | Minimum bid per player                                                                                                        |
+| `--season`              | most recent completed                | Yahoo season year. **Pass explicitly before the season starts** (e.g. `--season 2026` in May 2026). Ignored with `--platform sleeper`/`generic` — neither is tied to a real, season-scoped league |
+| `--platform`            | `generic`                            | Fantasy platform backend: `yahoo`, `sleeper`, or `generic` (fully synthetic mock draft, no real league — see issue #47)      |
+| `--sleeper-league-id`   | —                                    | Numeric Sleeper league ID (from the league URL). Required with `--platform sleeper`                                          |
+| `--num-teams`           | 12                                   | Number of teams for a `--platform generic` mock draft. Prompted for interactively if not given                               |
+| `--mock-scoring`        | `ppr`                                | Scoring system for a `--platform generic` mock draft: `standard`, `half_ppr`, or `ppr`. Prompted for interactively if not given |
+| `--fresh-draft`         | off                                  | Ignore each team's current roster and treat every player as available, instead of preserving it as a keeper — useful for mock-drafting a Sleeper league that already has real, mid-season rosters |
+| `--keepers`             | —                                    | Path to keepers CSV. Columns: `name`, `fantasy_team`, `salary` (last year's winning price)                                    |
+| `--keeper-surcharge`    | 5                                    | Dollars added to each keeper's last-year salary. Set to `0` to treat the CSV `salary` as the final keeper price                |
+| `--exclude`             | —                                    | Comma-separated player names to filter out of views                                                                            |
+| `--inprogress`          | —                                    | Path to a `DraftProgressSalaryCap.csv` from a paused draft. Also accepts the legacy V1 format (`salary` column)                |
+| `--output`              | `DraftProgressSalaryCap.csv` (or `--inprogress` path) | Where to save the running pick log                                                                       |
+| `--payouts`             | —                                    | Comma-separated 1st/2nd/3rd payouts                                                                                            |
 
 ## View tuning
 
@@ -63,6 +84,7 @@ salary-cap-draft --team "My Team" --inprogress DraftProgressSalaryCap.csv
 | ---------------------- | ------- | ------------------------------------------------------------------------ |
 | `--limit-per-position` | 5       | Rows per position in the `best` view                                     |
 | `--nominate-limit`     | 10      | Rows in the `nominate` drain-score view                                  |
+| `--simadd-limit`       | 3       | Default players per position simulated by `simadd` (also prompted per-run) |
 
 ## Interactive commands
 
@@ -79,6 +101,7 @@ Once running, the prompt accepts:
 | `budgets`          | Per-team budget status — remaining $, slots filled, max bid                            |
 | `exclude`          | Add a player to the per-session exclude list                                           |
 | `sim`              | Run a full season simulation with current rosters                                      |
+| `simadd`           | Sim top-N available per position, each at its `max_my_bid`; ranks by win/playoff/earnings delta from baseline |
 | `random`           | Auto-simulate one nomination + bidding round (Vickrey-style)                           |
 | `random til full`  | Auto-simulate the rest of the draft to completion                                      |
 | `go back`          | Revert the previous pick                                                               |

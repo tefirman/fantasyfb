@@ -26,6 +26,7 @@ from fantasyfb.drafts.salary_cap import (
     check_bid,
     check_team_name,
     compute_max_legal_bid,
+    main,
     setup_teams,
 )
 
@@ -367,6 +368,7 @@ class TestArgParser:
         assert args.min_bid == 1
         assert args.limit_per_position == 5
         assert args.nominate_limit == 10
+        assert args.simadd_limit == 3
         assert args.season is None
 
     def test_salary_cap_and_min_bid_override(self):
@@ -403,6 +405,75 @@ class TestArgParser:
         args = parser.parse_args(["--team", "X", "--keeper-surcharge", "0"])
         assert args.keeper_surcharge == 0
 
+    def test_simadd_limit_override(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--simadd-limit", "5"])
+        assert args.simadd_limit == 5
+
+    def test_platform_defaults_to_generic(self):
+        # Omitting --platform means a fully synthetic mock draft (issue
+        # #47), not Yahoo -- matches snake_draft's default. Pass
+        # --platform yahoo explicitly to draft against a real league.
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X"])
+        assert args.platform == "generic"
+        assert args.sleeper_league_id is None
+
+    def test_platform_yahoo_explicit(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--platform", "yahoo"])
+        assert args.platform == "yahoo"
+
+    def test_platform_sleeper_with_league_id(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--platform", "sleeper",
+            "--sleeper-league-id", "123456789",
+        ])
+        assert args.platform == "sleeper"
+        assert args.sleeper_league_id == "123456789"
+
+    def test_platform_generic_with_num_teams_and_scoring(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--platform", "generic",
+            "--num-teams", "10", "--mock-scoring", "half_ppr",
+        ])
+        assert args.platform == "generic"
+        assert args.num_teams == 10
+        assert args.mock_scoring == "half_ppr"
+
+    def test_generic_num_teams_and_scoring_default_to_none(self):
+        # None means "prompt interactively" -- see main()'s generic branch.
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X"])
+        assert args.num_teams is None
+        assert args.mock_scoring is None
+
+    def test_rejects_unknown_platform(self):
+        parser = build_arg_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--team", "X", "--platform", "espn"])
+
+    def test_fresh_draft_defaults_to_false(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X"])
+        assert args.fresh_draft is False
+
+    def test_fresh_draft_flag(self):
+        parser = build_arg_parser()
+        args = parser.parse_args(["--team", "X", "--fresh-draft"])
+        assert args.fresh_draft is True
+
+
+class TestMainPlatformValidation:
+    def test_sleeper_without_league_id_errors_before_connecting(self, capsys):
+        # Guard fires before the lazy `import fantasyfb` / League() call,
+        # so this must not require any credentials or network access.
+        code = main(["--team", "X", "--platform", "sleeper"])
+        assert code == 1
+        assert "sleeper-league-id" in capsys.readouterr().out
+
 
 # --------------------------------------------------------------------- #
 # Command list / help alignment
@@ -415,7 +486,7 @@ class TestPickCommands:
         _PICK_COMMANDS and _HELP_TEXT, this catches it before
         draft night."""
         for cmd in ("best", "nominate", "whatif", "lookup", "roster",
-                    "budgets", "exclude", "sim", "random",
+                    "budgets", "exclude", "sim", "simadd", "random",
                     "random til full", "go back", "help", "exit"):
             assert cmd in _PICK_COMMANDS, f"missing from _PICK_COMMANDS: {cmd}"
             assert cmd in _HELP_TEXT, f"missing from _HELP_TEXT: {cmd}"
