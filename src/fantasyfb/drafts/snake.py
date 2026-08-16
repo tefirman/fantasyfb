@@ -297,8 +297,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--team", required=True,
                    help="team to draft for -- Yahoo team name (--platform "
-                        "yahoo), or the Sleeper team/manager display name "
-                        "to identify your roster (--platform sleeper)")
+                        "yahoo), the Sleeper team/manager display name "
+                        "to identify your roster (--platform sleeper), or "
+                        "whatever you want to call your team (--platform "
+                        "generic)")
     p.add_argument("--adp", required=True,
                    help="path to ADP CSV (FantasyPros-style by default)")
     p.add_argument("--season", type=int, default=None,
@@ -307,15 +309,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "most recently completed season -- pass the upcoming "
                         "season explicitly when drafting before the NFL "
                         "season starts (e.g. --season 2026 in May 2026). "
-                        "Ignored with --platform sleeper, since a Sleeper "
-                        "league ID is already season-scoped.")
-    p.add_argument("--platform", default="yahoo", choices=["yahoo", "sleeper"],
-                   help="fantasy platform backend to draft against, "
-                        "defaults to yahoo")
+                        "Ignored with --platform sleeper/generic, since "
+                        "neither is tied to a real, season-scoped league.")
+    p.add_argument("--platform", default="generic",
+                   choices=["yahoo", "sleeper", "generic"],
+                   help="fantasy platform backend to draft against. "
+                        "Defaults to 'generic' -- a fully synthetic mock "
+                        "draft with no real Yahoo/Sleeper league, useful "
+                        "for sanity-checking VORP rankings against a "
+                        "scoring system you already have intuition for "
+                        "(see issue #47). Pass 'yahoo' or 'sleeper' to "
+                        "draft against a real league instead.")
     p.add_argument("--sleeper-league-id", default=None,
                    dest="sleeper_league_id",
                    help="numeric Sleeper league ID (from the league URL), "
                         "required with --platform sleeper")
+    p.add_argument("--num-teams", type=int, default=None, dest="num_teams",
+                   help="number of teams for a --platform generic mock "
+                        "draft (default 12). Prompted for interactively "
+                        "if not given.")
+    p.add_argument("--mock-scoring", default=None, dest="mock_scoring",
+                   choices=["standard", "half_ppr", "ppr"],
+                   help="scoring system for a --platform generic mock "
+                        "draft (default ppr). Prompted for interactively "
+                        "if not given.")
     p.add_argument("--fresh-draft", action="store_true", dest="fresh_draft",
                    help="ignore each team's current roster and treat every "
                         "player as available. Existing rosters are normally "
@@ -389,6 +406,16 @@ def main(argv=None) -> int:
         print("--sleeper-league-id is required with --platform sleeper")
         return 1
 
+    num_teams = args.num_teams
+    mock_scoring = args.mock_scoring
+    if args.platform == "generic":
+        if num_teams is None:
+            num_teams = _prompt_int("How many teams?", 12)
+        if mock_scoring is None:
+            mock_scoring = _prompt_choice(
+                "Scoring system?", ("standard", "half_ppr", "ppr"), "ppr",
+            )
+
     # Lazy import so `--help` and the helper unit tests work without
     # Yahoo creds / yahoo_fantasy_api installed.
     import fantasyfb as fb
@@ -397,6 +424,7 @@ def main(argv=None) -> int:
         name=args.team, num_sims=10000, season=args.season, sfb=args.sfb,
         bestball=args.bestball, platform=args.platform,
         sleeper_league_id=args.sleeper_league_id,
+        num_teams=num_teams or 12, mock_scoring=mock_scoring or "ppr",
     )
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
