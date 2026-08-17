@@ -7,6 +7,9 @@ regressions when the provider schema drifts.
 
 from __future__ import annotations
 
+import datetime
+import urllib.error
+
 import pandas as pd
 import pytest
 
@@ -194,3 +197,39 @@ class TestAddRosterPercentages:
         result = manager.add_roster_percentages(players)
         by_id = result.set_index("player_id")
         assert by_id.loc[2, "pct_rostered"] == 0.0
+
+
+class TestRemoteCsvOfflineFallback:
+    """add_injuries fetches a CSV straight from raw.githubusercontent.com
+    with no caching and, before this fix, no fallback -- unlike every
+    nflreadpy-backed method, this network call is entirely outside
+    NflreadpyProvider's persistent filesystem cache. A dead network
+    (urllib.error.URLError, what pandas' default urllib backend raises for
+    a DNS failure) must degrade to a no-op rather than crashing a
+    draft-prep run that's otherwise working fully offline.
+    """
+
+    def test_injuries_skipped_when_unreachable(
+        self, provider, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # add_injuries only hits the network for the *current* season (it
+        # infers past-season status from stats instead), so the manager's
+        # season has to match its own latest_season for this branch to run.
+        # Mirrors PlayerDataManager.__init__'s own latest_season formula.
+        latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
+        current_manager = PlayerDataManager(
+            client=None, season=latest_season, current_week=4, nfl_provider=provider,
+        )
+
+        def dead_read_csv(*a, **kw):
+            raise urllib.error.URLError("simulated offline / DNS failure")
+
+        monkeypatch.setattr(pd, "read_csv", dead_read_csv)
+        players = pd.DataFrame({
+            "player_id_sr": ["x"], "name": ["Some Player"], "position": ["QB"],
+            "status": [""], "fantasy_team": [None],
+        })
+        with pytest.warns(UserWarning, match="injured_list"):
+            result = current_manager.add_injuries(players, week=current_manager.current_week)
+        assert "until" in result.columns
+        assert result["until"].isna().all()

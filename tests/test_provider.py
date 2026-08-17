@@ -11,6 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from fantasyfb.data import nflreadpy_provider as mod
 from fantasyfb.data.nflreadpy_provider import _clamp_seasons, _load_pandas
 
 
@@ -198,6 +199,126 @@ class TestClampSeasons:
     def test_no_warning_when_nothing_dropped(self, recwarn):
         _clamp_seasons([2024], available_max=2025, context="stats")
         assert len(recwarn) == 0
+
+
+class TestCacheConfig:
+    """NflreadpyProvider.__init__ configures nflreadpy's own caching layer.
+
+    nflreadpy already caches every download, but defaults to an in-memory
+    cache that's wiped at process exit -- useless across the separate CLI
+    invocations that make up a draft-prep session. We switch it to
+    filesystem caching by default so pulls persist across runs, enabling
+    offline operation after the first successful pull. These tests stub
+    out `_nfl_update_config`/`nfl.clear_cache` so they exercise only our
+    decision logic, not nflreadpy's real config singleton or the network.
+    """
+
+    def test_defaults_to_filesystem_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        monkeypatch.delenv("NFLREADPY_CACHE", raising=False)
+        mod.NflreadpyProvider()
+        assert calls == [{"cache_mode": "filesystem"}]
+
+    def test_explicit_cache_mode_overrides_default(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        mod.NflreadpyProvider(cache_mode="off")
+        assert calls == [{"cache_mode": "off"}]
+
+    def test_respects_existing_cache_env_var(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # If the user (or their shell profile) already set NFLREADPY_CACHE,
+        # our default shouldn't clobber it.
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        monkeypatch.setenv("NFLREADPY_CACHE", "memory")
+        mod.NflreadpyProvider()
+        assert calls == []
+
+    def test_cache_duration_passed_through_with_default_mode(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        monkeypatch.delenv("NFLREADPY_CACHE", raising=False)
+        mod.NflreadpyProvider(cache_duration=3600)
+        assert calls == [{"cache_mode": "filesystem", "cache_duration": 3600}]
+
+    def test_refresh_clears_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cleared = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: None)
+        monkeypatch.setattr(mod.nfl, "clear_cache", lambda: cleared.append(True))
+        mod.NflreadpyProvider(refresh=True)
+        assert cleared == [True]
+
+    def test_no_refresh_does_not_clear_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cleared = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: None)
+        monkeypatch.setattr(mod.nfl, "clear_cache", lambda: cleared.append(True))
+        mod.NflreadpyProvider()
+        assert cleared == []
+
+
+class TestDepthChartsOfflineFallback:
+    """get_depth_charts, unlike get_schedule/get_rosters/get_player_stats,
+    never goes through _clamp_seasons -- it always asks for the current
+    calendar year's depth chart file directly, which nflverse may not have
+    published yet, or which may be unreachable if offline with a cold
+    cache. Confirms it degrades to an empty frame instead of raising in
+    both cases, matching the empty-dataframe fallback already used when
+    nflreadpy legitimately has no rows for a season.
+    """
+
+    def test_connection_error_on_latest_season_falls_back_to_prior_year(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls = []
+
+        def loader(**kwargs):
+            season = kwargs["seasons"][0]
+            calls.append(season)
+            if season == mod.pd.Timestamp.now(tz="UTC").year:
+                raise ConnectionError("simulated offline / cache miss")
+            raise ValueError("unexpectedly reached second fallback")
+
+        monkeypatch.setattr(mod.nfl, "load_depth_charts", loader)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+        out = provider._try_load_depth_charts(mod.pd.Timestamp.now(tz="UTC").year)
+        assert out.empty
+        assert calls == [mod.pd.Timestamp.now(tz="UTC").year]
+
+    def test_get_depth_charts_returns_empty_frame_when_fully_unreachable(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def loader(**kwargs):
+            raise ConnectionError("simulated offline / cache miss")
+
+        monkeypatch.setattr(mod.nfl, "load_depth_charts", loader)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+        out = provider.get_depth_charts()
+        assert out.empty
+        assert list(out.columns) == [
+            "name", "current_team", "position", "string", "player_id_sr",
+        ]
+
+    def test_missing_season_file_falls_back_without_raising(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # nflreadpy raises ValueError (not the polars-UTF8 flavor _load_pandas
+        # special-cases) when a requested season's parquet doesn't exist
+        # upstream yet -- e.g. depth charts for a season that hasn't
+        # started. That must also degrade gracefully, not propagate.
+        def loader(**kwargs):
+            raise ValueError("404: season not published")
+
+        monkeypatch.setattr(mod.nfl, "load_depth_charts", loader)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+        out = provider._try_load_depth_charts(2099)
+        assert out.empty
 
 
 class TestLoadPandasFallback:

@@ -310,6 +310,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    dest="simadd_limit",
                    help="default players per position to simulate in 'simadd' "
                         "(default 3); 'simadd' also prompts per-run to override this")
+    p.add_argument("--refresh-cache", action="store_true", dest="refresh_cache",
+                   help="bypass the local nflreadpy cache and force a fresh "
+                        "download of stats/schedule/roster data for this run")
     return p
 
 
@@ -360,11 +363,13 @@ def main(argv=None) -> int:
 
     # Lazy import so --help and helper unit tests work without Yahoo creds.
     import fantasyfb as fb
+    from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
 
     league = fb.League(
         name=args.team, num_sims=10000, season=args.season,
         platform=args.platform, sleeper_league_id=args.sleeper_league_id,
         num_teams=num_teams_arg or 12, mock_scoring=mock_scoring or "ppr",
+        nfl_provider=NflreadpyProvider(refresh=args.refresh_cache),
     )
     num_teams = len(league.teams)
     spec = _roster_spec_to_dict(league.roster_spots)

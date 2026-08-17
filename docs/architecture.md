@@ -96,6 +96,76 @@ stats, schedules, and depth charts in the expected shape will work —
 useful for testing without hitting the network or wiring in a
 different data source.
 
+## nflreadpy caching
+
+`nflreadpy` downloads pre-built parquet files from nflverse's GitHub
+releases and caches every download itself (`nflreadpy.cache`), but its
+own default is an in-memory cache that's wiped when the process exits.
+Since each `fantasyfb`/`draft-prep`/`snake-draft`/`salary-cap-draft`
+invocation is a fresh process, that default bought nothing across
+runs — a multi-hour draft-prep session re-downloaded the same
+stats/schedule/roster parquet on every single command.
+
+`NflreadpyProvider.__init__` switches nflreadpy to **filesystem**
+caching by default (24h TTL, same as nflreadpy's own default duration),
+so a pull made by one command is reused by the next one instead of
+hitting the network again. In practice this means:
+
+- The first pull of a session needs a live connection; every
+  subsequent pull within the cache window can run offline.
+- The cache window is a hard 24h TTL measured from when each file was
+  *downloaded*, not "prefer fresh, fall back to stale if unreachable"
+  and not extended by simply using the cache again while it's still
+  warm (a cache hit doesn't touch the file's timestamp). Once a cached
+  file passes 24h old, nflreadpy deletes it and always re-attempts the
+  network on the next pull, regardless of whether that network is
+  reachable. So offline draft prep only works within 24 hours of the
+  pull that actually populated the cache; past that,
+  `get_schedule`/`get_rosters`/`get_player_stats` will raise if you're
+  offline (unlike `get_depth_charts`/`add_injuries` below, which
+  degrade gracefully). For a multi-day offline draft weekend, either
+  re-run online with `--refresh-cache` shortly before the 24h mark to
+  force a fresh download and restart the clock, or construct
+  `NflreadpyProvider(cache_duration=<seconds>)` yourself for a longer
+  window (not currently exposed as a CLI flag).
+- Past weeks' stats are immutable, so a stale cache is only a concern
+  for the current week's in-progress data (live box scores) and depth
+  charts, which change during the week.
+- Pass `--refresh-cache` to `draft-prep`, `snake-draft`, or
+  `salary-cap-draft` to bypass the cache and force a fresh download
+  for that run (calls `nflreadpy.clear_cache()` under the hood).
+- An explicit `NFLREADPY_CACHE` env var (or a prior
+  `nflreadpy.update_config()` call) always wins over the
+  filesystem-cache default — set it to `memory` or `off` to restore
+  nflreadpy's out-of-the-box behavior, or construct
+  `NflreadpyProvider(cache_mode=..., cache_duration=...)` directly for
+  per-instance control.
+- This only covers nflreadpy's normal download path. The rare
+  `_pyarrow_fallback` used when polars rejects a parquet file for
+  invalid UTF-8 (see the module docstring in `nflreadpy_provider.py`)
+  downloads directly via `urllib` and is not cached.
+- `get_depth_charts` always asks for the *current calendar year's* file
+  rather than going through the season-clamping every other method
+  uses, since depth charts are a live/current-roster feed rather than a
+  historical one and nflverse's publish timing for it doesn't track
+  `nflreadpy.get_current_season()`. A cold cache with no network (or a
+  season whose depth-chart file nflverse hasn't published yet) degrades
+  to an empty depth-chart frame instead of raising, so a second,
+  offline `draft-prep`/`snake-draft`/`salary-cap-draft` run still
+  completes — draft prep just proceeds without depth-chart data for
+  that run.
+- `PlayerDataManager.add_injuries`'s manual injury-timespan overrides pull
+  a small CSV straight from `raw.githubusercontent.com`, entirely outside
+  `NflreadpyProvider` and nflreadpy's caching. A dead network there is
+  caught and skipped with a warning rather than raising, same as the
+  depth-chart case above — an offline run just proceeds without that
+  enrichment. (A parallel `apply_name_corrections` step used to carry the
+  same uncached fetch, but it was dead weight left over from the
+  pre-nflreadpy, name-matching era — `map_player_ids` has linked players
+  by `yahoo_id`/`gsis_id` instead of name for a while now, same as
+  `snake-draft`/`salary-cap-draft` already assumed in their V2 rewrites — so
+  it was removed rather than given a fallback.)
+
 ## Projection engine
 
 `ProjectionEngineV2` (`projections/engine_v2.py`) is the sole projection

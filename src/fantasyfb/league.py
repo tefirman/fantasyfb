@@ -172,16 +172,14 @@ class League:
             self.client, self.season, self.current_week, self.nfl_provider
         )
 
-        # We need stats for name corrections, so load them first
         self.load_stats((self.season - 2) * 100 + 1, self.season * 100 + self.week - 1)
 
         # Load NFL rosters for get_rates() method
         self.nfl_rosters = self.nfl_provider.get_rosters(self.season - 1, self.latest_season)
-        
+
         # Process all player data in one call
         self.players = player_manager.process_players(
             self.players,
-            self.stats,
             self.nfl_schedule,
             self.week
         )

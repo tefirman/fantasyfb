@@ -6,6 +6,7 @@ bye weeks, roster percentages, and depth chart integration.
 """
 
 import datetime
+import warnings
 from typing import Optional
 
 import numpy as np
@@ -13,6 +14,14 @@ import pandas as pd
 
 from .nfl_provider import NFLDataProvider
 from .platform_client import FantasyPlatformClient
+
+# injured_list.csv lives outside nflreadpy's caching entirely (a hardcoded
+# raw.githubusercontent.com fetch), so it always hits the network with no
+# local fallback. OSError covers a dead network here: urllib.error.URLError
+# (bare urllib, what pandas uses by default) and requests' connection
+# errors both subclass it. It's optional enrichment, so it's correct to
+# skip and warn rather than crash a draft-prep run that's otherwise
+# working entirely from nflreadpy's own persistent cache.
 
 
 class PlayerDataManager:
@@ -38,38 +47,6 @@ class PlayerDataManager:
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         self.nfl_teams = self.nfl_provider.team_aliases()
         
-    def apply_name_corrections(self, players: pd.DataFrame, stats: pd.DataFrame) -> pd.DataFrame:
-        """
-        Apply legacy name corrections between the historical roster feed and Yahoo.
-
-        Largely a no-op since the swap to nflreadpy: Yahoo<->NFL linkage now
-        happens via yahoo_id in map_player_ids, not name matching. The
-        corrections CSV survives to catch any pre-2024 backfills that
-        still reference legacy spellings.
-
-        Args:
-            players: DataFrame with Yahoo player data
-            stats: DataFrame with NFL stats from the active provider
-
-        Returns:
-            DataFrame with corrected player names
-        """
-        corrections = pd.read_csv(
-            "https://raw.githubusercontent.com/"
-            + "tefirman/fantasy-data/main/fantasyfb/name_corrections.csv"
-        )
-        players = pd.merge(
-            left=players, right=corrections, how="left", on="name"
-        )
-        to_fix = ~players.new_name.isnull()
-        players.loc[to_fix, "name"] = players.loc[to_fix, "new_name"]
-        
-        # Clean up temporary column
-        if 'new_name' in players.columns:
-            del players['new_name']
-            
-        return players
-
     def map_player_ids(self, players: pd.DataFrame) -> pd.DataFrame:
         """
         Map platform player IDs to NFL player IDs.
@@ -195,10 +172,17 @@ class PlayerDataManager:
             
         # For current season, use injury projections
         if as_of // 100 == self.latest_season:
-            inj_proj = pd.read_csv(
-                "https://raw.githubusercontent.com/"
-                + "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
-            )
+            try:
+                inj_proj = pd.read_csv(
+                    "https://raw.githubusercontent.com/"
+                    + "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
+                )
+            except OSError:
+                warnings.warn(
+                    "Could not reach injured_list.csv (offline?); skipping "
+                    "manual injury-timespan projections.",
+                )
+                return players
             inj_proj = inj_proj.loc[inj_proj.until >= self.current_week]
             
             players = pd.merge(
@@ -371,24 +355,19 @@ class PlayerDataManager:
 
         return players
 
-    def process_players(self, players: pd.DataFrame, stats: pd.DataFrame,
+    def process_players(self, players: pd.DataFrame,
                        nfl_schedule: pd.DataFrame, week: int) -> pd.DataFrame:
         """
         Run the complete player data processing pipeline.
 
         Args:
             players: Raw player data from the active platform client
-            stats: NFL stats from the active provider, used by the
-                   legacy name-correction step
             nfl_schedule: NFL schedule for bye weeks
             week: Current week being analyzed
 
         Returns:
             Fully processed player DataFrame
         """
-        print("Applying name corrections...")
-        players = self.apply_name_corrections(players, stats)
-
         print("Mapping player IDs...")
         players = self.map_player_ids(players)
 

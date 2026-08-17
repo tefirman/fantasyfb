@@ -7,6 +7,7 @@ files from the nflverse data releases, so it is fast and unauthenticated.
 """
 
 import io
+import os
 import re
 import urllib.request
 import warnings
@@ -17,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from nflreadpy.config import update_config as _nfl_update_config
 
 from .nfl_provider import NFLDataProvider
 
@@ -211,6 +213,42 @@ def _years_in_range(start: int, finish: int) -> list[int]:
 
 class NflreadpyProvider(NFLDataProvider):
     """Concrete NFLDataProvider backed by the nflreadpy parquet feeds."""
+
+    def __init__(
+        self,
+        *,
+        cache_mode: str | None = None,
+        cache_duration: int | None = None,
+        refresh: bool = False,
+    ) -> None:
+        """
+        Args:
+            cache_mode: Override nflreadpy's cache mode ("filesystem",
+                "memory", or "off"). Defaults to "filesystem" so downloaded
+                parquet files survive across separate fantasyfb invocations --
+                draft prep runs the CLI repeatedly over hours or days, and
+                nflreadpy's own default ("memory") is cleared at the end of
+                every process, so every run re-downloaded from nflverse over
+                the network. Left alone if the NFLREADPY_CACHE env var is
+                already set, so an explicit user preference always wins.
+            cache_duration: Override nflreadpy's cache TTL in seconds.
+                Left at nflreadpy's own default (24h) unless given.
+            refresh: Clear nflreadpy's cache before use, forcing a fresh
+                download on the next pull despite cache_mode. Escape hatch
+                for callers that explicitly want current data (e.g. a
+                --refresh-cache CLI flag).
+        """
+        config_updates: dict[str, Any] = {}
+        if cache_mode is not None:
+            config_updates["cache_mode"] = cache_mode
+        elif "NFLREADPY_CACHE" not in os.environ:
+            config_updates["cache_mode"] = "filesystem"
+        if cache_duration is not None:
+            config_updates["cache_duration"] = cache_duration
+        if config_updates:
+            _nfl_update_config(**config_updates)
+        if refresh:
+            nfl.clear_cache()
 
     def get_player_stats(self, start: int, finish: int) -> pd.DataFrame:
         seasons = _clamp_seasons(
@@ -431,16 +469,41 @@ class NflreadpyProvider(NFLDataProvider):
         cols = ["name", "current_team", "position", "player_id_sr", "yahoo_id", "season"]
         return out[[c for c in cols if c in out.columns]].reset_index(drop=True)
 
+    @staticmethod
+    def _try_load_depth_charts(season: int) -> pd.DataFrame:
+        """Load one season of depth charts, treating a missing/unreachable
+        file the same as an empty result instead of raising.
+
+        nflreadpy raises ConnectionError when a download fails outright
+        (network unavailable, cache miss) and ValueError when the requested
+        season's file doesn't exist upstream yet -- both are expected,
+        recoverable states here, not bugs.
+        """
+        try:
+            return _load_pandas(nfl.load_depth_charts, per_season=True, seasons=[season])
+        except (ConnectionError, ValueError):
+            return pd.DataFrame()
+
     def get_depth_charts(self) -> pd.DataFrame:
         # nflreadpy reworked the depth-chart schema starting in 2025: the
         # old (season, week, club_code, depth_team, full_name) shape was
         # replaced with (dt, team, player_name, pos_abb, pos_rank). We
         # support both because mid-package upgrades shouldn't trip up
         # users still pulling historical seasons.
+        #
+        # Unlike get_schedule/get_rosters/get_player_stats, this doesn't go
+        # through _clamp_seasons -- depth charts are a live/current-roster
+        # feed rather than a historical one, so nflverse may already have
+        # next season's file published (or not) independent of
+        # nfl.get_current_season(). We try the current year, fall back a
+        # year, and swallow a missing/offline file at each step rather than
+        # letting it propagate -- an --refresh-cache-free, offline second
+        # run must degrade gracefully here the same way the clamped callers
+        # already do, instead of throwing.
         latest = pd.Timestamp.now(tz="UTC").year
-        raw = _load_pandas(nfl.load_depth_charts, per_season=True, seasons=[latest])
+        raw = self._try_load_depth_charts(latest)
         if raw.empty and latest > 1999:
-            raw = _load_pandas(nfl.load_depth_charts, per_season=True, seasons=[latest - 1])
+            raw = self._try_load_depth_charts(latest - 1)
         if raw.empty:
             return pd.DataFrame(columns=["name", "current_team", "position", "string", "player_id_sr"])
 

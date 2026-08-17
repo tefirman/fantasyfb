@@ -12,7 +12,10 @@ draft-prep <subcommand> [options]
 ```
 
 Every subcommand requires `--team`. Most accept `--output` to dump
-the result to CSV.
+the result to CSV. Every subcommand also accepts `--refresh-cache` to
+bypass the local nflreadpy cache and force a fresh download of
+stats/schedule/roster data for that run — see
+[caching](../architecture.md#nflreadpy-caching).
 
 ## Subcommands
 

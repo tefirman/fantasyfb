@@ -45,7 +45,9 @@ def _build_league(args: argparse.Namespace):
     Imported lazily so `--help` works without Yahoo deps installed.
     """
     import fantasyfb as fb
-    return fb.League(name=args.team, sfb=args.sfb)
+    from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
+    nfl_provider = NflreadpyProvider(refresh=args.refresh_cache)
+    return fb.League(name=args.team, sfb=args.sfb, nfl_provider=nfl_provider)
 
 
 def _maybe_save(df: pd.DataFrame, path: Optional[str]) -> None:
@@ -226,6 +228,11 @@ def build_parser() -> argparse.ArgumentParser:
                             "Sleeper league ID (from the league URL) to pull "
                             "settings live from Sleeper; bare --sfb falls "
                             "back to the static snapshot in fantasyfb.configs")
+        p.add_argument("--refresh-cache", action="store_true",
+                       dest="refresh_cache",
+                       help="bypass the local nflreadpy cache and force a "
+                            "fresh download of stats/schedule/roster data "
+                            "for this run")
 
     p_tiers = sub.add_parser("tiers", help="per-position tier sheet")
     add_common(p_tiers)
