@@ -72,6 +72,12 @@ salary-cap-draft --team "My Team"
 
 Run any command with `--help` for the full option list.
 
+NFL data (stats, schedules, rosters) is cached to disk for 24 hours, so
+repeated runs within that window work offline. Past the 24h mark you'll
+need a live connection again to refresh the cache — see
+[nflreadpy caching](docs/architecture.md#nflreadpy-caching) for details
+and the `--refresh-cache` flag.
+
 ## Public API
 
 ```python

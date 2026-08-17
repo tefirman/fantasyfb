@@ -113,6 +113,21 @@ hitting the network again. In practice this means:
 
 - The first pull of a session needs a live connection; every
   subsequent pull within the cache window can run offline.
+- The cache window is a hard 24h TTL measured from when each file was
+  *downloaded*, not "prefer fresh, fall back to stale if unreachable"
+  and not extended by simply using the cache again while it's still
+  warm (a cache hit doesn't touch the file's timestamp). Once a cached
+  file passes 24h old, nflreadpy deletes it and always re-attempts the
+  network on the next pull, regardless of whether that network is
+  reachable. So offline draft prep only works within 24 hours of the
+  pull that actually populated the cache; past that,
+  `get_schedule`/`get_rosters`/`get_player_stats` will raise if you're
+  offline (unlike `get_depth_charts`/`add_injuries` below, which
+  degrade gracefully). For a multi-day offline draft weekend, either
+  re-run online with `--refresh-cache` shortly before the 24h mark to
+  force a fresh download and restart the clock, or construct
+  `NflreadpyProvider(cache_duration=<seconds>)` yourself for a longer
+  window (not currently exposed as a CLI flag).
 - Past weeks' stats are immutable, so a stale cache is only a concern
   for the current week's in-progress data (live box scores) and depth
   charts, which change during the week.
