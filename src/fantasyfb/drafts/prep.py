@@ -47,7 +47,11 @@ def _build_league(args: argparse.Namespace):
     import fantasyfb as fb
     from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
     nfl_provider = NflreadpyProvider(refresh=args.refresh_cache)
-    return fb.League(name=args.team, sfb=args.sfb, nfl_provider=nfl_provider)
+    return fb.League(
+        name=args.team, sfb=args.sfb, nfl_provider=nfl_provider,
+        platform=args.platform, sleeper_league_id=args.sleeper_league_id,
+        num_teams=args.num_teams or 12, mock_scoring=args.mock_scoring or "ppr",
+    )
 
 
 def _maybe_save(df: pd.DataFrame, path: Optional[str]) -> None:
@@ -219,9 +223,33 @@ def build_parser() -> argparse.ArgumentParser:
     # is self-contained.
     def add_common(p: argparse.ArgumentParser) -> None:
         p.add_argument("--team", required=True,
-                       help="Yahoo team name (passed to fantasyfb.League)")
+                       help="team to analyze -- Yahoo team name (--platform "
+                            "yahoo), the Sleeper team/manager display name "
+                            "to identify your roster (--platform sleeper), "
+                            "or whatever you want to call your team "
+                            "(--platform generic)")
         p.add_argument("--output", default=None,
                        help="optional CSV path to save the result")
+        p.add_argument("--platform", default="generic",
+                       choices=["yahoo", "sleeper", "generic"],
+                       help="fantasy platform backend to analyze. Defaults "
+                            "to 'generic' -- a fully synthetic mock league "
+                            "with no real Yahoo/Sleeper league, useful for "
+                            "running draft-prep without live credentials. "
+                            "Pass 'yahoo' or 'sleeper' to pull settings "
+                            "from a real league instead.")
+        p.add_argument("--sleeper-league-id", default=None,
+                       dest="sleeper_league_id",
+                       help="numeric Sleeper league ID (from the league "
+                            "URL), required with --platform sleeper")
+        p.add_argument("--num-teams", type=int, default=None,
+                       dest="num_teams",
+                       help="number of teams for a --platform generic "
+                            "league (default 12)")
+        p.add_argument("--mock-scoring", default=None, dest="mock_scoring",
+                       choices=["standard", "half_ppr", "ppr"],
+                       help="scoring system for a --platform generic "
+                            "league (default ppr)")
         p.add_argument("--sfb", nargs="?", const=True, default=False,
                        help="apply Scott Fish Bowl scoring/roster settings "
                             "instead of your Yahoo league's own. Pass a "
@@ -326,6 +354,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.platform == "sleeper" and not args.sleeper_league_id:
+        print("--sleeper-league-id is required with --platform sleeper")
+        return 1
+
     return args.func(args)
 
 
