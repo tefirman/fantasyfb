@@ -212,8 +212,8 @@ def get_league_config(league_id: str) -> Dict:
 
     Returns:
         Dict with 'scoring' and 'roster_spots' keys, matching the shape
-        of the static configs in fantasyfb.configs (e.g. SFB_CONFIG) so
-        it can be used interchangeably wherever a league config is expected.
+        of the static configs in fantasyfb.configs (e.g. DRAFTKINGS_CONFIG)
+        so it can be used interchangeably wherever a league config is expected.
     """
     league = fetch_league(league_id)
     return {

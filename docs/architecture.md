@@ -8,7 +8,7 @@ through projections, simulation, and analysis.
 ```
 fantasyfb/
 ├── league.py              # Top-level League class
-├── configs.py             # League / scoring presets (SFB, DraftKings, Underdog)
+├── configs.py             # League / scoring presets (DraftKings, Underdog)
 ├── cli.py                 # argparse/optparse glue for the `fantasyfb` entry point
 ├── data/                  # Yahoo client + nflverse providers
 ├── scoring/               # FantasyScorer, LineupOptimizer, MatchupModel
@@ -22,7 +22,7 @@ fantasyfb/
 | Subpackage              | What lives here                                                                      |
 | ----------------------- | ------------------------------------------------------------------------------------ |
 | `fantasyfb.league`      | The `League` class — the user-facing entry point for everything                      |
-| `fantasyfb.configs`     | Scoring + roster presets for non-Yahoo platforms (SFB, DK best-ball, Underdog)       |
+| `fantasyfb.configs`     | Scoring + roster presets for non-Yahoo platforms (DK best-ball, Underdog)            |
 | `fantasyfb.cli`         | `optparse` glue for the `fantasyfb` console script                                   |
 | `fantasyfb.data`        | Yahoo Fantasy API client; pluggable NFL data providers (nflreadpy default)           |
 | `fantasyfb.scoring`     | `FantasyScorer` (stats → points), `LineupOptimizer`, `MatchupModel`                  |

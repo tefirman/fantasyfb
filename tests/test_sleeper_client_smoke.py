@@ -7,9 +7,8 @@ confirm the client actually talks to Sleeper end-to-end:
     pytest tests/test_sleeper_client_smoke.py -v
 
 They target Scott Fish Bowl 16 (sleeper.com/leagues/1367870433398915072),
-the same real, public Sleeper league already referenced as the source of
-fantasyfb.configs.SFB_CONFIG -- a stable, known-good league ID to sanity
-check against instead of requiring a throwaway test league.
+a stable, known-good public league ID to sanity check against instead of
+requiring a throwaway test league.
 
 Assertions here are intentionally loose (shapes/types, not exact values):
 league state (current week, rosters, scores) changes over the season, and

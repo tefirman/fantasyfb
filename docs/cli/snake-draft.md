@@ -44,9 +44,6 @@ snake-draft --team "My Team" --adp ADP.csv --exclude "Tom Brady,Cam Newton"
 # Best-ball scoring/roster settings (defaults to Underdog; pass dk for DraftKings)
 snake-draft --team "My Team" --adp ADP.csv --bestball
 
-# Scott Fish Bowl scoring/roster settings, pulled live from a Sleeper league
-snake-draft --team "My Team" --adp ADP.csv --sfb 123456789
-
 # Third-Round Reversal at round 3 (matches Sleeper's reversal_round setting)
 snake-draft --team "My Team" --adp ADP.csv --reversal-round 3
 ```
@@ -73,7 +70,6 @@ snake-draft --team "My Team" --adp ADP.csv --reversal-round 3
 | `--output`              | `DraftProgress.csv` (or `--inprogress` path) | Where to save the running pick log                                                                                    |
 | `--payouts`             | —                                    | Comma-separated 1st/2nd/3rd payouts for earnings projections                                                                   |
 | `--bestball`            | off                                  | Enable best-ball scoring/roster settings and switch `sim`/`simadd` to `bestball_sims`. Bare flag defaults to `underdog`; pass a platform name (`underdog`, `dk`) to match its rules |
-| `--sfb`                 | off                                  | Apply Scott Fish Bowl scoring/roster settings instead of the connected league's own. Pass a Sleeper league ID to pull settings live; bare `--sfb` falls back to the static snapshot in `fantasyfb.configs` |
 | `--reversal-round`      | 0 (disabled)                         | Apply Third-Round Reversal at this round number — that round repeats the previous round's direction instead of flipping back, then normal snake alternation resumes (matches Sleeper's `reversal_round` setting) |
 | `--refresh-cache`       | off                                  | Bypass the local nflreadpy cache and force a fresh download of stats/schedule/roster data for this run (see [caching](../architecture.md#nflreadpy-caching)) |
 

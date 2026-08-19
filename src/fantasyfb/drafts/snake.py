@@ -375,12 +375,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="size of the top-VORP pool the 'random' command "
                         "samples from (default 8). Smaller = more "
                         "deterministic auto-picks; larger = more chaos.")
-    p.add_argument("--sfb", nargs="?", const=True, default=False,
-                   help="apply Scott Fish Bowl scoring/roster settings "
-                        "instead of your Yahoo league's own. Pass a Sleeper "
-                        "league ID (from the league URL) to pull settings "
-                        "live from Sleeper; bare --sfb falls back to the "
-                        "static snapshot in fantasyfb.configs")
     p.add_argument("--reversal-round", type=int, default=0,
                    dest="reversal_round",
                    help="apply Third-Round Reversal at this round number "
@@ -425,7 +419,7 @@ def main(argv=None) -> int:
     from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
 
     league = fb.League(
-        name=args.team, num_sims=10000, season=args.season, sfb=args.sfb,
+        name=args.team, num_sims=10000, season=args.season,
         bestball=args.bestball, platform=args.platform,
         sleeper_league_id=args.sleeper_league_id,
         num_teams=num_teams or 12, mock_scoring=mock_scoring or "ppr",
