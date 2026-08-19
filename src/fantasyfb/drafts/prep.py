@@ -48,7 +48,7 @@ def _build_league(args: argparse.Namespace):
     from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
     nfl_provider = NflreadpyProvider(refresh=args.refresh_cache)
     return fb.League(
-        name=args.team, sfb=args.sfb, nfl_provider=nfl_provider,
+        name=args.team, nfl_provider=nfl_provider,
         platform=args.platform, sleeper_league_id=args.sleeper_league_id,
         num_teams=args.num_teams or 12, mock_scoring=args.mock_scoring or "ppr",
     )
@@ -250,12 +250,6 @@ def build_parser() -> argparse.ArgumentParser:
                        choices=["standard", "half_ppr", "ppr"],
                        help="scoring system for a --platform generic "
                             "league (default ppr)")
-        p.add_argument("--sfb", nargs="?", const=True, default=False,
-                       help="apply Scott Fish Bowl scoring/roster settings "
-                            "instead of your Yahoo league's own. Pass a "
-                            "Sleeper league ID (from the league URL) to pull "
-                            "settings live from Sleeper; bare --sfb falls "
-                            "back to the static snapshot in fantasyfb.configs")
         p.add_argument("--refresh-cache", action="store_true",
                        dest="refresh_cache",
                        help="bypass the local nflreadpy cache and force a "
