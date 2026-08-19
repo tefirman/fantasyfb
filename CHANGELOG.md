@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-18
+
+Multi-platform league support: `SleeperClient` and a fully synthetic `generic` mock mode join Yahoo behind a shared `FantasyPlatformClient` interface, with `--platform` now available across all three draft CLIs. Also includes dual (position + flex) VORP, `simadd` win/earnings-delta evaluation during live drafts, and a rebranded navy/green logo.
+
 ### Added
 - **`SleeperClient`, parallel to `YahooFantasyClient`** (#37): `data/sleeper_client.py` gains `get_current_week`, `get_fantasy_teams`, `get_all_players`, `get_team_rosters`, and `get_schedule` against Sleeper's public read API (no OAuth). `player_id_sr` is populated straight from Sleeper's `gsis_id` where available, matching the ID `NflreadpyProvider` already keys rosters/stats/depth-charts on, so it can join against nflreadpy output without a name-matching fallback. The full `/players/nfl` map is cached locally (`~/.cache/fantasyfb`) per Sleeper's integrator guidance against re-fetching it every run. Live smoke tests (`tests/test_sleeper_client_smoke.py`) hit the real public SFB16 league end-to-end; they self-skip rather than fail when Sleeper is unreachable, so sandboxed/offline environments and the default `pytest -q` stay green.
 - **`FantasyPlatformClient` abstraction wires `SleeperClient` into `League`** (#37): a shared read-only interface both `YahooFantasyClient` and `SleeperClient` implement, so `League(platform="yahoo"|"sleeper")` can pick either backend at construction time instead of hardcoding Yahoo.
