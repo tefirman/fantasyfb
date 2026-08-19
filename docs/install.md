@@ -32,8 +32,11 @@ mkdocs build     # produces ./site/
 
 Before you can do anything useful you need:
 
-1. **Yahoo OAuth credentials** — see [Yahoo OAuth setup](yahoo-oauth.md).
-2. **A Yahoo fantasy team** the credentials have access to.
+1. **A league to connect to** — see [Connecting a league](platforms.md)
+   for Yahoo OAuth setup, or the credential-free Sleeper/generic
+   options.
+2. If using Yahoo: **a Yahoo fantasy team** the credentials have
+   access to.
 
 Once both are in place, the [quickstart](quickstart.md) walks you
 through your first weekly report.

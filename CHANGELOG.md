@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-18
+
+Multi-platform league support: `SleeperClient` and a fully synthetic `generic` mock mode join Yahoo behind a shared `FantasyPlatformClient` interface, with `--platform` now available across all three draft CLIs. Also includes dual (position + flex) VORP, `simadd` win/earnings-delta evaluation during live drafts, and a rebranded navy/green logo.
+
 ### Added
 - **`SleeperClient`, parallel to `YahooFantasyClient`** (#37): `data/sleeper_client.py` gains `get_current_week`, `get_fantasy_teams`, `get_all_players`, `get_team_rosters`, and `get_schedule` against Sleeper's public read API (no OAuth). `player_id_sr` is populated straight from Sleeper's `gsis_id` where available, matching the ID `NflreadpyProvider` already keys rosters/stats/depth-charts on, so it can join against nflreadpy output without a name-matching fallback. The full `/players/nfl` map is cached locally (`~/.cache/fantasyfb`) per Sleeper's integrator guidance against re-fetching it every run. Live smoke tests (`tests/test_sleeper_client_smoke.py`) hit the real public SFB16 league end-to-end; they self-skip rather than fail when Sleeper is unreachable, so sandboxed/offline environments and the default `pytest -q` stay green.
 - **`FantasyPlatformClient` abstraction wires `SleeperClient` into `League`** (#37): a shared read-only interface both `YahooFantasyClient` and `SleeperClient` implement, so `League(platform="yahoo"|"sleeper")` can pick either backend at construction time instead of hardcoding Yahoo.
@@ -22,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **`--platform` flag added to `draft-prep`, matching `snake-draft`/`salary-cap-draft`** (#53): `_build_league` previously called `fb.League(...)` with no `platform` kwarg, so it always fell through to the Yahoo default — `draft-prep` hung indefinitely without live Yahoo credentials and had no way to run against Sleeper or a generic mock league. Ports the same `--platform`/`--sleeper-league-id`/`--num-teams`/`--mock-scoring` wiring already used by `snake-draft` and `salary-cap-draft`.
 - **`League()`'s single-source version now comes from `importlib.metadata`** instead of a hardcoded `__version__` string, so `pyproject.toml` is the only place the version needs updating.
+- **Rebranded logo**: replaced the navy/gold snake-and-shield mark with a simpler navy/green "FFB51" football outline, cropped from its source photo and set as the new `assets/fantasyfb_logo.png` master (regenerated `docs/assets/fantasyfb_logo.png` and `docs/assets/favicon.png` via `scripts/build-assets.py`). `docs/stylesheets/extra.css`'s Material palette now pulls navy `#18304a` / green `#79ac57` from the new mark instead of the old navy `#06152b` / gold `#b29d76`.
 
 ### Removed
 - **`--sfb` CLI flag** (#48) from `snake-draft` and `draft-prep`, along with the `League(sfb=...)` kwarg, `configs.SFB_CONFIG`, and `configs.get_sfb_config_from_sleeper()`. Now that `--platform sleeper --sleeper-league-id <id>` (added above) covers pulling a live Sleeper league's scoring/roster settings — including SFB leagues — through `SleeperClient.get_league_config()`, the separate `--sfb` overlay mechanism was redundant. **Breaking change** to `League()`'s signature and both CLIs. Historical SFB13–16 configs were preserved outside the repo (a gitignored `notes/` dir) for posterity, not in the codebase.

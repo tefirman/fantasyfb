@@ -1,6 +1,7 @@
-<p align="center">
-  <img src="assets/fantasyfb_logo.png" alt="fantasyfb" width="400">
-</p>
+<table markdown="block">
+<tr markdown="block">
+<td markdown="block" style="vertical-align: middle;"><img src="assets/fantasyfb_logo.png" alt="fantasyfb" width="160"></td>
+<td markdown="block">
 
 # fantasyfb
 
@@ -9,11 +10,15 @@ projections from [nflverse](https://github.com/nflverse) data, syncs
 roster state from a Yahoo Fantasy league, and runs Monte Carlo season
 simulations to value pickups, trades, and draft picks.
 
+</td>
+</tr>
+</table>
+
 ## What's here
 
 - **[Install](install.md)** — `pip install fantasyfb` plus dev setup.
-- **[Yahoo OAuth setup](yahoo-oauth.md)** — the one-time credential
-  dance you have to do before anything else works.
+- **[Connecting a league](platforms.md)** — Yahoo OAuth setup, or the
+  credential-free Sleeper/generic options.
 - **[First weekly report](quickstart.md)** — end-to-end walkthrough
   from a fresh install to a finished Excel file.
 - **[CLI reference](cli/index.md)** — one page per entry point
@@ -37,8 +42,10 @@ schedule_sim, standings_sim = league.season_sims(postseason=True)
 print(standings_sim[["team", "wins_avg", "playoffs", "winner"]])
 ```
 
-`fb.League(name=...)` reads from the Yahoo Fantasy API, so you'll need
-[OAuth credentials](yahoo-oauth.md) set up first.
+`fb.League(name=...)` defaults to the Yahoo Fantasy API, so you'll
+need [OAuth credentials](platforms.md#yahoo) set up first — or pass
+`platform="sleeper"` / `platform="generic"` for a
+[credential-free league connection](platforms.md).
 
 ## Command-line tools
 

@@ -1,12 +1,78 @@
-# Yahoo OAuth setup
+# Connecting a league
 
-`fantasyfb` reads roster state, scoring, and league settings from the
+`League(platform=...)` picks which backend supplies rosters, scoring
+settings, and schedule. Three platforms are supported:
+
+| Platform  | Setup                          | Data source                                          |
+| --------- | ------------------------------- | ----------------------------------------------------- |
+| `yahoo`   | OAuth app + one-time browser login | Live [Yahoo Fantasy API](https://developer.yahoo.com/fantasysports/guide/) — real rosters, real transactions |
+| `sleeper` | None — just a league ID          | Live [Sleeper public API](https://docs.sleeper.com/) — real rosters, read-only |
+| `generic` | None                              | Fully synthetic mock league (no real league behind it) |
+
+`generic` is the default when `--platform` is omitted on the draft
+CLIs (`snake-draft`, `salary-cap-draft`, `draft-prep`), so mock drafts
+and sanity checks work out of the box with no credentials at all. The
+weekly `fantasyfb` report CLI tracks a live roster over a season, so
+it currently only supports `yahoo`.
+
+See the [CLI reference](cli/index.md) — each draft CLI's page has a
+"Common flags" table with the exact `--platform` /
+`--sleeper-league-id` / `--num-teams` / `--mock-scoring` syntax and
+worked examples.
+
+## Sleeper
+
+Sleeper's read API is public — no developer app, no OAuth, no
+credentials. You only need the league's numeric ID, which is the
+number in its URL:
+
+```text
+https://sleeper.com/leagues/<sleeper_league_id>/...
+```
+
+```python
+import fantasyfb as fb
+league = fb.League(platform="sleeper", sleeper_league_id="123456789012345678", name="My Team")
+```
+
+`name=` matches either the team's Sleeper display name or the
+manager's Sleeper username — pass whichever `list_team_names` (or the
+league's Sleeper page) shows you. If you only manage one team in that
+league, you can omit `name` and it auto-selects.
+
+Sleeper asks integrators not to pull its full `/players/nfl` payload
+more than once a day; `fantasyfb` caches it locally to
+`~/.cache/fantasyfb/sleeper_players.json` for 24h, so this is
+transparent in normal use.
+
+Sleeper access is read-only — there's no equivalent to Yahoo's
+Read/Write scope for scripting add/drop actions.
+
+## Generic (no live league)
+
+For mock drafts or sanity-checking VORP/projections against a
+familiar scoring baseline, skip live league data entirely:
+
+```python
+import fantasyfb as fb
+league = fb.League(platform="generic", num_teams=12, mock_scoring="ppr")
+```
+
+This synthesizes `num_teams` empty rosters, a round-robin schedule,
+and pulls the real current NFL player pool — there's just no actual
+league or manager behind any of the teams. `mock_scoring` accepts
+`standard`, `half_ppr`, or `ppr`.
+
+## Yahoo
+
+`fantasyfb`'s weekly report CLI, and optionally the draft CLIs, read
+roster state, scoring, and league settings from the
 [Yahoo Fantasy API](https://developer.yahoo.com/fantasysports/guide/).
 That API requires OAuth 2.0 credentials tied to a Yahoo developer app.
 This is a one-time setup; once `oauth2.json` exists in your working
 directory, every CLI and API call refreshes its token automatically.
 
-## 1. Create a Yahoo developer app
+### 1. Create a Yahoo developer app
 
 1. Go to <https://developer.yahoo.com/apps/>.
 2. Sign in with the Yahoo account that owns (or co-manages) your
@@ -22,7 +88,7 @@ directory, every CLI and API call refreshes its token automatically.
    Secret** (Consumer Secret). Keep this page open — you'll paste both
    into your shell in a moment.
 
-## 2. Drop the credentials in `.env`
+### 2. Drop the credentials in `.env`
 
 `fantasyfb` reads `CONSUMER_KEY` and `CONSUMER_SECRET` from the
 environment (via `python-dotenv`). Create a `.env` file in the
@@ -39,7 +105,7 @@ CONSUMER_SECRET=<paste from Yahoo>
     credentials that grant full read (or read/write) access to your
     fantasy account.
 
-## 3. First-run interactive token grant
+### 3. First-run interactive token grant
 
 The first time you instantiate `fb.League(...)`, the underlying
 [`yahoo_oauth`](https://github.com/josuebrunel/yahoo-oauth) library
@@ -59,7 +125,7 @@ import fantasyfb as fb
 league = fb.League(name="My Team")   # first run -> browser pops open
 ```
 
-## 4. Picking the right team
+### 4. Picking the right team
 
 `name=` is your **Yahoo fantasy team name** (the one shown on your
 league home page), not your Yahoo display name or email. If you
@@ -69,7 +135,7 @@ this `League` is bound to.
 If you only have one team for the current season, you can omit `name`
 entirely and it'll auto-select.
 
-## Troubleshooting
+### Troubleshooting
 
 ??? note "`Please refresh the token` loop on every run"
     Delete `oauth2.json` and re-run — your refresh token expired
@@ -91,7 +157,7 @@ entirely and it'll auto-select.
     You're in more than one league this season. Pass `name=` with the
     exact team name from the league you want.
 
-## Further reading
+### Further reading
 
 - [`yahoo_oauth` library docs](https://github.com/josuebrunel/yahoo-oauth)
 - [Yahoo Fantasy API docs](https://developer.yahoo.com/fantasysports/guide/)
