@@ -36,9 +36,9 @@ theme:
         name: Switch to light mode
 
 nav:
-  - Home: index.md
+  - fantasyfb: index.md
   - Install: install.md
-  - Yahoo OAuth setup: yahoo-oauth.md
+  - Connecting a league: platforms.md
   - First weekly report: quickstart.md
   - CLI reference:
       - cli/index.md

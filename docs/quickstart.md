@@ -1,8 +1,8 @@
 # First weekly report
 
 End-to-end walkthrough: from `pip install` to a spreadsheet open in
-Excel. Assumes you've already finished the [Yahoo OAuth
-setup](yahoo-oauth.md) — `.env` populated, `oauth2.json` will be
+Excel. Assumes you've already finished [Yahoo OAuth
+setup](platforms.md#yahoo) — `.env` populated, `oauth2.json` will be
 generated on first run.
 
 ## 1. Install
@@ -20,7 +20,7 @@ spreadsheets all live here.
 ```bash
 mkdir ~/fantasy-2026
 cd ~/fantasy-2026
-# put .env here (see Yahoo OAuth setup)
+# put .env here (see Connecting a league > Yahoo)
 ```
 
 ## 3. Run the weekly CLI
