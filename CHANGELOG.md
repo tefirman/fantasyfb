@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-23
+
+Custom roster shapes for generic mock drafts, plus a fix for mock-opponent picks drifting from real-world ADP.
+
 ### Added
 - **`--roster-spots` on `snake-draft` and `salary-cap-draft`** (#59): lets a `--platform generic` mock draft use a custom roster shape (extra flex, superflex via `Q/W/R/T`, custom bench size, etc.) instead of the fixed default, via comma-separated `POSITION=COUNT` pairs (e.g. `QB=1,RB=2,W/R/T=2,Q/W/R/T=1,BN=6`) or an interactive prompt when omitted. `GenericClient` and `League(platform="generic")` now accept an optional `roster_spots` DataFrame directly; an unrecognized position code raises `ValueError` at construction time instead of failing downstream in `compute_vorp`/`Roster`.
 
