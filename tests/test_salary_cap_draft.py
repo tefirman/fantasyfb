@@ -370,6 +370,14 @@ class TestArgParser:
         assert args.nominate_limit == 10
         assert args.simadd_limit == 3
         assert args.season is None
+        assert args.roster_spots is None
+
+    def test_roster_spots_override(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--roster-spots", "QB=1,RB=2,Q/W/R/T=1,BN=6",
+        ])
+        assert args.roster_spots == "QB=1,RB=2,Q/W/R/T=1,BN=6"
 
     def test_salary_cap_and_min_bid_override(self):
         parser = build_arg_parser()

@@ -38,7 +38,7 @@ import argparse
 import os
 import sys
 from difflib import SequenceMatcher
-from typing import Iterable
+from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
@@ -290,6 +290,60 @@ def parse_payouts(raw, num_teams: int):
     return payouts
 
 
+def parse_roster_spots(raw: Optional[str]) -> Optional[pd.DataFrame]:
+    """Parse a "POS=count,POS=count,..." string (e.g. "QB=1,RB=2,W/R/T=2,
+    Q/W/R/T=1,BN=6") into the position/count DataFrame GenericClient's
+    roster_spots expects (see issue #59). Position codes aren't validated
+    here -- GenericClient.__init__ raises ValueError on an unrecognized
+    one, same error path whether the spec came from this CLI or the
+    Python API directly.
+
+    Returns:
+        None if `raw` is falsy (caller should fall back to the platform
+        default). Raises ValueError on malformed "POS=count" syntax or a
+        non-positive-integer count.
+    """
+    if not raw:
+        return None
+    positions, counts = [], []
+    for part in str(raw).split(","):
+        part = part.strip()
+        if "=" not in part:
+            raise ValueError(
+                f"Malformed roster spot {part!r} -- expected POSITION=COUNT"
+            )
+        pos, _, count = part.partition("=")
+        pos, count = pos.strip(), count.strip()
+        if not count.isdigit() or int(count) <= 0:
+            raise ValueError(
+                f"Malformed roster spot {part!r} -- count must be a positive whole number"
+            )
+        positions.append(pos)
+        counts.append(int(count))
+    return pd.DataFrame({"position": positions, "count": counts})
+
+
+def _prompt_roster_spots() -> Optional[pd.DataFrame]:
+    """Interactively prompt for a custom roster spec, same yes/no-then-detail
+    shape as the custom-draft-order prompt. Re-prompts on malformed input
+    rather than silently falling back, since a typo here should be caught
+    immediately rather than producing a confusing draft later."""
+    custom = input("Would you like to provide a custom roster spec? ")
+    if custom.strip().lower() not in ("yes", "y"):
+        return None
+    print(
+        "Enter roster spots as POSITION=COUNT pairs separated by commas, "
+        "e.g. QB=1,RB=2,WR=2,TE=1,W/R/T=1,K=1,DEF=1,BN=7 "
+        "(flex codes: W/T, W/R/T, Q/W/R/T for superflex)."
+    )
+    while True:
+        raw = input("Roster spec: ")
+        try:
+            return parse_roster_spots(raw)
+        except ValueError as exc:
+            print(exc)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="snake_draft",
@@ -333,6 +387,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="scoring system for a --platform generic mock "
                         "draft (default ppr). Prompted for interactively "
                         "if not given.")
+    p.add_argument("--roster-spots", default=None, dest="roster_spots",
+                   help="custom roster shape for a --platform generic mock "
+                        "draft, as comma-separated POSITION=COUNT pairs, "
+                        "e.g. 'QB=1,RB=2,WR=2,TE=1,W/R/T=1,K=1,DEF=1,BN=7' "
+                        "(flex codes: W/T, W/R/T, Q/W/R/T for superflex; "
+                        "see issue #59). Defaults to the fixed roster shape "
+                        "for --mock-scoring; prompted for interactively if "
+                        "not given.")
     p.add_argument("--fresh-draft", action="store_true", dest="fresh_draft",
                    help="ignore each team's current roster and treat every "
                         "player as available. Existing rosters are normally "
@@ -407,6 +469,11 @@ def main(argv=None) -> int:
 
     num_teams = args.num_teams
     mock_scoring = args.mock_scoring
+    try:
+        roster_spots = parse_roster_spots(args.roster_spots)
+    except ValueError as exc:
+        print(exc)
+        return 1
     if args.platform == "generic":
         if num_teams is None:
             num_teams = _prompt_int("How many teams?", 12)
@@ -414,6 +481,8 @@ def main(argv=None) -> int:
             mock_scoring = _prompt_choice(
                 "Scoring system?", ("standard", "half_ppr", "ppr"), "ppr",
             )
+        if roster_spots is None:
+            roster_spots = _prompt_roster_spots()
 
     # Lazy import so `--help` and the helper unit tests work without
     # Yahoo creds / yahoo_fantasy_api installed.
@@ -425,6 +494,7 @@ def main(argv=None) -> int:
         bestball=args.bestball, platform=args.platform,
         sleeper_league_id=args.sleeper_league_id,
         num_teams=num_teams or 12, mock_scoring=mock_scoring or "ppr",
+        roster_spots=roster_spots,
         nfl_provider=NflreadpyProvider(refresh=args.refresh_cache),
     )
     num_teams = len(league.teams)
