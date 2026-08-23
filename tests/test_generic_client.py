@@ -128,6 +128,39 @@ class TestGetLeagueConfig:
         assert config["settings"]["num_playoff_teams"] in (4, 6)
         assert config["settings"]["end_week"] >= config["settings"]["playoff_start_week"]
 
+    def test_custom_roster_spots_override_default_shape(self):
+        custom = pd.DataFrame({
+            "position": ["QB", "RB", "WR", "W/R/T", "Q/W/R/T", "BN"],
+            "count": [1, 2, 2, 2, 1, 6],
+        })
+        client = GenericClient(roster_spots=custom)
+        config = client.get_league_config()
+        counts = config["roster_spots"].set_index("position")["count"].to_dict()
+        assert counts == {"QB": 1, "RB": 2, "WR": 2, "W/R/T": 2, "Q/W/R/T": 1, "BN": 6}
+
+    def test_custom_roster_spots_does_not_affect_scoring(self):
+        custom = pd.DataFrame({"position": ["QB"], "count": [1]})
+        client = GenericClient(scoring="half_ppr", roster_spots=custom)
+        config = client.get_league_config()
+        assert config["scoring"]["Rec"] == 0.5
+
+    def test_unknown_position_code_raises(self):
+        bad = pd.DataFrame({"position": ["QB", "ZZ"], "count": [1, 1]})
+        try:
+            GenericClient(roster_spots=bad)
+            assert False, "expected ValueError"
+        except ValueError as exc:
+            assert "ZZ" in str(exc)
+
+    def test_none_falls_back_to_fixed_default(self):
+        client = GenericClient(roster_spots=None)
+        config = client.get_league_config()
+        counts = config["roster_spots"].set_index("position")["count"].to_dict()
+        assert counts == {
+            "QB": 1, "RB": 2, "WR": 2, "TE": 1,
+            "W/R/T": 1, "K": 1, "DEF": 1, "BN": 7,
+        }
+
 
 class TestGetTeamRosters:
     def test_always_empty(self):

@@ -30,6 +30,29 @@ from .platform_client import FantasyPlatformClient
 
 _FANTASY_POSITIONS = {"QB", "RB", "WR", "TE", "K"}
 
+# Position codes accepted in a custom roster_spots DataFrame: the base
+# positions plus Yahoo-style flex codes (see FLEX_ELIGIBILITY in
+# drafts/tools.py) plus bench/IR. Kept independent of drafts/tools to
+# avoid this module importing the drafts package.
+_VALID_ROSTER_POSITIONS = {
+    "QB", "RB", "WR", "TE", "K", "DEF",
+    "W/T", "W/R/T", "Q/W/R/T",
+    "BN", "IR",
+}
+
+
+def _validate_roster_spots(roster_spots: pd.DataFrame) -> None:
+    if not isinstance(roster_spots, pd.DataFrame) or list(roster_spots.columns[:2]) != ["position", "count"]:
+        raise ValueError(
+            "roster_spots must be a DataFrame with 'position' and 'count' columns"
+        )
+    unknown = sorted(set(roster_spots["position"]) - _VALID_ROSTER_POSITIONS)
+    if unknown:
+        raise ValueError(
+            f"Unknown roster_spots position code(s): {unknown}. "
+            f"Valid codes are: {sorted(_VALID_ROSTER_POSITIONS)}"
+        )
+
 # Fallback defaults when Sleeper's public /state/nfl endpoint (used for
 # get_current_week) is unreachable -- a mock draft has no real league to
 # ask instead, so "week 1" is as good a guess as any offline.
@@ -84,6 +107,7 @@ class GenericClient(FantasyPlatformClient):
         my_team_name: Optional[str] = None,
         season: Optional[int] = None,
         nfl_provider: Optional[NflreadpyProvider] = None,
+        roster_spots: Optional[pd.DataFrame] = None,
     ):
         """
         Args:
@@ -101,6 +125,15 @@ class GenericClient(FantasyPlatformClient):
             nfl_provider: NflreadpyProvider instance to source players
                 from. Defaults to a new instance; pass League's own
                 instance to share its parquet cache.
+            roster_spots: optional custom roster shape, as a DataFrame
+                with 'position'/'count' columns -- same schema as
+                `League.roster_spots` (base positions QB/RB/WR/TE/K/DEF,
+                flex codes W/T, W/R/T, Q/W/R/T, plus BN/IR). Lets callers
+                mock-draft against leagues with an extra flex, superflex
+                (Q/W/R/T), different bench sizes, etc. Defaults to None,
+                which falls back to the fixed shape from the chosen
+                `scoring` preset (see issue #59). Raises ValueError on an
+                unrecognized position code.
         """
         self.num_teams = num_teams
         self.scoring = scoring
@@ -109,6 +142,9 @@ class GenericClient(FantasyPlatformClient):
             datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         )
         self.nfl_provider = nfl_provider if nfl_provider is not None else NflreadpyProvider()
+        if roster_spots is not None:
+            _validate_roster_spots(roster_spots)
+        self.roster_spots = roster_spots
 
     def get_current_week(self) -> int:
         """
@@ -136,11 +172,15 @@ class GenericClient(FantasyPlatformClient):
 
         Returns:
             Dict with 'settings' (playoff_start_week, num_playoff_teams,
-            end_week), 'scoring', and 'roster_spots' keys.
+            end_week), 'scoring', and 'roster_spots' keys. 'roster_spots'
+            is the custom shape passed to __init__, if given, otherwise
+            the fixed default for the chosen scoring preset.
         """
         from ..configs import get_league_config as _get_config
 
         config = dict(_get_config(self.scoring) or _get_config("ppr"))
+        if self.roster_spots is not None:
+            config["roster_spots"] = self.roster_spots
         config["settings"] = {
             "playoff_start_week": _DEFAULT_PLAYOFF_START_WEEK,
             "num_playoff_teams": _DEFAULT_NUM_PLAYOFF_TEAMS,
