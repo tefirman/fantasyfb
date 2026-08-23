@@ -57,9 +57,11 @@ from .snake import (
     _enable_completion,
     _prompt_choice,
     _prompt_int,
+    _prompt_roster_spots,
     _set_completion_candidates,
     check_pick_name,
     parse_payouts,
+    parse_roster_spots,
 )
 from .tools import (
     _bench_slots_from_spec,
@@ -270,6 +272,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="scoring system for a --platform generic mock "
                         "draft (default ppr). Prompted for interactively "
                         "if not given.")
+    p.add_argument("--roster-spots", default=None, dest="roster_spots",
+                   help="custom roster shape for a --platform generic mock "
+                        "draft, as comma-separated POSITION=COUNT pairs, "
+                        "e.g. 'QB=1,RB=2,WR=2,TE=1,W/R/T=1,K=1,DEF=1,BN=7' "
+                        "(flex codes: W/T, W/R/T, Q/W/R/T for superflex; "
+                        "see issue #59). Defaults to the fixed roster shape "
+                        "for --mock-scoring; prompted for interactively if "
+                        "not given.")
     p.add_argument("--fresh-draft", action="store_true", dest="fresh_draft",
                    help="ignore each team's current roster and treat every "
                         "player as available. Existing rosters are normally "
@@ -353,6 +363,11 @@ def main(argv=None) -> int:
 
     num_teams_arg = args.num_teams
     mock_scoring = args.mock_scoring
+    try:
+        roster_spots = parse_roster_spots(args.roster_spots)
+    except ValueError as exc:
+        print(exc)
+        return 1
     if args.platform == "generic":
         if num_teams_arg is None:
             num_teams_arg = _prompt_int("How many teams?", 12)
@@ -360,6 +375,8 @@ def main(argv=None) -> int:
             mock_scoring = _prompt_choice(
                 "Scoring system?", ("standard", "half_ppr", "ppr"), "ppr",
             )
+        if roster_spots is None:
+            roster_spots = _prompt_roster_spots()
 
     # Lazy import so --help and helper unit tests work without Yahoo creds.
     import fantasyfb as fb
@@ -369,6 +386,7 @@ def main(argv=None) -> int:
         name=args.team, num_sims=10000, season=args.season,
         platform=args.platform, sleeper_league_id=args.sleeper_league_id,
         num_teams=num_teams_arg or 12, mock_scoring=mock_scoring or "ppr",
+        roster_spots=roster_spots,
         nfl_provider=NflreadpyProvider(refresh=args.refresh_cache),
     )
     num_teams = len(league.teams)

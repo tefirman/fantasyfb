@@ -18,6 +18,7 @@ from fantasyfb.drafts.snake import (
     build_arg_parser,
     main,
     parse_payouts,
+    parse_roster_spots,
     snake_pick_slot,
 )
 
@@ -90,6 +91,34 @@ class TestParsePayouts:
         assert "standard payouts" in capsys.readouterr().out
 
 
+class TestParseRosterSpots:
+    def test_none_when_blank(self):
+        assert parse_roster_spots(None) is None
+        assert parse_roster_spots("") is None
+
+    def test_parses_position_count_pairs(self):
+        df = parse_roster_spots("QB=1,RB=2,W/R/T=2,Q/W/R/T=1,BN=6")
+        assert df["position"].tolist() == ["QB", "RB", "W/R/T", "Q/W/R/T", "BN"]
+        assert df["count"].tolist() == [1, 2, 2, 1, 6]
+
+    def test_strips_whitespace(self):
+        df = parse_roster_spots(" QB = 1 , RB = 2 ")
+        assert df["position"].tolist() == ["QB", "RB"]
+        assert df["count"].tolist() == [1, 2]
+
+    def test_missing_equals_raises(self):
+        with pytest.raises(ValueError, match="POSITION=COUNT"):
+            parse_roster_spots("QB1,RB=2")
+
+    def test_non_positive_count_raises(self):
+        with pytest.raises(ValueError, match="positive whole number"):
+            parse_roster_spots("QB=0")
+
+    def test_non_numeric_count_raises(self):
+        with pytest.raises(ValueError, match="positive whole number"):
+            parse_roster_spots("QB=abc")
+
+
 class TestArgParser:
     def test_requires_teamname_and_adp(self):
         parser = build_arg_parser()
@@ -106,6 +135,15 @@ class TestArgParser:
         assert args.limit_per_position == 5
         assert args.nearest_window == 2
         assert args.season is None
+        assert args.roster_spots is None
+
+    def test_roster_spots_override(self):
+        parser = build_arg_parser()
+        args = parser.parse_args([
+            "--team", "X", "--adp", "ADP.csv",
+            "--roster-spots", "QB=1,RB=2,Q/W/R/T=1,BN=6",
+        ])
+        assert args.roster_spots == "QB=1,RB=2,Q/W/R/T=1,BN=6"
 
     def test_season_override(self):
         """--season threads through to League so pre-draft runs can

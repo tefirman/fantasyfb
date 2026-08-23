@@ -75,6 +75,7 @@ class League:
         client: FantasyPlatformClient = None,
         num_teams: int = 12,
         mock_scoring: str = "ppr",
+        roster_spots: pd.DataFrame = None,
     ):
         """
         Initializes a League object using the parameters provided and class functions defined below.
@@ -98,6 +99,10 @@ class League:
             num_teams (int, optional): number of teams to synthesize, only used when platform="generic", defaults to 12.
             mock_scoring (str, optional): generic scoring preset ("standard", "half_ppr", or "ppr"),
                 only used when platform="generic", defaults to "ppr".
+            roster_spots (pd.DataFrame, optional): custom roster shape (position/count columns,
+                same schema as League.roster_spots -- base positions plus flex codes W/T, W/R/T,
+                Q/W/R/T, plus BN/IR), only used when platform="generic". Defaults to None, which
+                falls back to the fixed roster shape for mock_scoring (see issue #59).
         """
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         """ Year of the most recent season """
@@ -120,6 +125,7 @@ class League:
             self.client = GenericClient(
                 num_teams=num_teams, scoring=mock_scoring, my_team_name=name,
                 season=self.season, nfl_provider=self.nfl_provider,
+                roster_spots=roster_spots,
             )
             self.name = name
             self.lg_id = None
