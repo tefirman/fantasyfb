@@ -63,6 +63,29 @@ and pulls the real current NFL player pool — there's just no actual
 league or manager behind any of the teams. `mock_scoring` accepts
 `standard`, `half_ppr`, or `ppr`.
 
+By default, rosters follow a fixed shape (1 QB, 2 RB, 2 WR, 1 TE, 1
+FLEX, 1 K, 1 DEF, 7 BN). Pass `roster_spots` as a `position`/`count`
+DataFrame to customize it — extra flex spots, superflex (`Q/W/R/T`),
+a bigger bench, etc.:
+
+```python
+import pandas as pd
+import fantasyfb as fb
+
+roster_spots = pd.DataFrame({
+    "position": ["QB", "RB", "WR", "TE", "W/R/T", "Q/W/R/T", "BN"],
+    "count":    [1,    2,    2,    1,    2,        1,         6],
+})
+league = fb.League(platform="generic", num_teams=12, roster_spots=roster_spots)
+```
+
+Valid position codes are the base positions (`QB`, `RB`, `WR`, `TE`,
+`K`, `DEF`), the flex codes `W/T`, `W/R/T`, `Q/W/R/T`, and `BN`/`IR`.
+An unrecognized code raises `ValueError` at construction time. On the
+draft CLIs, pass the same shape via `--roster-spots` (see the
+[CLI reference](cli/index.md)) or answer the interactive prompt when
+it's omitted.
+
 ## Yahoo
 
 `fantasyfb`'s weekly report CLI, and optionally the draft CLIs, read
