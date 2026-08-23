@@ -590,3 +590,108 @@ class TestRandomPick:
             pool_size=2, rng=np.random.default_rng(0),
         )
         assert name in {"A", "B"}
+
+    def test_adp_window_excludes_far_off_vorp_favorite(
+        self, standard_roster_spec,
+    ):
+        """The motivating case from issue #58: a top-VORP player whose ADP
+        is many rounds away from the current pick shouldn't be eligible
+        just because raw VORP would have put them at the top of a
+        top-VORP pool. With a tight window and a large pool_size (so the
+        old top-VORP-first pool would have included them), the far-ADP
+        player should never be picked at pick 1.
+        """
+        pool = pd.DataFrame([
+            _make_projection(
+                "ModelFavorite", "RB", 40.0, vorp_flex_per_game=20.0, adp=45.0,
+            ),
+        ] + [
+            _make_projection(
+                f"InWindow{i:02d}", "RB", 20.0 - i,
+                vorp_flex_per_game=5.0 - i * 0.1, adp=float(i + 1),
+            )
+            for i in range(10)
+        ])
+        pool["fantasy_team"] = pd.NA
+        picks = {
+            random_pick(
+                pool, team_name="My Team", roster_spec=standard_roster_spec,
+                pool_size=8, pick_overall=1, num_teams=12, window_rounds=2,
+                rng=np.random.default_rng(seed),
+            )
+            for seed in range(50)
+        }
+        assert "ModelFavorite" not in picks
+
+    def test_adp_window_still_allows_pick_without_windowing(
+        self, standard_roster_spec,
+    ):
+        """Sanity check on the same board: without pick_overall/num_teams
+        (old call signature), the far-ADP top-VORP player is eligible,
+        confirming the exclusion above comes from the window and not from
+        some other filter."""
+        pool = pd.DataFrame([
+            _make_projection(
+                "ModelFavorite", "RB", 40.0, vorp_flex_per_game=20.0, adp=45.0,
+            ),
+        ] + [
+            _make_projection(
+                f"InWindow{i:02d}", "RB", 20.0 - i,
+                vorp_flex_per_game=5.0 - i * 0.1, adp=float(i + 1),
+            )
+            for i in range(10)
+        ])
+        pool["fantasy_team"] = pd.NA
+        picks = {
+            random_pick(
+                pool, team_name="My Team", roster_spec=standard_roster_spec,
+                pool_size=8, rng=np.random.default_rng(seed),
+            )
+            for seed in range(50)
+        }
+        assert "ModelFavorite" in picks
+
+    def test_adp_window_falls_back_to_top_vorp_when_window_empty(
+        self, standard_roster_spec,
+    ):
+        """If nothing on the board has ADP inside the window (e.g. very
+        early picks against a board whose cheapest ADP is deep), random_pick
+        should fall back to the top-VORP pool rather than raising."""
+        pool = pd.DataFrame([
+            _make_projection("Deep", "RB", 20.0, vorp_flex_per_game=5.0, adp=300.0),
+        ])
+        pool["fantasy_team"] = pd.NA
+        name = random_pick(
+            pool, team_name="My Team", roster_spec=standard_roster_spec,
+            pool_size=8, pick_overall=1, num_teams=12, window_rounds=2,
+            rng=np.random.default_rng(0),
+        )
+        assert name == "Deep"
+
+    def test_adp_window_keeps_missing_adp_players_eligible(
+        self, standard_roster_spec,
+    ):
+        """Deep-depth players with no ADP at all should still be eligible
+        within a windowed pool -- the window only screens out players whose
+        *known* ADP places them well outside the current range."""
+        pool = pd.DataFrame([
+            _make_projection(
+                "NoADP", "RB", 20.0, vorp_flex_per_game=20.0, adp=np.nan,
+            ),
+        ] + [
+            _make_projection(
+                f"InWindow{i:02d}", "RB", 10.0 - i,
+                vorp_flex_per_game=2.0 - i * 0.1, adp=float(i + 1),
+            )
+            for i in range(5)
+        ])
+        pool["fantasy_team"] = pd.NA
+        picks = {
+            random_pick(
+                pool, team_name="My Team", roster_spec=standard_roster_spec,
+                pool_size=8, pick_overall=1, num_teams=12, window_rounds=2,
+                rng=np.random.default_rng(seed),
+            )
+            for seed in range(50)
+        }
+        assert "NoADP" in picks
