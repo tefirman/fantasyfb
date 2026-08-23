@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--roster-spots` on `snake-draft` and `salary-cap-draft`** (#59): lets a `--platform generic` mock draft use a custom roster shape (extra flex, superflex via `Q/W/R/T`, custom bench size, etc.) instead of the fixed default, via comma-separated `POSITION=COUNT` pairs (e.g. `QB=1,RB=2,W/R/T=2,Q/W/R/T=1,BN=6`) or an interactive prompt when omitted. `GenericClient` and `League(platform="generic")` now accept an optional `roster_spots` DataFrame directly; an unrecognized position code raises `ValueError` at construction time instead of failing downstream in `compute_vorp`/`Roster`.
+
+### Fixed
+- **`random`/`random til me` drafting far ahead of real-world ADP** (#58): the candidate pool for simulated opponents was ranked top-VORP-first, with ADP only reweighting sampling within that already VORP-biased shortlist. `random_pick` now windows the candidate pool to players within `window_rounds` of the current overall pick (mirroring the `nearest` view) before ranking by need-adjusted VORP, falling back to the old top-VORP pool when `pick_overall`/`num_teams` aren't supplied or the window is empty.
+
 ## [0.7.0] — 2026-08-18
 
 Multi-platform league support: `SleeperClient` and a fully synthetic `generic` mock mode join Yahoo behind a shared `FantasyPlatformClient` interface, with `--platform` now available across all three draft CLIs. Also includes dual (position + flex) VORP, `simadd` win/earnings-delta evaluation during live drafts, and a rebranded navy/green logo.
