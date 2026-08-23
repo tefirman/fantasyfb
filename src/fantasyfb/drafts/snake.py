@@ -369,10 +369,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "to 'underdog'. Switches sim and simadd to use bestball_sims.")
     p.add_argument("--nearest-window", type=int, default=2,
                    dest="nearest_window",
-                   help="ADP window in rounds for 'nearest' view")
+                   help="ADP window in rounds for the 'nearest' view and "
+                        "for the 'random' command's candidate pool")
     p.add_argument("--random-pool-size", type=int, default=8,
                    dest="random_pool_size",
-                   help="size of the top-VORP pool the 'random' command "
+                   help="size of the top-VORP pool (within the ADP window, "
+                        "see --nearest-window) the 'random' command "
                         "samples from (default 8). Smaller = more "
                         "deterministic auto-picks; larger = more chaos.")
     p.add_argument("--reversal-round", type=int, default=0,
@@ -687,6 +689,8 @@ def main(argv=None) -> int:
                 roster_spec=league.roster_spots,
                 exclude=exclude,
                 pool_size=args.random_pool_size,
+                pick_overall=pick_num + 1, num_teams=num_teams,
+                window_rounds=args.nearest_window,
             )
             print(f"Auto-drafting {auto_name} for {team_name}")
             _apply_pick(league, board, auto_name, team_name)
@@ -715,6 +719,8 @@ def main(argv=None) -> int:
                     roster_spec=league.roster_spots,
                     exclude=exclude,
                     pool_size=args.random_pool_size,
+                    pick_overall=pick_num + 1, num_teams=num_teams,
+                    window_rounds=args.nearest_window,
                     rng=rng,
                 )
                 print(f"  Auto-drafting {auto_name} for {next_team}")

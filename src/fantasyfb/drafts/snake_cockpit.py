@@ -250,6 +250,9 @@ def random_pick(
     roster_spec,
     exclude: Iterable[str] = (),
     pool_size: int = 8,
+    pick_overall: Optional[int] = None,
+    num_teams: Optional[int] = None,
+    window_rounds: int = 2,
     rng: Optional[np.random.Generator] = None,
 ) -> str:
     """Auto-draft a sensible pick for ``team_name`` from the available pool.
@@ -260,13 +263,30 @@ def random_pick(
     rounds). Returns the picked player's name -- the caller applies the
     pick the same way it would for a typed name.
 
-    The candidate pool is need-adjusted to avoid pathological auto-picks:
-    the on-the-clock team's roster is rebuilt from the board so positions
-    they've already filled get demoted, then the top ``pool_size``
-    available players by adjusted VORP form the pool -- this keeps the
-    pool sensible (e.g. never proposes a 3rd QB) regardless of market ADP.
+    The candidate pool is ADP-windowed first, need-adjusted-VORP second --
+    this is what keeps auto-picked opponents from taking players well
+    ahead of their real-world ADP (e.g. a round-1 model-favorite the
+    market has going in round 3). When ``pick_overall`` and ``num_teams``
+    are both given, the pool is restricted to available players whose ADP
+    falls within ``window_rounds`` rounds of the current overall pick (the
+    same window ``view_nearest`` uses for its planning view), and the top
+    ``pool_size`` of *those* by need-adjusted VORP form the pool. Players
+    missing ADP entirely (deep depth) are always included in the window so
+    boards with thin ADP coverage don't run dry -- need-adjusted VORP and
+    the sampling weights below still keep them in check.
 
-    Within that pool, sampling weight blends the model's opinion (VORP)
+    Without ``pick_overall``/``num_teams`` (or when the window is empty),
+    falls back to the top ``pool_size`` available players by adjusted VORP
+    across the whole board -- the original cross-position behavior, kept
+    for callers that don't track pick position and for `--fresh-draft`
+    style boards with sparse ADP.
+
+    The on-the-clock team's roster is rebuilt from the board so positions
+    they've already filled get demoted before either pool is built -- this
+    keeps the pool sensible (e.g. never proposes a 3rd QB) regardless of
+    market ADP.
+
+    Within the pool, sampling weight blends the model's opinion (VORP)
     with the market's (ADP): weight = vorp_adjusted * (1 / adp), so a
     player needs to look good by both signals to get picked often. A
     model-favorite the market has cooled on, or a market darling the
@@ -298,7 +318,22 @@ def random_pick(
         "vorp_adjusted", ascending=False, na_position="last",
     )
 
-    pool = avail.head(pool_size)
+    candidates = avail
+    if (
+        pick_overall is not None
+        and num_teams is not None
+        and "adp" in avail.columns
+        and avail["adp"].notna().any()
+    ):
+        span = window_rounds * num_teams
+        lo, hi = pick_overall - span, pick_overall + span
+        windowed = avail[
+            avail["adp"].isna() | avail["adp"].between(lo, hi)
+        ]
+        if not windowed.empty:
+            candidates = windowed
+
+    pool = candidates.head(pool_size)
     if pool.empty:
         raise ValueError(
             f"No available players to auto-pick for {team_name!r}."
