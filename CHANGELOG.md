@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-08-24
+
+### Fixed
+- **`current_team` stuck on a player's previous team during the offseason/preseason** (#65): `PlayerDataManager.add_depth_charts` already fetched nflreadpy's live depth chart, which carries the correct `current_team`, but only pulled its `string` (depth-chart rank) column out, leaving `current_team` to come from the season-locked roster snapshot everywhere. That snapshot doesn't reflect a trade/signing until nflverse publishes the new season's roster file, well after free agency, so a player who changed teams (e.g. Stefon Diggs to WAS in 2026) still showed their old team (NE) on the draft board with no current-season games played yet to correct it. The name-based fallback join made this worse by requiring `current_team` to already match, which can never be true for exactly the players it exists to catch. `current_team` from the depth chart now overrides the stale value on both the id-based and name-based join paths; the name join is deduped on `(name, position)` first to avoid fanning out rows on rare same-name collisions.
+
 ## [0.8.0] — 2026-08-23
 
 Custom roster shapes for generic mock drafts, plus a fix for mock-opponent picks drifting from real-world ADP.
