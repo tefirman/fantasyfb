@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fantasyfb"
-version = "0.8.0"
+version = "0.8.1"
 description = "Fantasy football league simulation and optimization tool."
 readme = "README.md"
 license = { text = "MIT" }
