@@ -199,6 +199,114 @@ class TestAddRosterPercentages:
         assert by_id.loc[2, "pct_rostered"] == 0.0
 
 
+class FakeProviderWithDepthCharts:
+    """Wraps a real provider but stubs get_depth_charts with fixed data,
+    so tests can control team assignments deterministically instead of
+    depending on whatever trades happened to be live when the test ran.
+    """
+
+    def __init__(self, real_provider, depth_charts: pd.DataFrame):
+        self._real = real_provider
+        self._depth_charts = depth_charts
+
+    def get_depth_charts(self):
+        return self._depth_charts
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+class TestAddDepthCharts:
+    """Regression coverage for issue #65: current_team must reflect the
+    live depth chart, not the season-locked roster snapshot, so a player
+    who changed teams in the offseason doesn't show up on their old team
+    before any current-season stats exist.
+    """
+
+    def test_id_match_overrides_stale_current_team(self, provider) -> None:
+        manager = PlayerDataManager(
+            client=None, season=2026, current_week=1,
+            nfl_provider=FakeProviderWithDepthCharts(provider, pd.DataFrame({
+                "player_id_sr": ["diggs123"],
+                "name": ["Stefon Diggs"],
+                "position": ["WR"],
+                "current_team": ["WAS"],
+                "string": [1.0],
+            })),
+        )
+        players = pd.DataFrame({
+            "player_id_sr": ["diggs123"],
+            "name": ["Stefon Diggs"],
+            "position": ["WR"],
+            "current_team": ["NE"],  # stale, from last season's roster snapshot
+            "pct_rostered": [0.5],
+            "fantasy_team": [None],
+            "status": [""],
+            "until": [None],
+        })
+        result = manager.add_depth_charts(players, week=1)
+        assert result.iloc[0]["current_team"] == "WAS"
+
+    def test_name_fallback_overrides_stale_current_team(self, provider) -> None:
+        # No player_id_sr overlap, so this only resolves through the
+        # name+position fallback join -- which used to also require
+        # current_team to already match, defeating it for exactly the
+        # players who changed teams.
+        manager = PlayerDataManager(
+            client=None, season=2026, current_week=1,
+            nfl_provider=FakeProviderWithDepthCharts(provider, pd.DataFrame({
+                "player_id_sr": [None],
+                "name": ["Stefon Diggs"],
+                "position": ["WR"],
+                "current_team": ["WAS"],
+                "string": [1.0],
+            })),
+        )
+        players = pd.DataFrame({
+            "player_id_sr": ["not-in-depth-chart"],
+            "name": ["Stefon Diggs"],
+            "position": ["WR"],
+            "current_team": ["NE"],
+            "pct_rostered": [0.5],
+            "fantasy_team": [None],
+            "status": [""],
+            "until": [None],
+        })
+        result = manager.add_depth_charts(players, week=1)
+        assert result.iloc[0]["current_team"] == "WAS"
+        assert result.iloc[0]["string"] == 1.0
+
+    def test_duplicate_name_position_in_depth_chart_does_not_fan_out_rows(
+        self, provider
+    ) -> None:
+        # Rare but real (e.g. two same-named backups at the same
+        # position on different teams) -- the name-fallback join must not
+        # multiply rows in players when the depth chart has more than one
+        # match for a given (name, position).
+        manager = PlayerDataManager(
+            client=None, season=2026, current_week=1,
+            nfl_provider=FakeProviderWithDepthCharts(provider, pd.DataFrame({
+                "player_id_sr": [None, None],
+                "name": ["Jaylon Jones", "Jaylon Jones"],
+                "position": ["CB", "CB"],
+                "current_team": ["IND", "SEA"],
+                "string": [1.0, 2.0],
+            })),
+        )
+        players = pd.DataFrame({
+            "player_id_sr": ["unmatched-id"],
+            "name": ["Jaylon Jones"],
+            "position": ["CB"],
+            "current_team": ["IND"],
+            "pct_rostered": [0.1],
+            "fantasy_team": [None],
+            "status": [""],
+            "until": [None],
+        })
+        result = manager.add_depth_charts(players, week=1)
+        assert len(result) == 1
+
+
 class TestRemoteCsvOfflineFallback:
     """add_injuries fetches a CSV straight from raw.githubusercontent.com
     with no caching and, before this fix, no fallback -- unlike every
