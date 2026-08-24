@@ -320,20 +320,38 @@ class PlayerDataManager:
         # any non-current-season analysis. Today's depth chart is the best
         # info we have; trust it.
         depth = self.nfl_provider.get_depth_charts()
-        id_join = depth.dropna(subset=["player_id_sr"])[["player_id_sr", "string"]]
+        id_join = depth.dropna(subset=["player_id_sr"])[
+            ["player_id_sr", "string", "current_team"]
+        ].rename(columns={"current_team": "current_team_depth"})
         players = players.merge(id_join, on="player_id_sr", how="left")
+        matched_by_id = players["current_team_depth"].notnull()
+        players.loc[matched_by_id, "current_team"] = players.loc[
+            matched_by_id, "current_team_depth"
+        ]
+        del players["current_team_depth"]
 
         still_unset = players["string"].isnull()
         if still_unset.any():
+            # Join on name/position only here, not current_team -- current_team
+            # is exactly what's stale for a player who changed teams before
+            # nflverse's season roster snapshot caught up, so requiring it to
+            # already match would defeat this fallback for those players.
+            # Dedupe on (name, position) first since depth charts can have
+            # rare same-name/same-position collisions across teams, and a
+            # duplicated join key would fan out rows in players.
             name_join = depth[["name", "current_team", "position", "string"]].rename(
-                columns={"string": "string_name"}
-            )
+                columns={"string": "string_name", "current_team": "current_team_name"}
+            ).drop_duplicates(subset=["name", "position"], keep="first")
             players = players.merge(
-                name_join, on=["name", "current_team", "position"], how="left"
+                name_join, on=["name", "position"], how="left"
             )
             players.loc[still_unset, "string"] = players.loc[still_unset, "string_name"]
-            if "string_name" in players.columns:
-                del players["string_name"]
+            players.loc[still_unset, "current_team"] = players.loc[
+                still_unset, "current_team_name"
+            ].combine_first(players.loc[still_unset, "current_team"])
+            for col in ("string_name", "current_team_name"):
+                if col in players.columns:
+                    del players[col]
 
         # Surface unmapped fantasy-relevant players so name drift
         # (especially for newly-signed players) gets flagged early.
