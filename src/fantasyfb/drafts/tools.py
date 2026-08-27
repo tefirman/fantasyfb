@@ -27,6 +27,7 @@ Public API:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence
 
@@ -36,6 +37,25 @@ import pandas as pd
 
 _BASE_POSITIONS: tuple[str, ...] = ("QB", "RB", "WR", "TE", "K", "DEF")
 _SEASON_GAMES: int = 17
+
+# Generational suffixes FantasyPros-style ADP exports append to player
+# names ("James Cook III", "Travis Etienne Jr.") that the projections'
+# nflreadpy-sourced `name` column generally omits ("James Cook"). Left
+# alone they break the exact-string join in merge_adp, silently dropping
+# ADP for ~two dozen players a season including early-round starters.
+_NAME_SUFFIX_RE = re.compile(
+    r"\s+(?:jr|sr|ii|iii|iv|v)\.?$", flags=re.IGNORECASE
+)
+
+
+def _normalize_name_key(names: pd.Series) -> pd.Series:
+    """Build a join-key copy of a name column: trailing generational
+    suffix stripped, whitespace collapsed, lowercased. Never overwrites
+    the display name -- callers merge on this and keep `name` as-is."""
+    key = names.astype(str).str.strip()
+    key = key.str.replace(_NAME_SUFFIX_RE, "", regex=True)
+    key = key.str.replace(r"\s+", " ", regex=True).str.strip().str.lower()
+    return key
 
 
 # Flex slot encoding used by Yahoo league configs throughout the
@@ -553,10 +573,23 @@ def merge_adp(
                    .rank(method="min", ascending=False))
         out.loc[pool_mask, "vorp_rank"] = vranked.astype("Int64")
 
-    merged = out.merge(
-        adp_df[["name", "position", "adp"]],
-        how="left", on=["name", "position"],
+    # Join on a suffix-normalized name key rather than the raw name so
+    # "James Cook" (projections) matches "James Cook III" (ADP export).
+    # The key is scratch -- both display names survive untouched.
+    out["_name_key"] = _normalize_name_key(out["name"])
+    adp_keyed = adp_df[["name", "position", "adp"]].copy()
+    adp_keyed["_name_key"] = _normalize_name_key(adp_keyed["name"])
+    # Suffix-stripping can collapse two ADP rows onto one key (a real
+    # namesake, or a source that lists both "Name" and "Name Jr."). Keep
+    # the earliest pick so a duplicate can't fan out projection rows.
+    adp_keyed = (
+        adp_keyed.sort_values("adp")
+        .drop_duplicates(subset=["_name_key", "position"], keep="first")
     )
+    merged = out.merge(
+        adp_keyed[["_name_key", "position", "adp"]],
+        how="left", on=["_name_key", "position"],
+    ).drop(columns="_name_key")
     merged["adp_round"] = np.ceil(merged["adp"] / max(num_teams, 1))
     rank_for_value = "vorp_rank" if has_vorp else "proj_rank"
     merged["adp_value"] = merged["adp"] - merged[rank_for_value].astype("Float64")

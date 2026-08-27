@@ -627,6 +627,77 @@ class TestADP:
         rb00 = merged.loc[merged["name"] == "RB00"].iloc[0]
         assert rb00["adp_value"] == pytest.approx(10.0 - rb00["proj_rank"])
 
+    def test_merge_matches_across_generational_suffix(self, small_pool):
+        """FantasyPros ADP exports carry generational suffixes ("James
+        Cook III") that the projections' name column omits ("James
+        Cook"). The join must still connect them -- otherwise every
+        suffixed player silently gets NaN ADP and reads as undraftable
+        depth."""
+        pool = small_pool.copy()
+        pool.loc[pool["name"] == "RB05", "name"] = "James Cook"
+        adp_df = pd.DataFrame({
+            "name":     ["James Cook III"],
+            "position": ["RB"],
+            "adp":      [7.5],
+        })
+        merged = merge_adp(pool, adp_df, num_teams=12)
+        row = merged.loc[merged["name"] == "James Cook"].iloc[0]
+        assert row["adp"] == pytest.approx(7.5)
+        # Display name is untouched -- only the join key was normalized.
+        assert "James Cook" in set(merged["name"])
+        assert "James Cook III" not in set(merged["name"])
+
+    def test_merge_suffix_match_is_case_and_punctuation_insensitive(
+        self, small_pool,
+    ):
+        pool = small_pool.copy()
+        pool.loc[pool["name"] == "RB07", "name"] = "Travis Etienne"
+        adp_df = pd.DataFrame({
+            "name":     ["Travis Etienne Jr"],  # no period
+            "position": ["RB"],
+            "adp":      [38.0],
+        })
+        merged = merge_adp(pool, adp_df, num_teams=12)
+        row = merged.loc[merged["name"] == "Travis Etienne"].iloc[0]
+        assert row["adp"] == pytest.approx(38.0)
+
+    def test_merge_does_not_fan_out_on_colliding_suffix_keys(
+        self, small_pool,
+    ):
+        """If the ADP frame lists both "Name" and "Name Jr." at one
+        position, the suffix-normalized join key collides. The merge
+        must keep one row (earliest pick), not duplicate the projection
+        row."""
+        pool = small_pool.copy()
+        pool.loc[pool["name"] == "WR05", "name"] = "Michael Pittman"
+        adp_df = pd.DataFrame({
+            "name":     ["Michael Pittman Jr.", "Michael Pittman"],
+            "position": ["WR", "WR"],
+            "adp":      [111.0, 250.0],
+        })
+        merged = merge_adp(pool, adp_df, num_teams=12)
+        rows = merged.loc[merged["name"] == "Michael Pittman"]
+        assert len(rows) == 1
+        assert rows["adp"].iloc[0] == pytest.approx(111.0)
+
+    def test_merge_does_not_strip_non_suffix_trailing_tokens(
+        self, small_pool,
+    ):
+        """"Sr."/"Jr." etc. are stripped; an ordinary trailing name
+        token is not. A projections "Amon-Ra St. Brown" must not match
+        an unrelated "Amon-Ra St." in ADP."""
+        pool = small_pool.copy()
+        pool.loc[pool["name"] == "WR07", "name"] = "Odell Beckham"
+        adp_df = pd.DataFrame({
+            "name":     ["Odell Beckham Green"],
+            "position": ["WR"],
+            "adp":      [12.0],
+        })
+        merged = merge_adp(pool, adp_df, num_teams=12)
+        assert pd.isna(
+            merged.loc[merged["name"] == "Odell Beckham", "adp"].iloc[0]
+        )
+
 
 # --------------------------------------------------------------------- #
 # Mock draft simulator
