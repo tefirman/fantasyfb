@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-08-26
+
+### Fixed
+- **ADP merge silently dropped every suffixed player name** (#68): `merge_adp` joined projections onto ADP with an exact string match on `[name, position]`. FantasyPros-style ADP exports append generational suffixes (`James Cook III`, `Travis Etienne Jr.`) that the projections' nflreadpy-sourced `name` column omits, so ~two dozen players a season, including early-round starters like James Cook (RB5), Kenneth Walker III (RB12), and Travis Etienne Jr. (RB20), silently got `NaN` ADP and were treated as undraftable depth. A new `_normalize_name_key` helper builds a suffix-stripped, whitespace-collapsed, lowercased join key used for the merge only; both display names are preserved untouched. The ADP side is deduped on that key (earliest pick wins) so a collapsed namesake pair can't fan out a projection row, and the suffix regex is anchored so an ordinary trailing name token is never stripped.
+
 ## [0.8.1] — 2026-08-24
 
 ### Fixed
