@@ -50,8 +50,11 @@ class FantasyExcelExporter:
         
         for idx, col in enumerate(df.columns):
             series = df[col]
+            value_len = series.astype(object).map(
+                lambda v: 0 if pd.isna(v) else len(str(v))
+            ).max()
             max_len = min(
-                max((series.astype(str).map(len).max(), len(str(series.name)))) + 1, 50
+                max((value_len, len(str(series.name)))) + 1, 50
             )
             
             # Apply appropriate formatting based on column name
