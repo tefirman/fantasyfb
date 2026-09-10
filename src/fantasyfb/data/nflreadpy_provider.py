@@ -250,13 +250,48 @@ class NflreadpyProvider(NFLDataProvider):
         if refresh:
             nfl.clear_cache()
 
+    @staticmethod
+    def _load_player_stats_seasons(seasons: list[int]) -> pd.DataFrame:
+        """Load per-season player-stats parquets, dropping any season whose
+        file isn't published upstream yet instead of raising.
+
+        _clamp_seasons already trims seasons past nfl.get_current_season(),
+        but that value is calendar-driven and routinely runs ahead of the
+        nflverse release: once it's September nfl.get_current_season()
+        returns the new year, yet stats_player_week_<year>.parquet doesn't
+        exist until games are played, so the download 404s (surfaced as
+        ConnectionError, or ValueError for a missing file). That's an
+        expected pre-season state, not a bug -- skip the season and warn,
+        matching how _try_load_depth_charts and the clamped callers already
+        degrade.
+        """
+        frames: list[pd.DataFrame] = []
+        for season in seasons:
+            try:
+                frames.append(
+                    _load_pandas(
+                        nfl.load_player_stats, per_season=True, seasons=[season]
+                    )
+                )
+            except (ConnectionError, ValueError):
+                warnings.warn(
+                    f"Skipping player stats for season {season}: nflverse "
+                    f"parquet not available (download failed).",
+                    stacklevel=3,
+                )
+        if not frames:
+            raise ValueError(
+                f"No player-stats seasons could be loaded for {seasons}."
+            )
+        return pd.concat(frames, ignore_index=True)
+
     def get_player_stats(self, start: int, finish: int) -> pd.DataFrame:
         seasons = _clamp_seasons(
             _years_in_range(start, finish),
             nfl.get_current_season(),
             "player stats",
         )
-        raw = _load_pandas(nfl.load_player_stats, per_season=True, seasons=seasons)
+        raw = self._load_player_stats_seasons(seasons)
 
         # Restrict to regular season; the legacy package never trained on
         # postseason games either.
