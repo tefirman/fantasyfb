@@ -102,6 +102,35 @@ class TestSchedule:
         # KC was favored by 3, so KC's implied total should beat BAL's by 3.
         assert kc_w1["implied_total"] - bal_w1["implied_total"] == pytest.approx(3.0)
 
+    def test_future_season_not_clamped_away(self, provider) -> None:
+        """nflverse's games.parquet publishes a full season's schedule in
+        May, months before nfl.get_current_season() rolls forward to it.
+        get_schedule must NOT clamp to get_current_season() (as the stats
+        and roster loaders do) -- doing so silently drops the upcoming
+        season and leaves every current-week matchup projection at zero.
+        See the regression where a Sept 2026 run produced all-zero Week 1
+        projections because the 2026 slate was clamped out.
+        """
+        from fantasyfb.data import nflreadpy_provider as mod
+
+        upcoming = mod.nfl.get_current_season() + 1
+        sched = provider.get_schedule(2024, upcoming)
+
+        # The historical season always survives.
+        assert (sched.season == 2024).any()
+        # The upcoming season is either present (already published upstream)
+        # or absent (not yet) -- but the request must never raise, and must
+        # never truncate the historical range to work around the future year.
+        assert sched.season.max() >= 2024
+
+    def test_unpublished_future_season_returns_empty_not_error(self, provider) -> None:
+        """Requesting a season nflverse hasn't released yet yields an empty
+        slice for that year rather than raising."""
+        far_future = 2099
+        sched = provider.get_schedule(2024, far_future)
+        assert (sched.season == 2024).any()
+        assert (sched.season == far_future).sum() == 0
+
 
 class TestRosters:
     def test_returns_rows(self, rosters: pd.DataFrame) -> None:
