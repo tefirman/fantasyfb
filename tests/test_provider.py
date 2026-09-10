@@ -321,6 +321,69 @@ class TestDepthChartsOfflineFallback:
         assert out.empty
 
 
+class TestPlayerStatsMissingSeasonFallback:
+    """_clamp_seasons trims seasons past nfl.get_current_season(), but that
+    value is calendar-driven: once it's September it returns the new year
+    while stats_player_week_<year>.parquet won't exist until games are
+    played. get_player_stats must skip a season whose download 404s rather
+    than propagating, the same way the depth-chart loader already does.
+
+    This is the regression behind the CI failure where a Sept 2026 run
+    hard-errored with `404 ... stats_player_week_2026.parquet` before the
+    file was published.
+    """
+
+    def test_skips_unpublished_season_with_warning(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        published = {2024, 2025}
+
+        def fake_load_pandas(loader, *, per_season=False, **kwargs):
+            season = kwargs["seasons"][0]
+            if season not in published:
+                raise ConnectionError(
+                    f"Failed to download stats_player_week_{season}.parquet: 404"
+                )
+            return pd.DataFrame({"season": [season], "season_type": ["REG"]})
+
+        monkeypatch.setattr(mod, "_load_pandas", fake_load_pandas)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+
+        with pytest.warns(UserWarning, match="Skipping player stats for season 2026"):
+            out = provider._load_player_stats_seasons([2024, 2025, 2026])
+
+        assert sorted(out["season"].tolist()) == [2024, 2025]
+
+    def test_missing_file_valueerror_also_skipped(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def fake_load_pandas(loader, *, per_season=False, **kwargs):
+            season = kwargs["seasons"][0]
+            if season == 2025:
+                return pd.DataFrame({"season": [2025], "season_type": ["REG"]})
+            raise ValueError("404: season parquet not found upstream")
+
+        monkeypatch.setattr(mod, "_load_pandas", fake_load_pandas)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+
+        with pytest.warns(UserWarning):
+            out = provider._load_player_stats_seasons([2025, 2026])
+        assert out["season"].tolist() == [2025]
+
+    def test_raises_only_when_every_season_fails(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def fake_load_pandas(loader, *, per_season=False, **kwargs):
+            raise ConnectionError("404 for every requested season")
+
+        monkeypatch.setattr(mod, "_load_pandas", fake_load_pandas)
+        provider = mod.NflreadpyProvider.__new__(mod.NflreadpyProvider)
+
+        with pytest.warns(UserWarning):
+            with pytest.raises(ValueError, match="No player-stats seasons"):
+                provider._load_player_stats_seasons([2026, 2027])
+
+
 class TestLoadPandasFallback:
     """`_load_pandas` shields callers from the polars-strict UTF-8 error
     nflverse intermittently triggers (see provider module-level comment).
