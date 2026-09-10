@@ -467,7 +467,7 @@ class League:
 
     def starters(self, week: int):
         """
-        Identifies which players should be started on each fantasy team 
+        Identifies which players should be started on each fantasy team
         based on fantasy point projections and available roster spots.
 
         Args:
@@ -482,6 +482,99 @@ class League:
             self.nfl_schedule,
             self.matchup_model,
         )
+
+    def _completed_nfl_teams(self, week: int) -> list:
+        """NFL teams whose game for ``week`` of the current season has
+        already finished, by the same date heuristic
+        LineupOptimizer._handle_live_week_lineup uses.
+
+        A game is treated as complete once its kickoff date is in the past
+        (before ~8pm local, we back the cutoff up a day so the current
+        day's not-yet-final games aren't counted). This is a heuristic --
+        it flips a game to "done" roughly a day after kickoff regardless
+        of the actual final whistle -- but it keeps the live-week lineup
+        lock and the live-week scoring lock consistent with each other.
+        """
+        cutoff = datetime.datetime.now()
+        if datetime.datetime.now().hour < 20:
+            cutoff -= datetime.timedelta(days=1)
+        return self.nfl_schedule.loc[
+            (self.nfl_schedule.season == self.season)
+            & (self.nfl_schedule.week == week)
+            & (self.nfl_schedule.date < cutoff),
+            "team",
+        ].tolist()
+
+    def _live_week_actuals(self, week: int) -> pd.Series:
+        """Actual fantasy points, indexed by ``player_id_sr``, for players
+        whose NFL game in ``week`` of the current season is already over.
+
+        Empty unless ``week == self.current_week``, the season is the
+        latest one, and it's past August -- i.e. a genuine live week.
+        Empty too when no game for the week has finished yet, or the box
+        scores for the week aren't published.
+
+        In-progress games are deliberately excluded: a game is either done
+        (real points) or not (caller keeps the projection). See issue #18.
+        """
+        empty = pd.Series(dtype=float, name="points")
+        in_season = (
+            week == self.current_week
+            and self.season == self.latest_season
+            and datetime.datetime.now().month > 8
+        )
+        if not in_season:
+            return empty
+
+        completed_teams = self._completed_nfl_teams(week)
+        if not completed_teams:
+            return empty
+
+        # Pull just this week's box scores and run them through the same
+        # scorer load_stats uses, so the numbers match league settings.
+        actual = self.nfl_provider.get_player_stats(
+            self.season * 100 + week, self.season * 100 + week
+        )
+        if actual.empty:
+            return empty
+        actual = actual[actual.team.isin(completed_teams)]
+        if actual.empty:
+            return empty
+        actual = FantasyScorer(self.scoring).calculate_points(actual)
+        return (
+            actual[["player_id_sr", "points"]]
+            .dropna(subset=["player_id_sr"])
+            .drop_duplicates(subset=["player_id_sr"], keep="last")
+            .set_index("player_id_sr")["points"]
+        )
+
+    def _apply_live_week_actuals(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
+        """Return ``players`` with real points substituted for starters
+        whose NFL game in ``week`` is already finished.
+
+        For every locked starter, ``points_avg`` becomes their actual
+        fantasy points and ``points_stdev`` becomes 0, so the simulator's
+        current-week matchup is deterministic for the part of the slate
+        already played and only pending games contribute uncertainty.
+        Everyone else is returned unchanged.
+
+        Always returns a fresh copy -- ``self.players`` is never mutated.
+        This matters because ``starters()`` recomputes ``points_avg`` but
+        not ``points_stdev`` on each call, so an in-place zero would leak
+        into later weeks of the season_sims loop; and because callers add
+        their own scratch columns (e.g. ``points_var``) to the result.
+        """
+        players = players.copy()
+        real_points = self._live_week_actuals(week)
+        if real_points.empty:
+            return players
+
+        locked = players.starter & players.player_id_sr.isin(real_points.index)
+        players.loc[locked, "points_avg"] = players.loc[
+            locked, "player_id_sr"
+        ].map(real_points)
+        players.loc[locked, "points_stdev"] = 0.0
+        return players
 
     def bestball_sims(self, payouts: list = [20,20,20]):
         """
@@ -498,7 +591,8 @@ class League:
         projections = pd.DataFrame(columns=["fantasy_team", "week", "points_avg", "points_stdev"])
         for week in range(self.week,self.settings['playoff_start_week']):
             self.starters(week)
-            projections = pd.concat([projections,self.players.loc[~self.players.fantasy_team.isnull(),\
+            week_players = self._apply_live_week_actuals(self.players, week)
+            projections = pd.concat([projections,week_players.loc[~week_players.fantasy_team.isnull(),\
             ['player_id_sr','name','position','fantasy_team','points_avg','points_stdev']].reset_index(drop=True)],ignore_index=True,sort=False)
             projections.loc[projections.week.isnull(), "week"] = week
         season_sims = pd.concat([projections] * self.num_sims, ignore_index=True)
@@ -565,13 +659,17 @@ class League:
         """
         self.client.refresh_oauth()
 
-        # Calculate team projections for each week (your existing logic)
-        self.players["points_var"] = self.players.points_stdev**2
+        # Calculate team projections for each week. points_var is derived
+        # per-week on a copy (via _apply_live_week_actuals) rather than on
+        # self.players, since a live-week lock zeroes points_stdev for some
+        # starters and that must not leak into later weeks of this loop.
         projections_list = []
         for week in range(17):
             self.starters(week + 1)
+            week_players = self._apply_live_week_actuals(self.players, week + 1)
+            week_players["points_var"] = week_players.points_stdev**2
             week_projections = (
-                self.players.loc[self.players.starter]
+                week_players.loc[week_players.starter]
                 .groupby("fantasy_team")[["points_avg", "points_var"]]
                 .sum()
                 .reset_index()
@@ -584,7 +682,6 @@ class League:
         else:
             projections = pd.DataFrame(columns=["fantasy_team", "week", "points_avg", "points_var"])
         projections["points_stdev"] = projections["points_var"] ** 0.5
-        del self.players["points_var"]
         
         # Prepare league settings for simulator
         league_settings = {
