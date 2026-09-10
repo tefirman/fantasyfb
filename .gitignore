@@ -214,3 +214,6 @@ cache/
 
 # personal notes/documentation
 notes/
+
+# macOS
+.DS_Store
