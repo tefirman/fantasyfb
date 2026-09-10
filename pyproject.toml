@@ -31,6 +31,7 @@ dependencies = [
     "yahoo-oauth>=2.0",
     "requests>=2.28",
     "openpyxl>=3.1",
+    "xlsxwriter>=3.1",
     "python-dotenv>=1.0",
     "pytz>=2023.3",
 ]
