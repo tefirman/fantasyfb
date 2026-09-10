@@ -141,10 +141,15 @@ def _clamp_seasons(
     Pre-draft callers routinely request the upcoming season before nflverse
     has uploaded its parquet for it -- e.g. asking for 2026 stats in May
     2026 when nflreadpy's current_season is still 2025. Without clamping,
-    nflreadpy either 404s on the missing parquet (stats / schedules) or
-    raises ValueError (rosters). Silently dropping the future seasons and
+    nflreadpy either 404s on the missing parquet (player stats) or raises
+    ValueError (rosters). Silently dropping the future seasons and
     returning what's available lets the projection engine work off
     historical data, which is what it needs anyway.
+
+    Used by get_player_stats and get_rosters. NOT get_schedule: the
+    games.parquet feed publishes a season's full slate months before
+    get_current_season() advances to it, and clamping there would drop
+    the upcoming schedule and zero out every current-week projection.
 
     Raises ValueError if every requested season is past `available_max` --
     that would yield an empty result and almost certainly indicates a bug
@@ -416,11 +421,14 @@ class NflreadpyProvider(NFLDataProvider):
         )
 
     def get_schedule(self, start_year: int, end_year: int) -> pd.DataFrame:
-        seasons = _clamp_seasons(
-            list(range(start_year, end_year + 1)),
-            nfl.get_current_season(),
-            "schedule",
-        )
+        # Unlike player stats / rosters, nflverse's games.parquet carries
+        # *future* scheduled games -- a season's full slate lands there in
+        # May, months before nfl.get_current_season() rolls forward. So we
+        # do NOT clamp to get_current_season() here: requesting a not-yet
+        # -released season just returns fewer rows, while clamping would
+        # silently drop the upcoming season and leave every current-week
+        # matchup projection at zero (no schedule to join against).
+        seasons = list(range(start_year, end_year + 1))
         raw = _load_pandas(nfl.load_schedules, seasons=seasons)
         raw = raw[raw["game_type"] == "REG"].copy()
         raw["date"] = pd.to_datetime(raw["gameday"], errors="coerce")
