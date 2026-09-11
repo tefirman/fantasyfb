@@ -144,8 +144,8 @@ hitting the network again. In practice this means:
   `_pyarrow_fallback` used when polars rejects a parquet file for
   invalid UTF-8 (see the module docstring in `nflreadpy_provider.py`)
   downloads directly via `urllib` and is not cached.
-- `get_depth_charts` always asks for the *current calendar year's* file
-  rather than going through the season-clamping every other method
+- `get_depth_charts` defaults to asking for the *current calendar year's*
+  file rather than going through the season-clamping every other method
   uses, since depth charts are a live/current-roster feed rather than a
   historical one and nflverse's publish timing for it doesn't track
   `nflreadpy.get_current_season()`. A cold cache with no network (or a
@@ -153,7 +153,11 @@ hitting the network again. In practice this means:
   to an empty depth-chart frame instead of raising, so a second,
   offline `draft-prep`/`snake-draft`/`salary-cap-draft` run still
   completes — draft prep just proceeds without depth-chart data for
-  that run.
+  that run. Passing an explicit `season`/`week` opts into a historical
+  lookup instead (used by the backtest harness in `sim/backtest.py` to
+  validate `MatchupModel`'s depth-chart penalty against real
+  walk-forward data); this only works for pre-2025 seasons, where
+  nflreadpy's legacy schema still carries week-level snapshots.
 - `PlayerDataManager.add_injuries`'s manual injury-timespan overrides pull
   a small CSV straight from `raw.githubusercontent.com`, entirely outside
   `NflreadpyProvider` and nflreadpy's caching. A dead network there is
