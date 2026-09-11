@@ -68,8 +68,18 @@ class NFLDataProvider(ABC):
         """
 
     @abstractmethod
-    def get_depth_charts(self) -> pd.DataFrame:
-        """Current-week depth charts.
+    def get_depth_charts(
+        self, season: int | None = None, week: int | None = None,
+    ) -> pd.DataFrame:
+        """Depth charts, current-week by default or a historical snapshot.
+
+        Args:
+            season: if given, look up this season's depth chart instead
+                of the live/current one. Historical lookups are only
+                meaningful for seasons before the provider's rolling
+                current-snapshot feed took over (nflreadpy: pre-2025).
+            week: if given alongside `season`, the specific week within
+                that season. Ignored when `season` is omitted.
 
         Required columns:
             name, current_team, position, string

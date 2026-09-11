@@ -6,7 +6,128 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fantasyfb.sim.backtest import evaluate, run_backtest
+from fantasyfb.scoring.matchup_model import MatchupModel, _DEFAULT_WEIGHTS
+from fantasyfb.sim.backtest import _historical_strings, _v2_predictions, evaluate, run_backtest
+
+
+class _FakeStringProvider:
+    """Stub provider whose get_depth_charts records the (season, week) it
+    was asked for and returns a fixed strings table, used to test that
+    run_backtest/_v2_predictions actually wire real historical strings
+    through rather than silently falling back to string=1.0."""
+
+    def __init__(self, strings: pd.DataFrame) -> None:
+        self.strings = strings
+        self.calls: list[tuple[int, int]] = []
+
+    def get_depth_charts(self, season=None, week=None):
+        self.calls.append((season, week))
+        return self.strings
+
+
+class TestHistoricalStrings:
+    def test_no_provider_returns_empty(self) -> None:
+        out = _historical_strings(None, 2023, 5)
+        assert out.empty
+        assert list(out.columns) == ["player_id_sr", "string"]
+
+    def test_provider_queried_for_requested_season_and_week(self) -> None:
+        strings = pd.DataFrame({
+            "player_id_sr": ["p1", "p2"],
+            "current_team": ["AAA", "BBB"],
+            "position": ["WR", "RB"],
+            "string": [2.0, 3.0],
+        })
+        provider = _FakeStringProvider(strings)
+        out = _historical_strings(provider, 2023, 7)
+        assert provider.calls == [(2023, 7)]
+        assert set(out["player_id_sr"]) == {"p1", "p2"}
+
+    def test_empty_provider_result_returns_empty(self) -> None:
+        provider = _FakeStringProvider(pd.DataFrame())
+        out = _historical_strings(provider, 2023, 7)
+        assert out.empty
+
+    def test_rows_missing_player_id_are_dropped(self) -> None:
+        strings = pd.DataFrame({
+            "player_id_sr": ["p1", None],
+            "current_team": ["AAA", "BBB"],
+            "position": ["WR", "RB"],
+            "string": [2.0, 3.0],
+        })
+        provider = _FakeStringProvider(strings)
+        out = _historical_strings(provider, 2023, 7)
+        assert list(out["player_id_sr"]) == ["p1"]
+
+
+class TestV2PredictionsUsesRealStrings:
+    """Confirm the matchup factor for a player actually changes based on
+    the historical string passed in, closing the issue #78 blind spot
+    where every backtest player was hardcoded to string=1.0."""
+
+    @pytest.fixture
+    def stub_engine(self, monkeypatch):
+        class _StubEngine:
+            def calculate_projections(self, stats, earliest, current_week):
+                return pd.DataFrame({
+                    "player_id_sr": ["wr_deep"],
+                    "position": ["WR"],
+                    "points_rate": [10.0],
+                })
+        return _StubEngine()
+
+    @pytest.fixture
+    def stats_and_schedule(self):
+        stats = pd.DataFrame({
+            "player_id_sr": ["wr_deep"],
+            "season": [2023], "week": [6],
+            "team": ["AAA"],
+        })
+        schedule = pd.DataFrame({
+            "season": [2023], "week": [7],
+            "team": ["AAA"], "opp_team": ["BBB"],
+            "implied_total": [24.0], "opp_implied_total": [20.0],
+        })
+        return stats, schedule
+
+    def test_deep_string_lowers_prediction_vs_default_string_one(
+        self, stub_engine, stats_and_schedule
+    ) -> None:
+        stats, schedule = stats_and_schedule
+        matchup = MatchupModel(weights=dict(_DEFAULT_WEIGHTS))
+        cutoff = 202307
+
+        no_strings = _v2_predictions(
+            stub_engine, matchup, stats, schedule, cutoff, strings=None,
+        )
+        deep_strings = pd.DataFrame({
+            "player_id_sr": ["wr_deep"], "string": [6.0],
+        })
+        with_strings = _v2_predictions(
+            stub_engine, matchup, stats, schedule, cutoff, strings=deep_strings,
+        )
+
+        pred_default = no_strings.iloc[0]["prediction"]
+        pred_deep = with_strings.iloc[0]["prediction"]
+        assert pred_deep < pred_default
+
+    def test_missing_player_in_strings_table_falls_back_to_starter(
+        self, stub_engine, stats_and_schedule
+    ) -> None:
+        stats, schedule = stats_and_schedule
+        matchup = MatchupModel(weights=dict(_DEFAULT_WEIGHTS))
+        cutoff = 202307
+
+        empty_strings = pd.DataFrame(columns=["player_id_sr", "string"])
+        no_strings = _v2_predictions(
+            stub_engine, matchup, stats, schedule, cutoff, strings=None,
+        )
+        with_empty = _v2_predictions(
+            stub_engine, matchup, stats, schedule, cutoff, strings=empty_strings,
+        )
+        assert no_strings.iloc[0]["prediction"] == pytest.approx(
+            with_empty.iloc[0]["prediction"]
+        )
 
 
 class TestEvaluate:
@@ -68,8 +189,12 @@ class TestRunBacktest:
         sched = provider.get_schedule(2023, 2024)
 
         # Single test week to keep this fast; with 13 weeks we'd add ~30s.
+        # Passes the live provider so V2_default/V2_fitted exercise real
+        # historical depth-chart strings rather than the old string=1.0
+        # hardcode (issue #78).
         return run_backtest(
             scored, sched, test_season=2024, test_weeks=[10],
+            provider=provider,
         )
 
     def test_emits_all_variants(self, predictions: pd.DataFrame) -> None:

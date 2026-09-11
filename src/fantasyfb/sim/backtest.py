@@ -14,6 +14,12 @@ Then reports per-position MAE and RMSE.
 Walk-forward construction guards against look-ahead bias: predictions for
 week W only use stats from games played before W. The fitted weights are
 trained on the season prior to the test season and applied to the test set.
+
+When a `provider` is passed to `run_backtest`, V2_default/V2_fitted use
+that week's real historical depth-chart strings (via
+`get_depth_charts(season, week)`) instead of hardcoding string=1.0 for
+every player, so MatchupModel's string-penalty term is actually
+exercised by the walk-forward fit rather than going untested.
 """
 
 from __future__ import annotations
@@ -24,11 +30,32 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..data.nfl_provider import NFLDataProvider
 from ..scoring.matchup_model import MatchupModel, _DEFAULT_WEIGHTS, _PositionWeights
 from ..projections.engine_v2 import ProjectionEngineV2
 
 
 _FANTASY_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]
+
+
+def _historical_strings(
+    provider: Optional[NFLDataProvider], season: int, week: int,
+) -> pd.DataFrame:
+    """Depth-chart strings as of a specific historical week.
+
+    Returns a `player_id_sr` -> `string` lookup, empty if no provider was
+    given or the provider has no data for that week (e.g. depth charts
+    older than nflreadpy's legacy-schema coverage). Callers should treat
+    a miss the same as an unlisted player: fall back to string=1.0
+    (nflreadpy depth charts only include the top handful of strings per
+    team, so most bench/inactive players legitimately don't appear).
+    """
+    if provider is None:
+        return pd.DataFrame(columns=["player_id_sr", "string"])
+    depth = provider.get_depth_charts(season=season, week=week)
+    if depth.empty:
+        return pd.DataFrame(columns=["player_id_sr", "string"])
+    return depth.dropna(subset=["player_id_sr"])[["player_id_sr", "string"]]
 
 
 @dataclass
@@ -49,8 +76,18 @@ def _v2_predictions(
     engine: ProjectionEngineV2,
     matchup: Optional[MatchupModel],
     stats: pd.DataFrame, schedule: pd.DataFrame, cutoff: int,
+    strings: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
-    """V2 engine output, optionally multiplied by a matchup factor."""
+    """V2 engine output, optionally multiplied by a matchup factor.
+
+    Args:
+        strings: `player_id_sr` -> `string` lookup for this week's real
+            historical depth chart (see `_historical_strings`). Players
+            missing from it (not on a team's top handful of strings, or
+            no historical data available) fall back to string=1.0, i.e.
+            "assume starter" rather than "assume backup" -- consistent
+            with the live-analysis default in `player_data_manager.py`.
+    """
     earliest = {p: cutoff - 200 for p in _FANTASY_POSITIONS}
     proj = engine.calculate_projections(stats, earliest, current_week=cutoff)
     proj = proj[~proj["player_id_sr"].astype(str).str.startswith("avg_")].copy()
@@ -75,18 +112,23 @@ def _v2_predictions(
     )
     proj = proj.merge(teams, on="player_id_sr", how="left")
     proj = proj.merge(week_sched, on="team", how="left")
+    if strings is not None and not strings.empty:
+        proj = proj.merge(strings, on="player_id_sr", how="left")
+    else:
+        proj["string"] = np.nan
 
     factors = []
     for _, row in proj.iterrows():
         if pd.isna(row.get("implied_total")):
             factors.append(1.0)
             continue
+        string = row.get("string")
         factors.append(matchup.factor(
             position=row["position"],
             team_implied_total=row["implied_total"],
             opp_implied_total=row["opp_implied_total"],
             opp_team=row["opp_team"] or "",
-            string=1.0,  # historical depth charts unavailable
+            string=1.0 if pd.isna(string) else string,
         ))
     proj["matchup_factor"] = factors
     proj["prediction"] = proj["points_rate"] * proj["matchup_factor"]
@@ -99,6 +141,7 @@ def run_backtest(
     test_season: int,
     test_weeks: List[int],
     fitted_weights: Optional[Dict[str, _PositionWeights]] = None,
+    provider: Optional[NFLDataProvider] = None,
 ) -> pd.DataFrame:
     """Per-(player, week) predictions for every model variant.
 
@@ -110,6 +153,14 @@ def run_backtest(
         test_weeks: weeks within test_season to evaluate.
         fitted_weights: LS-fit weights for V2_fitted. If None, V2_fitted
             falls back to position-average predictions.
+        provider: if given, used to pull each test week's real historical
+            depth-chart strings (via `get_depth_charts(season, week)`) so
+            the matchup model's string penalty is actually exercised
+            during backtesting instead of every player being treated as
+            string=1.0. Only meaningful for pre-2025 seasons, where
+            nflreadpy's depth-chart feed has week-level historical data;
+            omit for seasons before nflreadpy's coverage starts or when
+            the string penalty isn't under test.
 
     Returns:
         Long DataFrame, one row per (player, week, variant). Columns:
@@ -142,10 +193,15 @@ def run_backtest(
                 history, sched_history, weights=fitted_weights,
             )
 
+        strings = _historical_strings(provider, test_season, week)
         v2_neutral = _v2_predictions(engine_v2, None, history, schedule, cutoff)
-        v2_default = _v2_predictions(engine_v2, matchup_default, history, schedule, cutoff)
+        v2_default = _v2_predictions(
+            engine_v2, matchup_default, history, schedule, cutoff, strings,
+        )
         v2_fitted = (
-            _v2_predictions(engine_v2, matchup_fitted, history, schedule, cutoff)
+            _v2_predictions(
+                engine_v2, matchup_fitted, history, schedule, cutoff, strings,
+            )
             if matchup_fitted is not None else None
         )
 

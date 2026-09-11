@@ -167,6 +167,35 @@ class TestDepthCharts:
         assert {"QB", "RB", "WR", "TE"}.issubset(positions)
 
 
+class TestDepthChartsHistorical:
+    """get_depth_charts(season, week) -- added for issue #78 so the
+    backtest harness can pull real depth-chart strings for a past week
+    instead of hardcoding string=1.0. Uses a pre-2025 season, where
+    nflreadpy's legacy schema carries a `week` column."""
+
+    def test_returns_rows_for_historical_season_and_week(self, provider) -> None:
+        out = provider.get_depth_charts(season=2023, week=5)
+        assert len(out) > 100
+        required = {"name", "current_team", "position", "string", "player_id_sr"}
+        assert required.issubset(out.columns)
+
+    def test_multiple_wr_strings_present_for_same_team_week(self, provider) -> None:
+        # The exact shape issue #78 is about: real teams carry WR string
+        # 1, 2, 3+ simultaneously, not just a single "starter."
+        out = provider.get_depth_charts(season=2023, week=5)
+        wr = out[(out.position == "WR")]
+        strings_seen = set(wr["string"].unique())
+        assert {1.0, 2.0, 3.0}.issubset(strings_seen)
+
+    def test_different_weeks_can_yield_different_snapshots(self, provider) -> None:
+        # Depth charts move over a season (injuries, trades); week 1 and
+        # week 15 shouldn't be forced to identical data by an off-by-one
+        # in the week filter.
+        wk1 = provider.get_depth_charts(season=2023, week=1)
+        wk15 = provider.get_depth_charts(season=2023, week=15)
+        assert not wk1.empty and not wk15.empty
+
+
 class TestTeamAliases:
     def test_returns_thirty_two_teams(self, team_aliases: pd.DataFrame) -> None:
         assert len(team_aliases) == 32
