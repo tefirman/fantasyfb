@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from fantasyfb.data import nflreadpy_provider as mod
-from fantasyfb.data.nflreadpy_provider import _clamp_seasons, _load_pandas
+from fantasyfb.data.nflreadpy_provider import _clamp_seasons, _dedupe_depth_chart, _load_pandas
 
 
 REQUIRED_STAT_COLS = {
@@ -165,6 +165,108 @@ class TestDepthCharts:
     def test_fantasy_positions_present(self, depth_charts: pd.DataFrame) -> None:
         positions = set(depth_charts["position"].dropna().unique())
         assert {"QB", "RB", "WR", "TE"}.issubset(positions)
+
+    def test_no_duplicate_player_ids(self, depth_charts: pd.DataFrame) -> None:
+        # A player with a special-teams role in addition to their offensive
+        # one (e.g. a WR who also returns punts) has multiple rows in
+        # nflreadpy's raw depth chart, one per role. Left un-deduped, a
+        # plain merge on player_id_sr fans that player out into duplicate
+        # rows downstream, which corrupts the lineup optimizer's
+        # per-position slot-filling (it double-counts one real player as
+        # two roster slots). get_depth_charts() must return at most one
+        # row per player_id_sr.
+        with_id = depth_charts.dropna(subset=["player_id_sr"])
+        assert with_id["player_id_sr"].is_unique
+
+
+class TestDedupeDepthChart:
+    """_dedupe_depth_chart collapses nflreadpy's one-row-per-role depth
+    chart to one row per player_id_sr. A plain merge on player_id_sr
+    without this step fans a multi-role player (e.g. a WR who also
+    returns punts) out into duplicate rows, which corrupts the lineup
+    optimizer's per-position slot-filling downstream -- it double-counts
+    one real player as two roster slots, silently bumping a teammate out
+    of the lineup. Found via a live discrepancy where a real starting RB
+    (depth-chart RB string 1, but also punt-return string 2) lost a
+    roster slot to a lower-scoring teammate.
+    """
+
+    def test_offensive_role_preferred_over_lower_string_special_teams_role(
+        self,
+    ) -> None:
+        # Mirrors a real nflreadpy shape: a KR/PR string can be numerically
+        # lower than a player's real offensive string. Naively picking the
+        # lowest string across all of a player's rows would wrongly select
+        # the special-teams row.
+        depth = pd.DataFrame({
+            "name": ["Ray Davis", "Ray Davis", "Ray Davis"],
+            "current_team": ["BUF", "BUF", "BUF"],
+            "position": ["KR", "PR", "RB"],
+            "string": [1.0, 2.0, 2.0],
+            "player_id_sr": ["00-1", "00-1", "00-1"],
+        })
+        out = _dedupe_depth_chart(depth)
+        assert len(out) == 1
+        assert out.iloc[0]["position"] == "RB"
+        assert out.iloc[0]["string"] == 2.0
+
+    def test_lowest_string_wins_among_multiple_fantasy_relevant_rows(self) -> None:
+        depth = pd.DataFrame({
+            "name": ["Two Way Player", "Two Way Player"],
+            "current_team": ["KC", "KC"],
+            "position": ["RB", "WR"],
+            "string": [3.0, 1.0],
+            "player_id_sr": ["00-2", "00-2"],
+        })
+        out = _dedupe_depth_chart(depth)
+        assert len(out) == 1
+        assert out.iloc[0]["position"] == "WR"
+        assert out.iloc[0]["string"] == 1.0
+
+    def test_players_with_single_row_are_unaffected(self) -> None:
+        depth = pd.DataFrame({
+            "name": ["Solo Player"],
+            "current_team": ["SEA"],
+            "position": ["QB"],
+            "string": [1.0],
+            "player_id_sr": ["00-3"],
+        })
+        out = _dedupe_depth_chart(depth)
+        assert len(out) == 1
+        assert out.iloc[0]["position"] == "QB"
+
+    def test_rows_missing_player_id_pass_through_unchanged(self) -> None:
+        # Nothing to group duplicates on without an id -- these are left
+        # for the name/position join fallback in
+        # PlayerDataManager.add_depth_charts to handle.
+        depth = pd.DataFrame({
+            "name": ["No Id Guy", "No Id Guy"],
+            "current_team": ["NYJ", "NYJ"],
+            "position": ["KR", "WR"],
+            "string": [1.0, 4.0],
+            "player_id_sr": [None, None],
+        })
+        out = _dedupe_depth_chart(depth)
+        assert len(out) == 2
+
+    def test_empty_input_returns_empty(self) -> None:
+        depth = pd.DataFrame(columns=["name", "current_team", "position", "string", "player_id_sr"])
+        out = _dedupe_depth_chart(depth)
+        assert out.empty
+
+    def test_multiple_distinct_players_all_preserved(self) -> None:
+        depth = pd.DataFrame({
+            "name": ["Player A", "Player A", "Player B"],
+            "current_team": ["DAL", "DAL", "DAL"],
+            "position": ["PR", "WR", "QB"],
+            "string": [1.0, 3.0, 1.0],
+            "player_id_sr": ["00-a", "00-a", "00-b"],
+        })
+        out = _dedupe_depth_chart(depth)
+        assert len(out) == 2
+        assert set(out["player_id_sr"]) == {"00-a", "00-b"}
+        a_row = out[out.player_id_sr == "00-a"].iloc[0]
+        assert a_row["position"] == "WR"
 
 
 class TestDepthChartsHistorical:
