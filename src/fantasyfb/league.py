@@ -50,10 +50,8 @@ class League:
         nfl_teams: dataframe containing different identifiers for each NFL team  
         nfl_schedule: dataframe containing NFL schedules throughout the years with elo statistics for both teams  
         players: dataframe containing demographics and rates for current NFL players  
-        num_sims: integer specifying the number of Monte Carlo simulations to run  
-        earliest: integer describing the earliest week to pull statistics from (YYYYWW)  
-        reference_games: integer describing the number of games to use as a prior for rates  
-        basaloppstringtime: list of the four weighting factors when calculating rates  
+        num_sims: integer specifying the number of Monte Carlo simulations to run
+        earliest: integer describing the earliest week to pull statistics from (YYYYWW)
         schedule: dataframe containing the fantasy schedule for the league and season in question
     """
 
@@ -65,8 +63,6 @@ class League:
         injurytries: int = 10,
         num_sims: int = 10000,
         earliest: int = None,
-        reference_games: int = None,
-        basaloppstringtime: list = [],
         bestball: str = "",
         nfl_provider: NFLDataProvider = None,
         fit_matchup: bool = True,
@@ -89,8 +85,6 @@ class League:
             injurytries (int, optional): integer specifying the number of attempts to pull injury statuses, defaults to 10.
             num_sims (int, optional): integer specifying the number of Monte Carlo simulations to run, defaults to 10000.
             earliest (int, optional): integer describing the earliest week to pull statistics from (YYYYWW), defaults to None.
-            reference_games (int, optional): integer describing the number of games to use as a prior for rates, defaults to None.
-            basaloppstringtime (list, optional): list of the four weighting factors when calculating rates, defaults to an empty list.
             bestball (str, optional): which platform to use when implementing best ball settings/scoring, defaults to a blank string (no bestball).
             platform (str, optional): which fantasy platform backend to use, "yahoo", "sleeper", or "generic"
                 (a fully synthetic mock draft with no real league -- see issue #47), defaults to "yahoo".
@@ -184,7 +178,7 @@ class League:
             self.week
         )
         
-        self.load_parameters(earliest, reference_games, basaloppstringtime)
+        self.load_parameters(earliest)
         self.num_sims = num_sims if type(num_sims) == int else 10000
         """ Number of simulations to run when assessing the league of interest """
         self.matchup_model = MatchupModel.from_history(self.stats, self.nfl_schedule)
@@ -298,33 +292,19 @@ class League:
             on=["season", "week", "team"],
         )
 
-    def load_parameters(self, earliest: int = None, reference_games: int = None, basaloppstringtime: list = []):
+    def load_parameters(self, earliest: int = None):
         """
         Initializes rate adjustment parameters for the projection engine.
-
-        V2 only needs the per-position `earliest` cutoff; `reference_games`
-        and `basaloppstringtime` are accepted for backward compatibility
-        with the V1 CLI but ignored downstream.
 
         Args:
             earliest (int, optional): YYYYWW of the earliest game to consider.
                 Defaults to two seasons before the current one.
-            reference_games: legacy V1 parameter, retained for backward
-                compat but unused; V2 uses Bayesian shrinkage in the
-                ProjectionEngineV2 instead.
-            basaloppstringtime: legacy V1 weighting factors, retained
-                for backward compat but unused; V2 uses MatchupModel
-                instead.
         """
         positions = ["QB", "RB", "WR", "TE", "K", "DEF"]
         if earliest:
             self.earliest = {pos: earliest for pos in positions}
         else:
             self.earliest = {pos: (self.season - 2) * 100 + 1 for pos in positions}
-        # Legacy attributes preserved so external callers reading them
-        # (cli.py, notebooks) don't crash. Values are placeholders.
-        self.reference_games = {pos: 16 for pos in positions}
-        self.basaloppstringtime = None
 
     def refit_matchup_weights(self, training_seasons: list = None) -> None:
         """Refit MatchupModel coefficients via walk-forward least squares.
@@ -817,8 +797,6 @@ def main():
         injurytries=options.injurytries,
         num_sims=options.sims,
         earliest=options.earliest,
-        reference_games=options.games,
-        basaloppstringtime=options.basaloppstringtime,
     )
     # Create Excel exporter
     excel_file = options.output + "FantasyFootballProjections_{}Week{}{}.xlsx".format(

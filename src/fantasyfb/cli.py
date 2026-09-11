@@ -46,19 +46,6 @@ def initialize_inputs():
         help="earliest week of stats being considered, e.g. 201807 corresponds to week 7 of the 2018 season",
     )
     parser.add_option(
-        "--games",
-        action="store",
-        type="int",
-        dest="games",
-        help="number of games to build each player's prior off of",
-    )
-    parser.add_option(
-        "--basaloppstringtime",
-        action="store",
-        dest="basaloppstringtime",
-        help="scaling factors for basal/opponent/depthchart/time factors, comma-separated string of values",
-    )
-    parser.add_option(
         "--sims", action="store", type="int", dest="sims", help="number of season simulations"
     )
     parser.add_option(
@@ -137,15 +124,6 @@ def _apply_defaults(options):
     """Apply default values to command line options."""
     if not options.season:
         options.season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
-    
-    # Handle basaloppstringtime parsing
-    if options.basaloppstringtime:
-        options.basaloppstringtime = options.basaloppstringtime.split(",")
-        if all([val.isnumeric() for val in options.basaloppstringtime]) and len(options.basaloppstringtime) == 4:
-            options.basaloppstringtime = [float(val) for val in options.basaloppstringtime]
-        else:
-            print("Invalid rate inference parameters, using defaults...")
-            options.basaloppstringtime = None
     
     # Handle payouts parsing with team-specific defaults
     if options.payouts:
