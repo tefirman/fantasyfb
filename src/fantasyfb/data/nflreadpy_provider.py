@@ -527,31 +527,44 @@ class NflreadpyProvider(NFLDataProvider):
         except (ConnectionError, ValueError):
             return pd.DataFrame()
 
-    def get_depth_charts(self) -> pd.DataFrame:
+    def get_depth_charts(
+        self, season: int | None = None, week: int | None = None,
+    ) -> pd.DataFrame:
         # nflreadpy reworked the depth-chart schema starting in 2025: the
         # old (season, week, club_code, depth_team, full_name) shape was
         # replaced with (dt, team, player_name, pos_abb, pos_rank). We
         # support both because mid-package upgrades shouldn't trip up
         # users still pulling historical seasons.
         #
-        # Unlike get_schedule/get_rosters/get_player_stats, this doesn't go
-        # through _clamp_seasons -- depth charts are a live/current-roster
-        # feed rather than a historical one, so nflverse may already have
-        # next season's file published (or not) independent of
+        # `season`/`week` request a specific historical snapshot (used by
+        # the backtest harness, which needs the depth chart as it stood
+        # for a given past week rather than today's). With both omitted
+        # (the default, used by live/current-week analysis), this doesn't
+        # go through _clamp_seasons -- depth charts are a live/current-
+        # roster feed rather than a historical one, so nflverse may already
+        # have next season's file published (or not) independent of
         # nfl.get_current_season(). We try the current year, fall back a
         # year, and swallow a missing/offline file at each step rather than
         # letting it propagate -- an --refresh-cache-free, offline second
         # run must degrade gracefully here the same way the clamped callers
         # already do, instead of throwing.
-        latest = pd.Timestamp.now(tz="UTC").year
-        raw = self._try_load_depth_charts(latest)
-        if raw.empty and latest > 1999:
-            raw = self._try_load_depth_charts(latest - 1)
+        if season is not None:
+            raw = self._try_load_depth_charts(season)
+        else:
+            latest = pd.Timestamp.now(tz="UTC").year
+            raw = self._try_load_depth_charts(latest)
+            if raw.empty and latest > 1999:
+                raw = self._try_load_depth_charts(latest - 1)
         if raw.empty:
             return pd.DataFrame(columns=["name", "current_team", "position", "string", "player_id_sr"])
 
         if "pos_rank" in raw.columns:
-            # New schema (2025+): keep only the latest snapshot.
+            # New schema (2025+): a rolling feed of timestamped snapshots
+            # with no `week` column, so a specific historical week can't
+            # be requested here -- callers wanting week-level historical
+            # strings (the backtest harness) need a pre-2025 season, where
+            # the legacy schema below applies. Keep only the latest
+            # snapshot regardless of `week`.
             raw = raw[raw["dt"] == raw["dt"].max()]
             out = raw.rename(columns={
                 "gsis_id": "player_id_sr",
@@ -561,8 +574,10 @@ class NflreadpyProvider(NFLDataProvider):
                 "pos_rank": "string",
             })
         else:
-            # Legacy schema (<=2024): keep the most recent week we have.
-            raw = raw[raw["week"] == raw["week"].max()]
+            # Legacy schema (<=2024): keep the requested week, or the most
+            # recent week we have if none was requested.
+            target_week = week if week is not None else raw["week"].max()
+            raw = raw[raw["week"] == target_week]
             out = raw.rename(columns={
                 "gsis_id": "player_id_sr",
                 "full_name": "name",

@@ -311,14 +311,14 @@ class PlayerDataManager:
             DataFrame with depth chart information added
         """
         # Always load the current depth chart, regardless of which season
-        # the user is analyzing. The previous gate (only loading for
-        # current season + current week) made sense in a world where we
-        # had historical depth charts to fall back on, but we don't --
-        # nflreadpy only ships current depth charts and the alternative
-        # was every offensive player getting fillna(2.0), which silently
-        # imposed a ~50% backup penalty on every legitimate starter for
-        # any non-current-season analysis. Today's depth chart is the best
-        # info we have; trust it.
+        # the user is analyzing. get_depth_charts() *can* look up a
+        # historical (season, week) snapshot (added for the backtest
+        # harness, see sim/backtest.py), but doing that here for
+        # non-current-season live analysis would mean every offensive
+        # player without a name/id match gets fillna(2.0), which silently
+        # imposes a depth-chart penalty on every legitimate starter for
+        # that analysis. Today's depth chart is the best info we have for
+        # "what does this roster look like right now"; trust it.
         depth = self.nfl_provider.get_depth_charts()
         id_join = depth.dropna(subset=["player_id_sr"])[
             ["player_id_sr", "string", "current_team"]

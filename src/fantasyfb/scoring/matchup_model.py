@@ -12,7 +12,10 @@ game-factor formula with a richer multiplier built from three signals:
 2. Opponent's allowed fantasy points to the player's position -- how
    permissive this defense has been against this position over the
    season so far.
-3. Depth-chart string -- backups get a discount; starters do not.
+3. Depth-chart string -- genuine backups get a discount; players within
+   a position's real-starter slots (see `_STARTER_SLOTS`) do not, since
+   nflreadpy's `string` is a full ordinal depth ranking rather than a
+   starter/backup flag for any position but QB.
 
 Each signal is converted to a deviation from league average and folded
 multiplicatively around 1.0 so a league-average matchup yields factor 1.0
@@ -39,9 +42,13 @@ class _PositionWeights:
     factor = 1
             + alpha * z(team_implied_total)
             + beta  * z(opp_allowed_vs_position)
-            - gamma * (string - 1)
+            - gamma * string_penalty(string)
 
-    where z(x) = (x - league_avg) / league_std.
+    where z(x) = (x - league_avg) / league_std, and string_penalty is a
+    position-aware function of depth-chart string (see
+    `_string_penalty_slots`) that is 0 for genuinely-starting depth and
+    only grows once a player is beyond the slots a position actually
+    plays.
     """
     alpha: float  # team implied total weight
     beta: float   # opp allowed-vs-position weight
@@ -64,6 +71,46 @@ _DEFAULT_WEIGHTS: Dict[str, _PositionWeights] = {
     # negative alpha.
     "DEF": _PositionWeights(alpha=-0.30, beta=0.15, gamma=0.0),
 }
+
+
+# How many depth-chart string slots at each position are genuinely
+# every-down/starting-caliber roles, i.e. where `string` shouldn't be
+# read as "backup" at all. nflreadpy's `pos_rank` is a full ordinal depth
+# ranking (WR string runs 1-6+ per team), not a starter/backup flag --
+# that distinction only actually holds for QB. Below this many slots, the
+# penalty is zero; beyond it, the penalty grows by one "string" worth of
+# depth per slot past the cutoff (see `_string_penalty`).
+#
+# QB: only the QB1 plays under normal circumstances.
+# RB: most offenses feature a clear RB1/RB2 committee; RB3+ is touches-
+#     dependent backup/handcuff territory.
+# WR: 3-receiver sets are the modern default; WR4+ is rotational/depth.
+# TE: single-TE and 12-personnel sets both lean on TE1/TE2; TE3+ rarely
+#     sees meaningful snaps.
+_STARTER_SLOTS: Dict[str, int] = {
+    "QB": 1,
+    "RB": 2,
+    "WR": 3,
+    "TE": 2,
+    "K": 1,
+    "DEF": 1,
+}
+_DEFAULT_STARTER_SLOTS = 1
+
+
+def _string_penalty(position: str, string: float) -> float:
+    """Position-aware depth-chart penalty input, >= 0.
+
+    Zero for any string within that position's real-starter slots (see
+    `_STARTER_SLOTS`); beyond that, grows linearly the same way the old
+    flat `string - 1` penalty did, just anchored at the position's own
+    cutoff instead of always at 1. A player one slot past their
+    position's cutoff (e.g. WR string 4) gets the same penalty a backup
+    QB (string 2) always got, rather than the much harsher penalty the
+    flat formula used to apply to every non-QB1/RB1/starter alike.
+    """
+    slots = _STARTER_SLOTS.get(position, _DEFAULT_STARTER_SLOTS)
+    return max(0.0, string - slots)
 
 
 class MatchupModel:
@@ -175,7 +222,7 @@ class MatchupModel:
         z_total = self._z_implied_total(relevant_total)
 
         z_allowed = self._z_allowed(opp_team, position)
-        string_penalty = max(0.0, string - 1.0)
+        string_penalty = _string_penalty(position, string)
 
         factor = (
             1.0

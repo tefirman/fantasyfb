@@ -132,13 +132,17 @@ class TestFactorDirection:
 
 
 class TestStringPenalty:
-    def test_backup_gets_discount(self, synthetic_history) -> None:
+    def test_backup_beyond_real_starter_slots_gets_discount(
+        self, synthetic_history
+    ) -> None:
+        # RB's real-starter cutoff is string<=2 (see _STARTER_SLOTS), so
+        # the penalty should only start biting at string=3.
         stats, schedule = synthetic_history
         m = MatchupModel.from_history(stats, schedule)
-        starter = m.factor("RB", 22.0, 22.0, "GOOD", string=1.0)
-        backup = m.factor("RB", 22.0, 22.0, "GOOD", string=2.0)
-        third = m.factor("RB", 22.0, 22.0, "GOOD", string=3.0)
-        assert starter > backup > third
+        rb2 = m.factor("RB", 22.0, 22.0, "GOOD", string=2.0)
+        rb3 = m.factor("RB", 22.0, 22.0, "GOOD", string=3.0)
+        rb4 = m.factor("RB", 22.0, 22.0, "GOOD", string=4.0)
+        assert rb2 > rb3 > rb4
 
     def test_string_below_one_does_not_boost(self, synthetic_history) -> None:
         # Defensive guard against weird depth-chart data; the penalty
@@ -156,8 +160,51 @@ class TestStringPenalty:
         # negative, which breaks "rank by projection" logic.
         stats, schedule = synthetic_history
         m = MatchupModel.from_history(stats, schedule)
-        f = m.factor("QB", 22.0, 22.0, "GOOD", string=9.0)
+        f = m.factor("QB", 22.0, 22.0, "GOOD", string=90.0)
         assert f == 0.0
+
+    @pytest.mark.parametrize(
+        "position,real_starter_string",
+        [("QB", 1.0), ("RB", 2.0), ("WR", 3.0), ("TE", 2.0)],
+    )
+    def test_real_starters_get_no_penalty(
+        self, synthetic_history, position, real_starter_string
+    ) -> None:
+        # The bug from issue #78: nflreadpy's `string` is a full ordinal
+        # depth ranking (WR runs 1-6+ per team), not a starter/backup
+        # flag, so a legitimate starting WR2/WR3/RB2/TE2 must not be
+        # penalized just for not being the #1 option at their position.
+        stats, schedule = synthetic_history
+        m = MatchupModel.from_history(stats, schedule)
+        qb1 = m.factor(position, 22.0, 22.0, "GOOD", string=1.0)
+        real_starter = m.factor(
+            position, 22.0, 22.0, "GOOD", string=real_starter_string
+        )
+        assert real_starter == pytest.approx(qb1)
+
+    def test_penalty_grows_past_position_specific_cutoff(
+        self, synthetic_history
+    ) -> None:
+        # WR3 (string=3) is still a real-starter slot and shouldn't be
+        # discounted, but WR4/WR5 (depth) should be, and increasingly so.
+        stats, schedule = synthetic_history
+        m = MatchupModel.from_history(stats, schedule)
+        wr3 = m.factor("WR", 22.0, 22.0, "GOOD", string=3.0)
+        wr4 = m.factor("WR", 22.0, 22.0, "GOOD", string=4.0)
+        wr5 = m.factor("WR", 22.0, 22.0, "GOOD", string=5.0)
+        assert wr3 > wr4 > wr5
+
+    def test_qb_still_penalized_immediately_past_starter(
+        self, synthetic_history
+    ) -> None:
+        # QB is the one position where the old flat penalty's assumption
+        # (string 1 = starter, 2+ = doesn't play) actually holds, so its
+        # behavior shouldn't change.
+        stats, schedule = synthetic_history
+        m = MatchupModel.from_history(stats, schedule)
+        qb1 = m.factor("QB", 22.0, 22.0, "GOOD", string=1.0)
+        qb2 = m.factor("QB", 22.0, 22.0, "GOOD", string=2.0)
+        assert qb1 > qb2
 
 
 class TestApplyFactors:
