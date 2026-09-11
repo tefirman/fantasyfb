@@ -98,14 +98,22 @@ class LineupOptimizer:
                 & (players.fantasy_team == team["name"])
                 & players.current_team.isin(completed)
             ]
-            
+            # Lock in their starter status -- their game is over, so this
+            # can't be re-optimized regardless of projection. Without this,
+            # `started` is used below only to compute *remaining* roster
+            # capacity and these players are left with the `starter=False`
+            # default, which drops them from every downstream consumer of
+            # the starter flag (live-week actuals blending, season_sims
+            # scoring) even though they were legitimately active.
+            players.loc[started.index, "starter"] = True
+
             # Get bench players from completed games
             not_available = players.loc[
                 (players.selected_position == "BN")
                 & (players.fantasy_team == team["name"])
                 & players.current_team.isin(completed)
             ]
-            
+
             # Calculate remaining roster needs
             lineup = pd.merge(
                 left=self.roster_spots,
@@ -115,7 +123,7 @@ class LineupOptimizer:
                 how='left', on='position'
             )
             lineup['count'] -= lineup.num_started.fillna(0.0)
-            
+
             # Set remaining position players
             players = self._fill_remaining_positions(
                 players, team["name"], lineup, started, not_available, week
