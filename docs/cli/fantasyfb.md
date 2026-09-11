@@ -46,8 +46,6 @@ fantasyfb --team "My Team" --sims 5000 --bestball
 | `--sims`              | int  | —       | Number of Monte Carlo season simulations. More = smoother estimates, longer runs. 1,000-10,000 is typical |
 | `--injurytries`       | int  | 10      | Retries on flaky Yahoo injury-status calls                                                               |
 | `--earliest`          | int  | —       | Earliest week to pull stats from, as `YYYYWW` (e.g. `202407`)                                            |
-| `--games`             | int  | —       | Number of prior games used as the per-player rate prior                                                  |
-| `--basaloppstringtime`| str  | —       | Four comma-separated weights for the basal / opponent / depth-chart / time-decay rate factors            |
 | `--bestball`          | flag | off     | Score the league as best-ball (bench contributes per-week max)                                           |
 
 ### Analysis sheets
