@@ -133,6 +133,42 @@ def _load_pandas(
         return pd.concat(frames, ignore_index=True)
 
 
+# Depth-chart position codes that map onto a fantasy-relevant role. A
+# player can carry multiple depth-chart rows for a given team/week (e.g.
+# a WR who also returns punts shows up at WR *and* PR/KR), so a plain
+# join on player_id_sr fans out into one row per role. When collapsing
+# to one row per player, prefer whichever row is fantasy-relevant --
+# special-teams-only strings (PR/KR/etc.) are irrelevant to the matchup
+# model's depth-chart penalty and can be a *lower* (more "starter-like")
+# string than the player's real offensive/kicking depth, which would
+# otherwise pick the wrong row via a naive "lowest string wins" rule.
+_FANTASY_RELEVANT_POSITIONS = {"QB", "RB", "WR", "TE", "K", "PK"}
+
+
+def _dedupe_depth_chart(depth: pd.DataFrame) -> pd.DataFrame:
+    """Collapse to one row per player_id_sr, preferring the
+    fantasy-relevant position (see `_FANTASY_RELEVANT_POSITIONS`) and
+    then the lowest `string` as a tiebreaker.
+
+    Rows with a missing player_id_sr can't be deduped this way (nothing
+    to group on) and are passed through unchanged -- the name/position
+    join fallback in PlayerDataManager.add_depth_charts handles those.
+    """
+    if depth.empty or "player_id_sr" not in depth.columns:
+        return depth
+    with_id = depth[depth["player_id_sr"].notna()].copy()
+    without_id = depth[depth["player_id_sr"].isna()]
+    if with_id.empty:
+        return depth
+    with_id["_fantasy_relevant"] = ~with_id["position"].isin(
+        _FANTASY_RELEVANT_POSITIONS
+    )
+    with_id = with_id.sort_values(["_fantasy_relevant", "string"])
+    with_id = with_id.drop_duplicates(subset=["player_id_sr"], keep="first")
+    del with_id["_fantasy_relevant"]
+    return pd.concat([with_id, without_id], ignore_index=True)
+
+
 def _clamp_seasons(
     seasons: list[int], available_max: int, context: str,
 ) -> list[int]:
@@ -586,7 +622,8 @@ class NflreadpyProvider(NFLDataProvider):
             })
 
         out["string"] = pd.to_numeric(out["string"], errors="coerce").fillna(2.0)
-        return out[["name", "current_team", "position", "string", "player_id_sr"]].reset_index(drop=True)
+        out = out[["name", "current_team", "position", "string", "player_id_sr"]]
+        return _dedupe_depth_chart(out).reset_index(drop=True)
 
     def get_draft(self, year: int) -> pd.DataFrame:
         raw = _load_pandas(nfl.load_draft_picks, seasons=[year])
