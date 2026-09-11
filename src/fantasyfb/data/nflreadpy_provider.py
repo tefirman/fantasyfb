@@ -142,7 +142,9 @@ def _load_pandas(
 # model's depth-chart penalty and can be a *lower* (more "starter-like")
 # string than the player's real offensive/kicking depth, which would
 # otherwise pick the wrong row via a naive "lowest string wins" rule.
-_FANTASY_RELEVANT_POSITIONS = {"QB", "RB", "WR", "TE", "K", "PK"}
+# Callers normalize "PK" (the 2025+ schema's kicker code) to "K" before
+# dedup runs, so this set only needs the canonical codes.
+_FANTASY_RELEVANT_POSITIONS = {"QB", "RB", "WR", "TE", "K"}
 
 
 def _dedupe_depth_chart(depth: pd.DataFrame) -> pd.DataFrame:
@@ -622,6 +624,13 @@ class NflreadpyProvider(NFLDataProvider):
             })
 
         out["string"] = pd.to_numeric(out["string"], errors="coerce").fillna(2.0)
+        # The 2025+ schema's pos_abb calls kickers "PK"; every other
+        # position code fantasyfb cares about (QB/RB/WR/TE) already
+        # matches the players DataFrame's `position` column, but "PK"
+        # doesn't match "K" -- normalize so add_depth_charts' name/
+        # position join fallback can actually match kickers instead of
+        # silently falling through to fillna(2.0) for every one of them.
+        out.loc[out["position"] == "PK", "position"] = "K"
         out = out[["name", "current_team", "position", "string", "player_id_sr"]]
         return _dedupe_depth_chart(out).reset_index(drop=True)
 

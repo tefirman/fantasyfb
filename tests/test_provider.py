@@ -166,6 +166,19 @@ class TestDepthCharts:
         positions = set(depth_charts["position"].dropna().unique())
         assert {"QB", "RB", "WR", "TE"}.issubset(positions)
 
+    def test_kickers_use_canonical_k_code_not_pk(self, depth_charts: pd.DataFrame) -> None:
+        # nflreadpy's 2025+ depth-chart schema calls kickers "PK", but the
+        # players DataFrame's `position` column (and every other provider
+        # method) uses "K". Left un-normalized, add_depth_charts' name/
+        # position join fallback can never match a kicker by name, so
+        # every kicker would silently fall through to fillna(2.0) --
+        # currently harmless only because K's gamma weight is 0, but a
+        # real mismatch waiting to bite the moment that changes.
+        positions = set(depth_charts["position"].dropna().unique())
+        assert "K" in positions
+        assert "PK" not in positions
+        assert len(depth_charts[depth_charts.position == "K"]) >= 20
+
     def test_no_duplicate_player_ids(self, depth_charts: pd.DataFrame) -> None:
         # A player with a special-teams role in addition to their offensive
         # one (e.g. a WR who also returns punts) has multiple rows in
