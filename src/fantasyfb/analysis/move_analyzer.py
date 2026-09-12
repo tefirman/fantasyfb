@@ -95,12 +95,10 @@ class MoveAnalyzer:
         & (self.league.players.pct_rostered >= min_rostership)].reset_index(drop=True)
         for my_player in players_to_drop.name:
             self.league.client.refresh_oauth(55)
-            if (
-                players_to_drop.loc[players_to_drop.name == my_player, "until"].values[
-                    0
-                ]
-                >= as_of % 100
-            ):
+            my_player_until = players_to_drop.loc[
+                players_to_drop.name == my_player, "until"
+            ].values[0]
+            if pd.notnull(my_player_until) and my_player_until >= as_of % 100:
                 possible = available.loc[~available.name.str.contains("Average_")]
             else:
                 possible = available.loc[
