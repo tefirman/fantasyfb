@@ -199,13 +199,17 @@ class PlayerDataManager:
             )
             
             if as_of % 100 == self.current_week:
-                # Check for new injuries
+                # Check for new injuries. Rostered players are always in
+                # scope; unrostered players are included too once they're
+                # widely-owned enough to matter for waiver-wire decisions
+                # (same 5% threshold used for depth-chart reconciliation).
+                pct_rostered = players.get("pct_rostered", 0.0)
                 new_injury = (
                     players.status.isin([
                         "O", "D", "SUSP", "IR", "PUP-R", "PUP-P", "NFI-R", "NA", "COVID-19"
                     ])
                     & (players.until.isnull() | (players.until < self.current_week))
-                    & (~players.fantasy_team.isnull())
+                    & (~players.fantasy_team.isnull() | (pct_rostered > 0.05))
                 )
                 
                 if new_injury.any():
@@ -222,7 +226,7 @@ class PlayerDataManager:
                         "O", "D", "SUSP", "IR", "PUP-R", "PUP-P", "NFI-R", "NA", "COVID-19"
                     ])
                     & (players.until >= self.current_week)
-                    & (~players.fantasy_team.isnull())
+                    & (~players.fantasy_team.isnull() | (pct_rostered > 0.05))
                 )
                 
                 if old_injury.any():
@@ -403,14 +407,14 @@ class PlayerDataManager:
         print("Mapping player IDs...")
         players = self.map_player_ids(players)
 
+        print("Adding roster percentages...")
+        players = self.add_roster_percentages(players)
+
         print("Adding injury information...")
         players = self.add_injuries(players, week)
 
         print("Adding bye weeks...")
         players = self.add_bye_weeks(players, nfl_schedule)
-
-        print("Adding roster percentages...")
-        players = self.add_roster_percentages(players)
 
         print("Adding depth charts...")
         players = self.add_depth_charts(players, week)
