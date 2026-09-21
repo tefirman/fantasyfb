@@ -24,6 +24,7 @@ REQUIRED_STAT_COLS = {
     "fumbles_lost", "kick_ret_yds", "punt_ret_yds",
     "kick_ret_td", "punt_ret_td", "xpm", "fgm",
     "sacks", "def_int", "fumbles_rec", "def_int_td", "fumbles_rec_td",
+    "tackles_for_loss",
 }
 
 REQUIRED_SCHEDULE_COLS = {
@@ -51,6 +52,11 @@ class TestPlayerStats:
     def test_defense_sacks_in_plausible_range(self, stats: pd.DataFrame) -> None:
         defenses = stats[stats.position == "DEF"]
         assert defenses["sacks"].between(0, 12).all()
+
+    def test_defense_tackles_for_loss_in_plausible_range(self, stats: pd.DataFrame) -> None:
+        defenses = stats[stats.position == "DEF"]
+        assert defenses["tackles_for_loss"].notna().all()
+        assert defenses["tackles_for_loss"].between(0, 20).all()
 
     def test_yyyyww_range_respected(self, stats: pd.DataFrame) -> None:
         as_of = stats.season * 100 + stats.week

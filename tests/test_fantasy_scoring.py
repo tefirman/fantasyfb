@@ -69,3 +69,29 @@ class TestCombinedRushRecBonus:
         df = pd.DataFrame([_player("RB", rush_yds=150, rec_yds=10)])
         result = FantasyScorer(scoring).calculate_points(df)
         assert result.loc[0, "points"] == pytest.approx(160 * 0.1 + 5.0 + 10.0)
+
+
+class TestDefensiveTacklesForLoss:
+    """Tackles-for-loss is a team-DEF stat some leagues score separately
+    from sacks; nflreadpy_provider._build_defense feeds it in as
+    tackles_for_loss."""
+
+    def test_tfl_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["TFL"] = 0.5
+        df = pd.DataFrame([_player("DEF", tackles_for_loss=6)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(3.0)
+
+    def test_tfl_stacks_with_other_defensive_stats(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["Sack"] = 1.0
+        scoring["TFL"] = 0.5
+        df = pd.DataFrame([_player("DEF", sacks=3, tackles_for_loss=4)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(3 * 1.0 + 4 * 0.5)
+
+    def test_missing_tfl_column_defaults_to_zero(self):
+        df = pd.DataFrame([_player("DEF", sacks=2)])
+        result = FantasyScorer(dict(SFB16_SCORING)).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(0.0)

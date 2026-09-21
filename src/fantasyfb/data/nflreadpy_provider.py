@@ -402,6 +402,7 @@ class NflreadpyProvider(NFLDataProvider):
             "def_interceptions": "def_int",
             "fumble_recovery_opp": "fumbles_rec",
             "def_tds": "def_int_td",
+            "def_tackles_for_loss": "tackles_for_loss",
         }
         for src in agg_cols:
             if src not in raw.columns:

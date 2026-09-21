@@ -30,7 +30,7 @@ class FantasyScorer:
                 - 'Int Thrown', 'Fum Lost', 'Ret Yds', 'Ret TD'
                 - 'PAT Made', 'FG 0-19', 'TE Rec Bonus', 'TE 1D Bonus'
                 - 'Pass 300+', 'Rush 100+', 'Rec 100+'
-                - 'Sack', 'Int', 'Fum Rec', 'Pts Allow 0', etc.
+                - 'Sack', 'Int', 'Fum Rec', 'TFL', 'Pts Allow 0', etc.
         """
         self.scoring = scoring_settings
         
@@ -47,7 +47,7 @@ class FantasyScorer:
             'TE Rec Bonus', 'TE 1D Bonus', 'Pass 300+', 'Pass 400+',
             'Rush 100+', 'Rush 200+', 'Rec 100+', 'Rec 200+',
             'Rush+Rec 100+', 'Rush+Rec 200+',
-            'Sack', 'Int', 'Fum Rec', 'Pts Allow 0', 'Pts Allow 1-6',
+            'Sack', 'Int', 'Fum Rec', 'TFL', 'Pts Allow 0', 'Pts Allow 1-6',
             'Pts Allow 7-13', 'Pts Allow 14-20', 'Pts Allow 21-27',
             'Pts Allow 28-34', 'Pts Allow 35+'
         ]
@@ -161,7 +161,7 @@ class FantasyScorer:
         # Fill any missing defensive stat columns with 0
         def_stat_columns = [
             'sacks', 'def_int', 'fumbles_rec', 'def_int_td', 'fumbles_rec_td',
-            'kick_ret_td', 'punt_ret_td', 'points_allowed'
+            'kick_ret_td', 'punt_ret_td', 'points_allowed', 'tackles_for_loss'
         ]
         
         for col in def_stat_columns:
@@ -174,6 +174,7 @@ class FantasyScorer:
             defense_df['sacks'] * self.scoring['Sack'] +
             defense_df['def_int'] * self.scoring['Int'] +
             defense_df['fumbles_rec'] * self.scoring['Fum Rec'] +
+            defense_df['tackles_for_loss'] * self.scoring['TFL'] +
             (defense_df['def_int_td'] + defense_df['fumbles_rec_td'] +
              defense_df['kick_ret_td'] + defense_df['punt_ret_td']) * self.scoring['Ret TD']
         )
