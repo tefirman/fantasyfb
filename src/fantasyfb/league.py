@@ -611,6 +611,15 @@ class League:
         standings = standings.rename(columns={'fantasy_team':'team','points_sim':'points_avg','place':'avg_place'})
         del standings['num_sim']
         standings[["wins_avg","wins_stdev","playoff_bye"]] = 0.0
+
+        weekly_totals = season_sims.loc[season_sims.starter]\
+        .groupby(['num_sim','week','fantasy_team']).points_sim.sum().reset_index()
+        per_game_stats = weekly_totals.groupby('fantasy_team').points_sim.agg(['mean','std']).reset_index()
+        per_game_stats = per_game_stats.rename(columns={
+            'fantasy_team':'team','mean':'per_game_avg','std':'per_game_stdev',
+        })
+        per_game_stats['per_game_fano'] = per_game_stats['per_game_stdev'] / per_game_stats['per_game_avg']
+        standings = pd.merge(left=standings, right=per_game_stats, how='inner', on='team')
         standings = standings.sort_values(
             by=['earnings', 'wins_avg', 'points_avg'],
             ascending=[False, False, False],
@@ -836,20 +845,20 @@ def main():
                 ],
             ].to_string(index=False)
         )
-        print(
-            standings_sim[
-                [
-                    "team",
-                    "wins_avg",
-                    "points_avg",
-                    "playoffs",
-                    "playoff_bye",
-                    "winner",
-                    "earnings",
-                ]
-            ].to_string(index=False)
-        )
         exporter.export_schedule(schedule_sim)
+    print(
+        standings_sim[
+            [
+                "team",
+                "wins_avg",
+                "points_avg",
+                "playoffs",
+                "playoff_bye",
+                "winner",
+                "earnings",
+            ]
+        ].to_string(index=False)
+    )
     exporter.export_standings(standings_sim)
 
     if options.pickups:

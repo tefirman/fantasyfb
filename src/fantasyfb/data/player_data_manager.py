@@ -12,6 +12,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from ..name_utils import normalize_name_key
 from .nfl_provider import NFLDataProvider
 from .platform_client import FantasyPlatformClient
 
@@ -114,21 +115,26 @@ class PlayerDataManager:
         # them still have null yahoo_id. Without this fallback those
         # players fail to link and surface as "needs reconcile" noise on
         # every pre-draft run.
+        #
+        # Joined on a suffix-normalized name key rather than the raw name
+        # since Yahoo appends generational suffixes ("KC Concepcion Jr.")
+        # that nflreadpy's roster `name` column omits ("KC Concepcion").
         unmapped = players["player_id_sr"].isnull()
         if unmapped.any():
             name_join = (
                 nfl_rosters.dropna(subset=["player_id_sr"])
                 .sort_values("season")
-                .drop_duplicates(subset=["name", "current_team"], keep="last")
-                [["name", "current_team", "player_id_sr"]]
+                .assign(_name_key=lambda d: normalize_name_key(d["name"]))
+                .drop_duplicates(subset=["_name_key", "current_team"], keep="last")
+                [["_name_key", "current_team", "player_id_sr"]]
                 .rename(columns={"player_id_sr": "_pid_sr_byname"})
             )
-            players = players.merge(
-                name_join, on=["name", "current_team"], how="left",
+            players = players.assign(_name_key=normalize_name_key(players["name"])).merge(
+                name_join, on=["_name_key", "current_team"], how="left",
             )
             fill = players["player_id_sr"].isnull() & players["_pid_sr_byname"].notna()
             players.loc[fill, "player_id_sr"] = players.loc[fill, "_pid_sr_byname"]
-            del players["_pid_sr_byname"]
+            del players["_pid_sr_byname"], players["_name_key"]
 
         # Defenses use the team abbreviation as their ID.
         defenses = players["position"].isin(["DEF"])
@@ -193,13 +199,17 @@ class PlayerDataManager:
             )
             
             if as_of % 100 == self.current_week:
-                # Check for new injuries
+                # Check for new injuries. Rostered players are always in
+                # scope; unrostered players are included too once they're
+                # widely-owned enough to matter for waiver-wire decisions
+                # (same 5% threshold used for depth-chart reconciliation).
+                pct_rostered = players.get("pct_rostered", 0.0)
                 new_injury = (
                     players.status.isin([
                         "O", "D", "SUSP", "IR", "PUP-R", "PUP-P", "NFI-R", "NA", "COVID-19"
                     ])
                     & (players.until.isnull() | (players.until < self.current_week))
-                    & (~players.fantasy_team.isnull())
+                    & (~players.fantasy_team.isnull() | (pct_rostered > 0.05))
                 )
                 
                 if new_injury.any():
@@ -216,7 +226,7 @@ class PlayerDataManager:
                         "O", "D", "SUSP", "IR", "PUP-R", "PUP-P", "NFI-R", "NA", "COVID-19"
                     ])
                     & (players.until >= self.current_week)
-                    & (~players.fantasy_team.isnull())
+                    & (~players.fantasy_team.isnull() | (pct_rostered > 0.05))
                 )
                 
                 if old_injury.any():
@@ -339,17 +349,25 @@ class PlayerDataManager:
             # Dedupe on (name, position) first since depth charts can have
             # rare same-name/same-position collisions across teams, and a
             # duplicated join key would fan out rows in players.
-            name_join = depth[["name", "current_team", "position", "string"]].rename(
+            #
+            # Joined on a suffix-normalized name key since Yahoo appends
+            # generational suffixes ("KC Concepcion Jr.") that nflreadpy's
+            # depth chart `name` column omits ("KC Concepcion").
+            name_join = depth[["name", "current_team", "position", "string"]].assign(
+                _name_key=lambda d: normalize_name_key(d["name"])
+            ).rename(
                 columns={"string": "string_name", "current_team": "current_team_name"}
-            ).drop_duplicates(subset=["name", "position"], keep="first")
-            players = players.merge(
-                name_join, on=["name", "position"], how="left"
+            ).drop_duplicates(subset=["_name_key", "position"], keep="first")[
+                ["_name_key", "current_team_name", "position", "string_name"]
+            ]
+            players = players.assign(_name_key=normalize_name_key(players["name"])).merge(
+                name_join, on=["_name_key", "position"], how="left"
             )
             players.loc[still_unset, "string"] = players.loc[still_unset, "string_name"]
             players.loc[still_unset, "current_team"] = players.loc[
                 still_unset, "current_team_name"
             ].combine_first(players.loc[still_unset, "current_team"])
-            for col in ("string_name", "current_team_name"):
+            for col in ("string_name", "current_team_name", "_name_key"):
                 if col in players.columns:
                     del players[col]
 
@@ -389,14 +407,14 @@ class PlayerDataManager:
         print("Mapping player IDs...")
         players = self.map_player_ids(players)
 
+        print("Adding roster percentages...")
+        players = self.add_roster_percentages(players)
+
         print("Adding injury information...")
         players = self.add_injuries(players, week)
 
         print("Adding bye weeks...")
         players = self.add_bye_weeks(players, nfl_schedule)
-
-        print("Adding roster percentages...")
-        players = self.add_roster_percentages(players)
 
         print("Adding depth charts...")
         players = self.add_depth_charts(players, week)
