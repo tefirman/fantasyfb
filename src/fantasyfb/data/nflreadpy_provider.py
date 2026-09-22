@@ -414,6 +414,15 @@ class NflreadpyProvider(NFLDataProvider):
         return offense
 
     def _build_defense(self, raw: pd.DataFrame, seasons: Iterable[int]) -> pd.DataFrame:
+        # nflreadpy occasionally emits a stray team/week row with no
+        # player_id/name/position at all but a nonzero stat value (e.g. a
+        # phantom def_safeties=1 with a wrong opponent_team) -- a data
+        # artifact, not a real play. Excluding rows with no player
+        # identity keeps that noise out of the team-week aggregation
+        # below, same as every real defensive stat row having an actual
+        # player attached.
+        raw = raw[raw["player_id"].notna()]
+
         # Aggregate per-player defensive stats up to team-week totals.
         agg_cols = {
             "def_sacks": "sacks",

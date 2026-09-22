@@ -110,6 +110,16 @@ def initialize_inputs():
         dest="output",
         help="where to save the final projections spreadsheet",
     )
+    parser.add_option(
+        "--refresh-cache",
+        action="store_true",
+        dest="refresh_cache",
+        default=False,
+        help="force a fresh pull of nflreadpy stats/rosters/schedule instead of "
+             "using the (up to 24h stale) filesystem cache -- use this when "
+             "checking live in-progress scores, since nflverse actively "
+             "corrects stats through midweek",
+    )
 
     options, args = parser.parse_args()
     
