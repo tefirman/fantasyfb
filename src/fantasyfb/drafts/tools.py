@@ -27,35 +27,17 @@ Public API:
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
 
+from ..name_utils import normalize_name_key as _normalize_name_key
+
 
 _BASE_POSITIONS: tuple[str, ...] = ("QB", "RB", "WR", "TE", "K", "DEF")
 _SEASON_GAMES: int = 17
-
-# Generational suffixes FantasyPros-style ADP exports append to player
-# names ("James Cook III", "Travis Etienne Jr.") that the projections'
-# nflreadpy-sourced `name` column generally omits ("James Cook"). Left
-# alone they break the exact-string join in merge_adp, silently dropping
-# ADP for ~two dozen players a season including early-round starters.
-_NAME_SUFFIX_RE = re.compile(
-    r"\s+(?:jr|sr|ii|iii|iv|v)\.?$", flags=re.IGNORECASE
-)
-
-
-def _normalize_name_key(names: pd.Series) -> pd.Series:
-    """Build a join-key copy of a name column: trailing generational
-    suffix stripped, whitespace collapsed, lowercased. Never overwrites
-    the display name -- callers merge on this and keep `name` as-is."""
-    key = names.astype(str).str.strip()
-    key = key.str.replace(_NAME_SUFFIX_RE, "", regex=True)
-    key = key.str.replace(r"\s+", " ", regex=True).str.strip().str.lower()
-    return key
 
 
 # Flex slot encoding used by Yahoo league configs throughout the
