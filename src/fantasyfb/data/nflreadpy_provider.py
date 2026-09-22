@@ -246,6 +246,9 @@ _OFFENSE_RENAMES = {
     "punt_return_yards": "punt_ret_yds",
     "pat_made": "xpm",
     "fg_made": "fgm",
+    "fg_made_distance": "fg_yds",
+    "pat_missed": "pat_miss",
+    "fumble_recovery_tds": "off_fumble_td",
 }
 
 
@@ -378,6 +381,20 @@ class NflreadpyProvider(NFLDataProvider):
         offense["kick_ret_td"] = offense["special_teams_tds"].fillna(0)
         offense["punt_ret_td"] = 0
 
+        # Combine the three 2pt-conversion flavors (pass/rush/rec) into one
+        # offensive stat -- the scorer pays them all at the same rate.
+        for col in (
+            "passing_2pt_conversions", "rushing_2pt_conversions",
+            "receiving_2pt_conversions",
+        ):
+            if col not in offense.columns:
+                offense[col] = 0
+        offense["two_pt"] = (
+            offense["passing_2pt_conversions"].fillna(0)
+            + offense["rushing_2pt_conversions"].fillna(0)
+            + offense["receiving_2pt_conversions"].fillna(0)
+        )
+
         offense["game_id"] = self._build_game_id(offense)
 
         keep = [
@@ -388,6 +405,7 @@ class NflreadpyProvider(NFLDataProvider):
             "pass_yds", "pass_cmp", "pass_td", "pass_first_down", "pass_int",
             "fumbles_lost", "kick_ret_yds", "punt_ret_yds",
             "kick_ret_td", "punt_ret_td", "xpm", "fgm",
+            "fg_yds", "pat_miss", "off_fumble_td", "two_pt",
         ]
         offense = offense[[c for c in keep if c in offense.columns]].copy()
         for col in keep:
@@ -403,6 +421,10 @@ class NflreadpyProvider(NFLDataProvider):
             "fumble_recovery_opp": "fumbles_rec",
             "def_tds": "def_int_td",
             "def_tackles_for_loss": "tackles_for_loss",
+            "def_safeties": "safeties",
+            "def_punt_blocks": "punt_blocks",
+            "def_pat_blocks": "pat_blocks",
+            "def_fg_blocks": "fg_blocks",
         }
         for src in agg_cols:
             if src not in raw.columns:
@@ -420,6 +442,12 @@ class NflreadpyProvider(NFLDataProvider):
         # The fantasy scorer pays both at the same rate, so attributing
         # the whole bucket to def_int_td is point-equivalent.
         team_def["fumbles_rec_td"] = 0
+
+        # Punt/PAT/FG blocks all score at the same "Blk Kick" rate, so
+        # collapse them into one blocked_kicks total.
+        team_def["blocked_kicks"] = (
+            team_def["punt_blocks"] + team_def["pat_blocks"] + team_def["fg_blocks"]
+        )
 
         # points_allowed comes from the schedule, not the stats feed.
         sched = _load_pandas(nfl.load_schedules, seasons=list(seasons))
@@ -444,6 +472,7 @@ class NflreadpyProvider(NFLDataProvider):
             "pass_yds", "pass_cmp", "pass_td", "pass_first_down", "pass_int",
             "fumbles_lost", "kick_ret_yds", "punt_ret_yds",
             "kick_ret_td", "punt_ret_td", "xpm", "fgm",
+            "fg_yds", "pat_miss", "off_fumble_td", "two_pt",
         ]:
             team_def[col] = 0
 

@@ -12,9 +12,15 @@ from typing import Dict, Union
 class FantasyScorer:
     """
     Calculates fantasy points from player statistics using configurable scoring rules.
-    
+
     This class extracts the core scoring logic to work with any fantasy platform
     that can provide player stats in the expected DataFrame format.
+
+    Note: Yahoo also exposes a generic 'TD' scoring category alongside the
+    specific Pass/Rush/Rec/Ret/Off Fumb TD categories above. Every TD
+    pathway nflreadpy exposes is already covered by one of those specific
+    categories, so 'TD' is intentionally left unwired here -- scoring it
+    independently would risk double-counting the same touchdown twice.
     """
     
     def __init__(self, scoring_settings: Dict[str, float]):
@@ -28,9 +34,12 @@ class FantasyScorer:
                 - 'Rec', 'Rec Yds', 'Rec TD', 'Rec 1D'  
                 - 'Pass Yds', 'Pass Comp', 'Pass TD', 'Pass 1D'
                 - 'Int Thrown', 'Fum Lost', 'Ret Yds', 'Ret TD'
-                - 'PAT Made', 'FG 0-19', 'TE Rec Bonus', 'TE 1D Bonus'
+                - 'PAT Made', 'PAT Miss', 'FG 0-19', 'FG Yds'
+                - 'TE Rec Bonus', 'TE 1D Bonus'
                 - 'Pass 300+', 'Rush 100+', 'Rec 100+'
-                - 'Sack', 'Int', 'Fum Rec', 'TFL', 'Pts Allow 0', etc.
+                - '2-PT', 'Off Fumb TD'
+                - 'Sack', 'Int', 'Fum Rec', 'TFL', 'Safe', 'Blk Kick',
+                  'Pts Allow 0', etc.
         """
         self.scoring = scoring_settings
         
@@ -49,7 +58,8 @@ class FantasyScorer:
             'Rush+Rec 100+', 'Rush+Rec 200+',
             'Sack', 'Int', 'Fum Rec', 'TFL', 'Pts Allow 0', 'Pts Allow 1-6',
             'Pts Allow 7-13', 'Pts Allow 14-20', 'Pts Allow 21-27',
-            'Pts Allow 28-34', 'Pts Allow 35+'
+            'Pts Allow 28-34', 'Pts Allow 35+',
+            'FG Yds', 'PAT Miss', 'Off Fumb TD', '2-PT', 'Safe', 'Blk Kick',
         ]
         
         for category in default_categories:
@@ -96,8 +106,9 @@ class FantasyScorer:
             'rush_yds', 'rush_att', 'rush_td', 'rush_first_down',
             'rec', 'rec_yds', 'rec_td', 'rec_first_down',
             'pass_yds', 'pass_cmp', 'pass_td', 'pass_first_down', 'pass_int',
-            'fumbles_lost', 'kick_ret_yds', 'punt_ret_yds', 
-            'kick_ret_td', 'punt_ret_td', 'xpm', 'fgm'
+            'fumbles_lost', 'kick_ret_yds', 'punt_ret_yds',
+            'kick_ret_td', 'punt_ret_td', 'xpm', 'fgm',
+            'fg_yds', 'pat_miss', 'off_fumble_td', 'two_pt',
         ]
         
         for col in stat_columns:
@@ -124,7 +135,11 @@ class FantasyScorer:
             (offense_df['kick_ret_yds'] + offense_df['punt_ret_yds']) * self.scoring['Ret Yds'] +
             (offense_df['kick_ret_td'] + offense_df['punt_ret_td']) * self.scoring['Ret TD'] +
             offense_df['xpm'] * self.scoring['PAT Made'] +
-            offense_df['fgm'] * self.scoring['FG 0-19']
+            offense_df['pat_miss'] * self.scoring['PAT Miss'] +
+            offense_df['fgm'] * self.scoring['FG 0-19'] +
+            offense_df['fg_yds'] * self.scoring['FG Yds'] +
+            offense_df['off_fumble_td'] * self.scoring['Off Fumb TD'] +
+            offense_df['two_pt'] * self.scoring['2-PT']
         )
         
         # TE position bonuses
@@ -161,20 +176,23 @@ class FantasyScorer:
         # Fill any missing defensive stat columns with 0
         def_stat_columns = [
             'sacks', 'def_int', 'fumbles_rec', 'def_int_td', 'fumbles_rec_td',
-            'kick_ret_td', 'punt_ret_td', 'points_allowed', 'tackles_for_loss'
+            'kick_ret_td', 'punt_ret_td', 'points_allowed', 'tackles_for_loss',
+            'safeties', 'blocked_kicks',
         ]
-        
+
         for col in def_stat_columns:
             if col not in defense_df.columns:
                 defense_df = defense_df.copy()
                 defense_df[col] = 0
-        
+
         # Base defensive scoring
         points = (
             defense_df['sacks'] * self.scoring['Sack'] +
             defense_df['def_int'] * self.scoring['Int'] +
             defense_df['fumbles_rec'] * self.scoring['Fum Rec'] +
             defense_df['tackles_for_loss'] * self.scoring['TFL'] +
+            defense_df['safeties'] * self.scoring['Safe'] +
+            defense_df['blocked_kicks'] * self.scoring['Blk Kick'] +
             (defense_df['def_int_td'] + defense_df['fumbles_rec_td'] +
              defense_df['kick_ret_td'] + defense_df['punt_ret_td']) * self.scoring['Ret TD']
         )
