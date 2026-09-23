@@ -69,3 +69,113 @@ class TestCombinedRushRecBonus:
         df = pd.DataFrame([_player("RB", rush_yds=150, rec_yds=10)])
         result = FantasyScorer(scoring).calculate_points(df)
         assert result.loc[0, "points"] == pytest.approx(160 * 0.1 + 5.0 + 10.0)
+
+
+class TestDefensiveTacklesForLoss:
+    """Tackles-for-loss is a team-DEF stat some leagues score separately
+    from sacks; nflreadpy_provider._build_defense feeds it in as
+    tackles_for_loss."""
+
+    def test_tfl_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["TFL"] = 0.5
+        df = pd.DataFrame([_player("DEF", tackles_for_loss=6)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(3.0)
+
+    def test_tfl_stacks_with_other_defensive_stats(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["Sack"] = 1.0
+        scoring["TFL"] = 0.5
+        df = pd.DataFrame([_player("DEF", sacks=3, tackles_for_loss=4)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(3 * 1.0 + 4 * 0.5)
+
+    def test_missing_tfl_column_defaults_to_zero(self):
+        df = pd.DataFrame([_player("DEF", sacks=2)])
+        result = FantasyScorer(dict(SFB16_SCORING)).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(0.0)
+
+
+class TestFieldGoalYardageScoring:
+    """Some leagues (e.g. 0.1 pts/yard) score kickers by actual FG distance
+    instead of the FG 0-19/20-29/etc. tiers. Regression test for a real
+    discrepancy: a kicker who made FGs of 23/47/51 yards plus a PAT was
+    projected at way less than Yahoo's actual total because only 'FG 0-19'
+    (a flat per-kick rate) was ever applied, ignoring 'FG Yds' entirely."""
+
+    def test_fg_yds_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["FG 0-19"] = 0.0
+        scoring["FG Yds"] = 0.1
+        scoring["PAT Made"] = 1.0
+        df = pd.DataFrame([_player("K", fgm=3, fg_yds=121, xpm=1)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(13.1)
+
+    def test_fg_0_19_and_fg_yds_are_additive_not_exclusive(self):
+        # A league could (in principle) award both a flat per-kick bonus
+        # and a yardage rate; the two terms should simply add.
+        scoring = dict(SFB16_SCORING)
+        scoring["FG 0-19"] = 3.0
+        scoring["FG Yds"] = 0.1
+        df = pd.DataFrame([_player("K", fgm=1, fg_yds=45)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(3.0 + 4.5)
+
+    def test_missing_fg_yds_column_defaults_to_zero(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["FG 0-19"] = 0.0
+        df = pd.DataFrame([_player("K", fgm=2)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(0.0)
+
+
+class TestMiscellaneousScoringCategories:
+    """PAT Miss, Off Fumb TD, 2-PT (offense) and Safe, Blk Kick (defense)
+    all exist as real, nonzero categories in at least one league's Yahoo
+    scoring settings but had no corresponding stat column wired up at
+    all prior to this test."""
+
+    def test_pat_miss_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["PAT Miss"] = -1.0
+        df = pd.DataFrame([_player("K", pat_miss=1)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(-1.0)
+
+    def test_off_fumble_td_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["Off Fumb TD"] = 6.0
+        df = pd.DataFrame([_player("WR", off_fumble_td=1)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(6.0)
+
+    def test_two_pt_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["2-PT"] = 2.0
+        df = pd.DataFrame([_player("RB", two_pt=2)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(4.0)
+
+    def test_safety_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["Safe"] = 4.0
+        df = pd.DataFrame([_player("DEF", safeties=1)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(4.0)
+
+    def test_blocked_kick_scored_at_configured_rate(self):
+        scoring = dict(SFB16_SCORING)
+        scoring["Blk Kick"] = 2.0
+        df = pd.DataFrame([_player("DEF", blocked_kicks=2)])
+        result = FantasyScorer(scoring).calculate_points(df)
+        assert result.loc[0, "points"] == pytest.approx(4.0)
+
+    def test_missing_columns_do_not_raise(self):
+        df = pd.DataFrame([
+            _player("K", fgm=1),
+            _player("DEF", sacks=1),
+        ])
+        result = FantasyScorer(dict(SFB16_SCORING)).calculate_points(df)
+        assert result["points"].notna().all()

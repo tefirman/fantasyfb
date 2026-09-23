@@ -806,6 +806,7 @@ def main():
         injurytries=options.injurytries,
         num_sims=options.sims,
         earliest=options.earliest,
+        nfl_provider=NflreadpyProvider(refresh=options.refresh_cache),
     )
     # Create Excel exporter
     excel_file = options.output + "FantasyFootballProjections_{}Week{}{}.xlsx".format(

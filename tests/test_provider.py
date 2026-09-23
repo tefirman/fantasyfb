@@ -24,6 +24,8 @@ REQUIRED_STAT_COLS = {
     "fumbles_lost", "kick_ret_yds", "punt_ret_yds",
     "kick_ret_td", "punt_ret_td", "xpm", "fgm",
     "sacks", "def_int", "fumbles_rec", "def_int_td", "fumbles_rec_td",
+    "tackles_for_loss", "fg_yds", "pat_miss", "off_fumble_td", "two_pt",
+    "safeties", "blocked_kicks",
 }
 
 REQUIRED_SCHEDULE_COLS = {
@@ -52,10 +54,67 @@ class TestPlayerStats:
         defenses = stats[stats.position == "DEF"]
         assert defenses["sacks"].between(0, 12).all()
 
+    def test_defense_tackles_for_loss_in_plausible_range(self, stats: pd.DataFrame) -> None:
+        defenses = stats[stats.position == "DEF"]
+        assert defenses["tackles_for_loss"].notna().all()
+        assert defenses["tackles_for_loss"].between(0, 20).all()
+
+    def test_kicker_fg_yds_in_plausible_range(self, stats: pd.DataFrame) -> None:
+        # A kicker who makes 6+ FGs in a wild game can clear 250 combined
+        # yards (e.g. Chris Boswell's 6-for-6, 273 yards, 2024 W1); anything
+        # negative or absurdly large signals a unit mismatch, not a real game.
+        kickers = stats[(stats.position == "K") & (stats["fgm"] > 0)]
+        assert not kickers.empty
+        assert kickers["fg_yds"].between(0, 400).all()
+
     def test_yyyyww_range_respected(self, stats: pd.DataFrame) -> None:
         as_of = stats.season * 100 + stats.week
         assert as_of.min() >= 202401
         assert as_of.max() <= 202404
+
+
+class TestBuildDefenseExcludesPhantomRows:
+    """Regression test: nflreadpy occasionally emits a stray team/week row
+    with no player_id/name/position at all but a nonzero stat value (a
+    def_safeties=1 with a garbage opponent_team was observed for a real
+    team/week that had no actual safety). Such a row must not be summed
+    into the team's real defensive total."""
+
+    def _raw_frame(self) -> pd.DataFrame:
+        return pd.DataFrame([
+            {
+                "player_id": "00-0012345", "player_display_name": "Real Player",
+                "team": "BUF", "opponent_team": "NYJ", "season": 2026, "week": 2,
+                "def_sacks": 2, "def_interceptions": 0, "fumble_recovery_opp": 0,
+                "def_tds": 0, "def_tackles_for_loss": 3, "def_safeties": 0,
+                "def_punt_blocks": 0, "def_pat_blocks": 0, "def_fg_blocks": 0,
+            },
+            {
+                # Phantom row: no identity, wrong/stale opponent, but a
+                # nonzero stat that would otherwise get summed in.
+                "player_id": None, "player_display_name": None,
+                "team": "BUF", "opponent_team": "DET", "season": 2026, "week": 2,
+                "def_sacks": 0, "def_interceptions": 0, "fumble_recovery_opp": 0,
+                "def_tds": 0, "def_tackles_for_loss": 0, "def_safeties": 1,
+                "def_punt_blocks": 0, "def_pat_blocks": 0, "def_fg_blocks": 0,
+            },
+        ])
+
+    def test_phantom_row_excluded_from_team_totals(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        provider = mod.NflreadpyProvider()
+        sched = pd.DataFrame([{
+            "season": 2026, "week": 2, "game_type": "REG",
+            "home_team": "BUF", "away_team": "NYJ",
+            "home_score": 41, "away_score": 31,
+        }])
+        monkeypatch.setattr(mod, "_load_pandas", lambda *a, **kw: sched)
+
+        team_def = provider._build_defense(self._raw_frame(), [2026])
+        buf = team_def[team_def["team"] == "BUF"].iloc[0]
+
+        assert buf["sacks"] == 2
+        assert buf["tackles_for_loss"] == 3
+        assert buf["safeties"] == 0
 
 
 class TestSchedule:
