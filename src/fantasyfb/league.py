@@ -106,6 +106,8 @@ class League:
         """ Season of interest, defaults to most recent season when no value is provided """
         if client is not None:
             self.client = client
+            self.name = name
+            self.lg_id = None
         elif platform == "sleeper":
             if not sleeper_league_id:
                 raise ValueError("sleeper_league_id is required when platform='sleeper'")

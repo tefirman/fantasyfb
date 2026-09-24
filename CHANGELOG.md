@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **End-to-end snapshot test of the weekly run**: `tests/test_weekly_snapshot.py` replays recorded real-world inputs (every `NFLDataProvider` and `FantasyPlatformClient` call, the injury list, and a frozen wall clock) through the full weekly pipeline offline: `League` construction, projections, lineups, live-week actuals, `season_sims`, adds/drops, and the Excel export. It then checks invariants any correct run must satisfy: no duplicate players, every team fills a full, legal lineup, starters whose game is final carry their actual points with zero variance while pending games keep theirs, win/playoff/title probabilities and payouts sum correctly, played weeks keep their real results, move analysis restores rosters, and every report sheet is written. These target the bug class recent releases kept finding on game day (#78, #80, #81, #86, #89); reverting the #81 fix, for example, fails five of its checks. Ships with one snapshot, a synthetic 12-team league on real 2026 week 2 data frozen at Sunday night (Thursday and Sunday games final, Monday night pending). `scripts/record_snapshot.py` records more from a Yahoo, Sleeper, or generic league. Adds `freezegun` to the `dev` extra.
+
+### Fixed
+- **`League(client=...)` crashed during construction**: the pre-built-client branch, documented as the testing hook, never set `self.name` or `self.lg_id`, so construction failed with an `AttributeError` at `ScheduleManager`. Nothing had exercised it until the snapshot test.
+
 ## [0.9.0] — 2026-09-15
 
 ### Removed
