@@ -23,6 +23,10 @@ from .platform_client import FantasyPlatformClient
 # errors both subclass it. It's optional enrichment, so it's correct to
 # skip and warn rather than crash a draft-prep run that's otherwise
 # working entirely from nflreadpy's own persistent cache.
+INJURED_LIST_URL = (
+    "https://raw.githubusercontent.com/"
+    "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
+)
 
 
 class PlayerDataManager:
@@ -179,10 +183,7 @@ class PlayerDataManager:
         # For current season, use injury projections
         if as_of // 100 == self.latest_season:
             try:
-                inj_proj = pd.read_csv(
-                    "https://raw.githubusercontent.com/"
-                    + "tefirman/fantasy-data/main/fantasyfb/injured_list.csv"
-                )
+                inj_proj = pd.read_csv(INJURED_LIST_URL)
             except OSError:
                 warnings.warn(
                     "Could not reach injured_list.csv (offline?); skipping "

@@ -1,0 +1,15 @@
+{
+  "platform": "generic",
+  "team": "Snapshot Team",
+  "season": 2026,
+  "week": 2,
+  "as_of": "2026-09-20T23:30",
+  "seed": 0,
+  "description": "Synthetic 12-team PPR league (rosters snake-drafted on 2025 fantasy points), real NFL data, clock frozen Sunday night of 2026 week 2: TNF + Sunday games final, MNF (LA-NYG) pending.",
+  "recorded_at": "2026-09-24T18:27:16",
+  "versions": {
+    "pandas": "3.0.6",
+    "numpy": "2.4.6"
+  },
+  "current_week": 2
+}

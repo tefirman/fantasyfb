@@ -39,6 +39,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4",
+    "freezegun>=1.2",
     "ruff>=0.5",
     "build>=1.0",
 ]
