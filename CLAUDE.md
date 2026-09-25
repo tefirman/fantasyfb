@@ -56,4 +56,5 @@ Yahoo needs `oauth2.json` plus `.env` with `CONSUMER_KEY`/`CONSUMER_SECRET` in t
 - `CHANGELOG.md` follows Keep a Changelog with an `[Unreleased]` section; fixes are written up in detail with the issue/PR number. `docs/changelog.md` pulls it in via a snippet include, so edit only `CHANGELOG.md`. Release notes drafts live in `notes/release_vX.Y.Z.md`.
 - `notes/` and all `*.csv` files (except `examples/*.csv`) are gitignored; the CSVs at the repo root are local run outputs/inputs, not fixtures.
 - Publishing to PyPI happens from `.github/workflows/publish.yml` on a GitHub release (TestPyPI on manual dispatch). Docs deploy to GitHub Pages on push to main.
+- Project skills in `.claude/skills/`: `/weekly-run` (in-season pipeline run with data sanity checks), `/update-injuries`, `/changelog-entry`, and `/release` (which stops before publishing, since a GitHub release uploads to PyPI).
 - In user-facing text, say "salary cap draft" / "bidding", not "auction".
