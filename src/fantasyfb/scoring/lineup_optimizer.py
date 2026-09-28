@@ -10,6 +10,9 @@ import pandas as pd
 
 from ..data.platform_client import FantasyPlatformClient
 
+# Roster slots whose occupants don't score for the fantasy team.
+INACTIVE_SLOTS = ["BN", "IR", "IR+", "NA"]
+
 class LineupOptimizer:
     """
     Handles optimal lineup selection for fantasy football teams.
@@ -92,9 +95,12 @@ class LineupOptimizer:
         
         # Set starters for each team
         for team in self.teams:
-            # Get already started players
+            # Get already started players. IR/NA slots are excluded along
+            # with BN: a player parked on IR whose NFL team has played is
+            # not an active starter and must not be locked in (which would
+            # add his projection on top of a full lineup).
             started = players.loc[
-                (players.selected_position != "BN")
+                ~players.selected_position.isin(INACTIVE_SLOTS)
                 & (players.fantasy_team == team["name"])
                 & players.current_team.isin(completed)
             ]
@@ -107,9 +113,9 @@ class LineupOptimizer:
             # scoring) even though they were legitimately active.
             players.loc[started.index, "starter"] = True
 
-            # Get bench players from completed games
+            # Get bench/IR players from completed games
             not_available = players.loc[
-                (players.selected_position == "BN")
+                players.selected_position.isin(INACTIVE_SLOTS)
                 & (players.fantasy_team == team["name"])
                 & players.current_team.isin(completed)
             ]

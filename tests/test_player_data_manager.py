@@ -100,6 +100,26 @@ class TestMapPlayerIds:
         mapped = manager.map_player_ids(players)
         assert mapped.iloc[0]["player_id_sr"] == target["player_id_sr"]
 
+    def test_defense_id_is_nfl_team_code(
+        self, manager: PlayerDataManager, team_aliases: pd.DataFrame
+    ) -> None:
+        """Regression: DEF player_id_sr was set to the platform display
+        name (Yahoo's "Chiefs"), which never matched the provider's
+        team-DEF rows (keyed "KC"), so every defense fell back to the
+        league-average projection and never got live-week actuals.
+        """
+        row = team_aliases[team_aliases["real_abbrev"] == "KC"].iloc[0]
+        players = pd.DataFrame([{
+            "player_id": 100012,
+            "name": "Chiefs",
+            "position": "DEF",
+            "editorial_team_abbr": row["yahoo"],
+            "status": "",
+            "fantasy_team": None,
+        }])
+        mapped = manager.map_player_ids(players)
+        assert mapped.iloc[0]["player_id_sr"] == "KC"
+
 
 class TestAddByeWeeks:
     def test_every_team_has_bye(

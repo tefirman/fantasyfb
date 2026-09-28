@@ -405,7 +405,12 @@ class League:
         del by_player['yahoo_name']
         
         # Handle defense naming
-        defenses = by_player.player_id_sr.isin(self.nfl_teams.real_abbrev.tolist())
+        # Keep the platform's display name (e.g. Yahoo's "Chiefs") and fall
+        # back to the team abbreviation only when there isn't one.
+        defenses = (
+            by_player.player_id_sr.isin(self.nfl_teams.real_abbrev.tolist())
+            & by_player.name.isnull()
+        )
         by_player.loc[defenses,'name'] = by_player.loc[defenses,'player_id_sr']
         
         # Handle average player naming
