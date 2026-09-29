@@ -136,9 +136,12 @@ class PlayerDataManager:
             players.loc[fill, "player_id_sr"] = players.loc[fill, "_pid_sr_byname"]
             del players["_pid_sr_byname"], players["_name_key"]
 
-        # Defenses use the team abbreviation as their ID.
+        # Defenses use the NFL team abbreviation as their ID, matching the
+        # team-DEF rows the NFL provider emits (player_id_sr == team). Keyed
+        # off current_team rather than the platform's display name, which is
+        # a nickname on Yahoo ("Chiefs") and never matched the stats.
         defenses = players["position"].isin(["DEF"])
-        players.loc[defenses, "player_id_sr"] = players.loc[defenses, "name"]
+        players.loc[defenses, "player_id_sr"] = players.loc[defenses, "current_team"]
 
         # Surface duplicate IDs so we can flag data-quality regressions early.
         id_check = players.groupby("player_id_sr").size().to_frame("freq").reset_index()

@@ -140,3 +140,46 @@ class TestHandleLiveWeekLineupStarterFlag:
             nfl_schedule=_schedule(), matchup_model=_neutral_matchup_model(),
         )
         assert out[out.position == "RB"].starter.sum() == 2
+
+
+class TestHandleLiveWeekLineupInactiveSlots:
+    """Regression: an IR-slotted player whose NFL game has finished was
+    treated as "already started" (the check was only != BN), so he was
+    locked in as an extra starter on top of a full lineup and his
+    projection was added to the team's live-week total.
+    """
+
+    def _players(self) -> pd.DataFrame:
+        return pd.DataFrame({
+            "player_id_sr": ["wr_ir_done", "wr_done", "wr_late"],
+            "player_id": ["1", "2", "3"],
+            "name": ["IR Guy", "Done Guy", "Late Guy"],
+            "position": ["WR", "WR", "WR"],
+            "current_team": ["DONE_TEAM", "DONE_TEAM", "LATE_TEAM"],
+            "fantasy_team": ["A", "A", "A"],
+            "selected_position": ["IR", "WR", "WR"],
+            "points_rate": [20.0, 15.0, 10.0],
+            "string": [1.0, 1.0, 1.0],
+            "until": [None, None, None],
+            "bye_week": [99, 99, 99],
+        })
+
+    @pytest.mark.parametrize("slot", ["IR", "IR+", "NA"])
+    def test_inactive_slot_finished_game_player_is_not_starter(self, slot) -> None:
+        players = self._players()
+        players.loc[0, "selected_position"] = slot
+        out = _optimizer().set_optimal_lineup(
+            players, week=1, season=2026, current_week=1, latest_season=2026,
+            nfl_schedule=_schedule(), matchup_model=_neutral_matchup_model(),
+        )
+        row = out.set_index("player_id_sr").loc["wr_ir_done"]
+        assert row["starter"] == False  # noqa: E712
+
+    def test_active_finished_and_late_players_still_start(self) -> None:
+        out = _optimizer().set_optimal_lineup(
+            self._players(), week=1, season=2026, current_week=1,
+            latest_season=2026, nfl_schedule=_schedule(),
+            matchup_model=_neutral_matchup_model(),
+        )
+        starters = set(out.loc[out.starter, "player_id_sr"])
+        assert {"wr_done", "wr_late"} <= starters
