@@ -108,7 +108,7 @@ def initialize_inputs():
         "--output",
         action="store",
         dest="output",
-        help="where to save the final projections spreadsheet",
+        help="directory to save the final projections report(s) in",
     )
     parser.add_option(
         "--refresh-cache",
@@ -119,6 +119,35 @@ def initialize_inputs():
              "using the (up to 24h stale) filesystem cache -- use this when "
              "checking live in-progress scores, since nflverse actively "
              "corrects stats through midweek",
+    )
+
+    parser.add_option(
+        "--format",
+        action="store",
+        dest="format",
+        type="choice",
+        choices=["excel", "html", "both"],
+        default="excel",
+        help="report format to write: excel (default), html (a single "
+             "self-contained interactive report), or both",
+    )
+    parser.add_option(
+        "--drop-safe-threshold",
+        action="store",
+        dest="drop_safe_threshold",
+        type="float",
+        default=-4.0,
+        help="HTML report: a drop whose expected-earnings change is above this "
+             "dollar value is labelled 'Safe to cut' (default -4)",
+    )
+    parser.add_option(
+        "--drop-depth-threshold",
+        action="store",
+        dest="drop_depth_threshold",
+        type="float",
+        default=-12.0,
+        help="HTML report: a drop above this dollar value (but not safe to cut) "
+             "is labelled 'Depth', anything lower 'Keep' (default -12)",
     )
 
     options, args = parser.parse_args()

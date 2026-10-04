@@ -24,6 +24,7 @@ from .data.sleeper_client import SleeperClient
 from .data.generic_client import GenericClient
 from .data.platform_client import FantasyPlatformClient
 from .io.excel_exporter import FantasyExcelExporter
+from .io.html_exporter import FantasyHtmlExporter
 from .analysis.war_calculator import WARCalculator
 from .data.player_data_manager import PlayerDataManager
 from .scoring.lineup_optimizer import LineupOptimizer
@@ -813,25 +814,44 @@ def main():
         earliest=options.earliest,
         nfl_provider=NflreadpyProvider(refresh=options.refresh_cache),
     )
-    # Create Excel exporter
-    excel_file = options.output + "FantasyFootballProjections_{}Week{}{}.xlsx".format(
+    # Create exporters for the requested report format(s)
+    stem = options.output + "FantasyFootballProjections_{}Week{}{}".format(
         datetime.datetime.now().strftime("%A"), league.week, "_BestBall" if options.bestball else ""
     )
-    exporter = FantasyExcelExporter(excel_file)
+    excel_exporter = (
+        FantasyExcelExporter(stem + ".xlsx") if options.format in ("excel", "both") else None
+    )
+    html_exporter = (
+        FantasyHtmlExporter(
+            stem + ".html",
+            week=league.week,
+            me=options.team,
+            sims=league.num_sims,
+            day=datetime.datetime.now().strftime("%A"),
+            bestball=bool(options.bestball),
+            drop_safe_threshold=options.drop_safe_threshold,
+            drop_depth_threshold=options.drop_depth_threshold,
+        )
+        if options.format in ("html", "both")
+        else None
+    )
+    exporters = [e for e in (excel_exporter, html_exporter) if e is not None]
 
     rosters = (
         league.players.loc[~league.players.fantasy_team.isnull()]
         .sort_values(by=["fantasy_team", "WAR"], ascending=[True, False])
         .copy()
     )
-    exporter.export_rosters(rosters)
+    for exporter in exporters:
+        exporter.export_rosters(rosters)
 
     available = league.players.loc[
         league.players.fantasy_team.isnull()
         & (league.players.until.isnull() | (league.players.until < 17))
     ].sort_values(by="WAR", ascending=False)
     del available["fantasy_team"]
-    exporter.export_available(available)
+    for exporter in exporters:
+        exporter.export_available(available)
 
     if options.bestball:
         standings_sim = league.bestball_sims(payouts=options.payouts)
@@ -851,7 +871,8 @@ def main():
                 ],
             ].to_string(index=False)
         )
-        exporter.export_schedule(schedule_sim)
+        for exporter in exporters:
+            exporter.export_schedule(schedule_sim)
     print(
         standings_sim[
             [
@@ -865,7 +886,8 @@ def main():
             ]
         ].to_string(index=False)
     )
-    exporter.export_standings(standings_sim)
+    for exporter in exporters:
+        exporter.export_standings(standings_sim)
 
     if options.pickups:
         pickups = league.possible_pickups(
@@ -877,7 +899,8 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(pickups, "Pickups", freeze_cols=2)
+        for exporter in exporters:
+            exporter.export_analysis(pickups, "Pickups", freeze_cols=2)
 
     if options.adds:
         adds = league.possible_adds(
@@ -886,14 +909,16 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(adds, "Adds")
+        for exporter in exporters:
+            exporter.export_analysis(adds, "Adds")
 
     if options.drops:
         drops = league.possible_drops(
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(drops, "Drops")
+        for exporter in exporters:
+            exporter.export_analysis(drops, "Drops")
 
     if options.trades or options.given:
         if not options.trades:
@@ -908,13 +933,16 @@ def main():
             payouts=options.payouts,
             bestball=options.bestball,
         )
-        exporter.export_analysis(trades, "Trades", freeze_cols=3)
+        for exporter in exporters:
+            exporter.export_analysis(trades, "Trades", freeze_cols=3)
 
     if options.deltas:
         deltas = league.perGameDelta(payouts=options.payouts)
-        exporter.export_deltas(deltas)
+        if excel_exporter is not None:
+            excel_exporter.export_deltas(deltas)
 
-    exporter.close()
+    for exporter in exporters:
+        exporter.close()
     os.system(
         'touch -t {} "{}"'.format(
             datetime.datetime.now().strftime("%Y%m%d%H%M"),
