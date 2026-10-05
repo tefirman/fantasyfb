@@ -399,10 +399,9 @@
       '<div id="fa-count" style="font-size:13px;color:var(--color-neutral-700)"></div></div>' +
       '<div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center">' +
       '<input class="input" id="fa-q" style="width:220px" placeholder="Search players or NFL team" value="' + esc(S.q) + '">' +
-      '<select class="input" style="width:auto" data-action="fa-min" aria-label="Minimum rostered percentage">' +
-      [[0, "Any rostered %"], [0.01, "Rostered 1%+"], [0.05, "Rostered 5%+"], [0.1, "Rostered 10%+"], [0.25, "Rostered 25%+"], [0.5, "Rostered 50%+"]].map(function (o) {
-        return '<option value="' + o[0] + '"' + (o[0] === S.faMin ? " selected" : "") + ">" + o[1] + "</option>";
-      }).join("") + "</select>" +
+      '<label style="display:flex;align-items:center;gap:var(--space-2);font-size:13px;color:var(--color-neutral-700)">Rostered \u2265 ' +
+      '<input type="range" id="fa-min" min="0" max="100" step="1" value="' + Math.round(S.faMin * 100) + '" style="width:140px;accent-color:var(--color-accent)" aria-label="Minimum rostered percentage">' +
+      '<span id="fa-min-label" style="min-width:34px;font-variant-numeric:tabular-nums;color:var(--color-text)">' + Math.round(S.faMin * 100) + "%</span></label>" +
       seg("fapos", POS.map(function (p) { return [p, p === "ALL" ? "All" : p]; }), S.faPos, "fa-pos") + "</div></div>" +
       '<div id="fa-results"></div></section>';
   }
@@ -450,13 +449,17 @@
     else if (a === "add-pos") S.addPos = el.value;
     else if (a === "trade-filter") S.tf = el.value;
     else if (a === "week") S.week = +el.value;
-    else if (a === "fa-min") { S.faMin = +el.value; S.faAll = false; }
     else if (a === "fa-pos") { S.faPos = el.value; S.faAll = false; }
     else return;
     render();
   });
   document.addEventListener("input", function (e) {
     if (e.target.id === "fa-q") { S.q = e.target.value; S.faAll = false; paintFA(); }
+    else if (e.target.id === "fa-min") {
+      S.faMin = +e.target.value / 100; S.faAll = false;
+      $("fa-min-label").textContent = e.target.value + "%";
+      paintFA();
+    }
   });
 
   /* ---------- boot ---------- */
