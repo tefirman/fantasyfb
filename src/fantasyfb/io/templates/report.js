@@ -24,7 +24,7 @@
   var S = {
     team: D.me, tab: TABS[0][0], sKey: "earnings", sDir: -1, week: CW,
     mv: MOVES[0], aKey: "earnings", aDir: -1, addPos: "ALL", tf: "all",
-    faPos: "ALL", faAll: false, q: ""
+    faPos: "ALL", faAll: false, q: "", faMin: 0.05
   };
 
   /* ---------- helpers ---------- */
@@ -379,7 +379,7 @@
   function faResults() {
     var q = S.q.trim().toLowerCase();
     var all = (D.available || []).filter(function (p) {
-      return (S.faPos === "ALL" || p.position === S.faPos) && (!q || String(p.name).toLowerCase().indexOf(q) >= 0 || String(p.current_team || "").toLowerCase() === q);
+      return (p.pct_rostered || 0) >= S.faMin && (S.faPos === "ALL" || p.position === S.faPos) && (!q || String(p.name).toLowerCase().indexOf(q) >= 0 || String(p.current_team || "").toLowerCase() === q);
     });
     var shown = S.faAll ? all : all.slice(0, FA_LIMIT);
     var rows = shown.map(function (p) {
@@ -399,6 +399,10 @@
       '<div id="fa-count" style="font-size:13px;color:var(--color-neutral-700)"></div></div>' +
       '<div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center">' +
       '<input class="input" id="fa-q" style="width:220px" placeholder="Search players or NFL team" value="' + esc(S.q) + '">' +
+      '<select class="input" style="width:auto" data-action="fa-min" aria-label="Minimum rostered percentage">' +
+      [[0, "Any rostered %"], [0.01, "Rostered 1%+"], [0.05, "Rostered 5%+"], [0.1, "Rostered 10%+"], [0.25, "Rostered 25%+"], [0.5, "Rostered 50%+"]].map(function (o) {
+        return '<option value="' + o[0] + '"' + (o[0] === S.faMin ? " selected" : "") + ">" + o[1] + "</option>";
+      }).join("") + "</select>" +
       seg("fapos", POS.map(function (p) { return [p, p === "ALL" ? "All" : p]; }), S.faPos, "fa-pos") + "</div></div>" +
       '<div id="fa-results"></div></section>';
   }
@@ -446,6 +450,7 @@
     else if (a === "add-pos") S.addPos = el.value;
     else if (a === "trade-filter") S.tf = el.value;
     else if (a === "week") S.week = +el.value;
+    else if (a === "fa-min") { S.faMin = +el.value; S.faAll = false; }
     else if (a === "fa-pos") { S.faPos = el.value; S.faAll = false; }
     else return;
     render();
