@@ -37,7 +37,7 @@ The `players` DataFrame is the shared state that most bugs travel through. Recur
 
 ### Data caching and external inputs
 
-- `NflreadpyProvider` switches nflreadpy to a filesystem cache with a hard 24h TTL from download time. `--refresh-cache` on the draft CLIs clears it; the `NFLREADPY_CACHE` env var overrides the default. A `_pyarrow_fallback` path handles parquet files polars rejects for invalid UTF-8 and is uncached.
+- `NflreadpyProvider` switches nflreadpy to a filesystem cache with a hard 24h TTL from download time (the `fantasyfb` CLI shortens it to 30 minutes Thursday to Tuesday, September through January, via `live_cache_duration`). `--refresh-cache` on the draft CLIs clears it; the `NFLREADPY_CACHE` env var overrides the default. A `_pyarrow_fallback` path handles parquet files polars rejects for invalid UTF-8 and is uncached.
 - `get_depth_charts()` defaults to the current calendar year's live feed (not the season clamp other methods use) and degrades to an empty frame when unavailable. Passing `(season, week)` does a historical lookup (pre-2025 schema only), used by `sim/backtest.py`.
 - `get_schedule`/`get_rosters`/`get_player_stats` raise when offline with a cold cache; depth charts and injury overrides degrade with a warning instead.
 - Manual injury return-week overrides come from `injured_list.csv` in the separate `tefirman/fantasy-data` repo (fetched from raw.githubusercontent.com by `PlayerDataManager.add_injuries`). The `/update-injuries` skill in `.claude/skills/` maintains that file (local checkout `~/fantasy-data`) and must never commit without explicit approval.

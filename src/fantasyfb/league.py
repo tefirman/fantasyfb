@@ -30,7 +30,7 @@ from .scoring.lineup_optimizer import LineupOptimizer
 from .analysis.move_analyzer import MoveAnalyzer
 from .cli import initialize_inputs
 from .data.nfl_provider import NFLDataProvider
-from .data.nflreadpy_provider import NflreadpyProvider
+from .data.nflreadpy_provider import LIVE_WEEK_CACHE_SECONDS, NflreadpyProvider
 
 class League:
     """
@@ -811,7 +811,10 @@ def main():
         injurytries=options.injurytries,
         num_sims=options.sims,
         earliest=options.earliest,
-        nfl_provider=NflreadpyProvider(refresh=options.refresh_cache),
+        nfl_provider=NflreadpyProvider(
+            refresh=options.refresh_cache,
+            live_cache_duration=LIVE_WEEK_CACHE_SECONDS,
+        ),
     )
     # Create Excel exporter
     excel_file = options.output + "FantasyFootballProjections_{}Week{}{}.xlsx".format(
