@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-05
+
+Interactive HTML report, game-day cache freshness, and live-week projection fixes.
+
 ### Added
 - **Interactive HTML report as an alternative to the Excel workbook** (#93): a new `FantasyHtmlExporter` (`fantasyfb.io.html_exporter`) has the same shape as `FantasyExcelExporter` (`export_rosters`, `export_available`, `export_schedule`, `export_standings`, `export_analysis`, `close`) but writes one self-contained `.html` file. The tables are embedded as a JSON blob and rendered client-side by inlined vanilla JS and the "Industry" design-system CSS, so the report works offline and can be emailed (only Google Fonts is fetched, with a system-font fallback). Tabs: **My week** (matchup card with score distributions, outlook, season path, lineup and bench), **Standings** (sortable, click a team to scope the whole report to it), **Schedule** (week-by-week matchup cards), **Moves** (Adds, Pickups, Drops and Trades, shown only for the analyses that ran) and **Free agents** (search, position filter, minimum rostered % slider defaulting to 5%, WAR-sorted). The Viewing selector rescopes the report to any team, and the tab and team are kept in the URL hash. For `--bestball` runs, which have no schedule, the matchup, season path and Schedule views are hidden.
 - **`--format excel|html|both` flag on `fantasyfb`** (#93, default `excel`, so existing behavior is unchanged): `html` writes `FantasyFootballProjections_<Weekday>Week<N>.html` next to where the workbook would go, `both` writes both. `Deltas` remains Excel-only.
