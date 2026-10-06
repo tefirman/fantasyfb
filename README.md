@@ -110,7 +110,7 @@ from fantasyfb.io.excel_exporter import FantasyExcelExporter
 | `fantasyfb.projections` | V2 projection engine, walk-forward fitter  |
 | `fantasyfb.sim`         | Season simulation, backtests, schedule     |
 | `fantasyfb.analysis`    | WAR, move analysis                         |
-| `fantasyfb.io`          | Excel export                               |
+| `fantasyfb.io`          | Excel and HTML report export               |
 
 ## Development
 

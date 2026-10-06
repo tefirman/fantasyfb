@@ -32,7 +32,7 @@ from fantasyfb import (
 - **[Scoring](scoring.md)** — `FantasyScorer`, `LineupOptimizer`,
   `MatchupModel`.
 - **[Data providers](data.md)** — Yahoo client, `NflreadpyProvider`.
-- **[I/O](io.md)** — `FantasyExcelExporter`.
+- **[I/O](io.md)** — `FantasyExcelExporter`, `FantasyHtmlExporter`.
 
 ## Configs helper
 

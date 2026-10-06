@@ -30,7 +30,7 @@ fantasyfb/
 | `fantasyfb.sim`         | `SeasonSimulator`, `ScheduleManager`, `backtest` harness                              |
 | `fantasyfb.drafts`      | `snake.py`, `salary_cap.py`, `prep.py`, `tools.py`, `snake_cockpit.py`, `salary_cap_cockpit.py` |
 | `fantasyfb.analysis`    | `WARCalculator`, `MoveAnalyzer`                                                      |
-| `fantasyfb.io`          | `FantasyExcelExporter`                                                               |
+| `fantasyfb.io`          | `FantasyExcelExporter`, `FantasyHtmlExporter`                                        |
 
 ## Data flow
 

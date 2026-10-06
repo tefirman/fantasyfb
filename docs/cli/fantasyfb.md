@@ -65,7 +65,10 @@ All optional — turn on the ones you want.
 
 | Flag       | Type | Default               | Meaning                                                                                         |
 | ---------- | ---- | --------------------- | ----------------------------------------------------------------------------------------------- |
-| `--output` | str  | `~/Documents/<team>/` | Directory to write the spreadsheet into. Auto-creates `<team>/<season>/` subdirs if not present |
+| `--output` | str  | `~/Documents/<team>/` | Directory to write the report(s) into. Auto-creates `<team>/<season>/` subdirs if not present |
+| `--format` | str  | `excel`               | `excel`, `html` (one self-contained interactive report), or `both`                               |
+| `--drop-safe-threshold`  | float | `-4`      | HTML report: a drop whose expected-earnings change is above this is labelled "Safe to cut"       |
+| `--drop-depth-threshold` | float | `-12`     | HTML report: above this (but not safe to cut) is "Depth", anything lower is "Keep"               |
 | `--payouts`| str  | `60,30,10`            | Comma-separated 1st/2nd/3rd payouts used for the earnings calculation                            |
 
 ## Output files
@@ -74,7 +77,15 @@ All optional — turn on the ones you want.
 <output>/FantasyFootballProjections_<Weekday>Week<N>.xlsx
 ```
 
-`_BestBall` is appended when `--bestball` is set.
+`_BestBall` is appended when `--bestball` is set. With `--format html` (or
+`both`) the same name is used with an `.html` extension.
+
+The HTML report is a single file with everything inlined, so it opens
+offline and can be emailed. Use the **Viewing** menu to scope it to any
+team in the league, and the tabs to move between your week, standings,
+the league schedule, roster moves, and free agents. The Moves tab only
+appears when at least one of `--adds`, `--pickups`, `--drops` or
+`--trades` was passed.
 
 The workbook always has **Rosters**, **Available**, and **Standings**
 sheets. Other sheets appear conditionally based on the analysis flags
