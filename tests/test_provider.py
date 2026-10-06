@@ -480,6 +480,46 @@ class TestCacheConfig:
         mod.NflreadpyProvider(cache_duration=3600)
         assert calls == [{"cache_mode": "filesystem", "cache_duration": 3600}]
 
+    def test_live_cache_duration_applies_in_live_window(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        monkeypatch.delenv("NFLREADPY_CACHE", raising=False)
+        monkeypatch.delenv("NFLREADPY_CACHE_DURATION", raising=False)
+        monkeypatch.setattr(mod, "is_live_nfl_window", lambda now=None: True)
+        mod.NflreadpyProvider(live_cache_duration=1800)
+        assert calls == [{"cache_mode": "filesystem", "cache_duration": 1800}]
+
+    def test_live_cache_duration_ignored_outside_live_window(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        monkeypatch.delenv("NFLREADPY_CACHE", raising=False)
+        monkeypatch.setattr(mod, "is_live_nfl_window", lambda now=None: False)
+        mod.NflreadpyProvider(live_cache_duration=1800)
+        assert calls == [{"cache_mode": "filesystem"}]
+
+    def test_explicit_cache_duration_beats_live_duration(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        monkeypatch.delenv("NFLREADPY_CACHE", raising=False)
+        monkeypatch.setattr(mod, "is_live_nfl_window", lambda now=None: True)
+        mod.NflreadpyProvider(cache_duration=7200, live_cache_duration=1800)
+        assert calls == [{"cache_mode": "filesystem", "cache_duration": 7200}]
+
+    def test_env_var_beats_live_duration(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = []
+        monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: calls.append(kw))
+        monkeypatch.delenv("NFLREADPY_CACHE", raising=False)
+        monkeypatch.setenv("NFLREADPY_CACHE_DURATION", "99999")
+        monkeypatch.setattr(mod, "is_live_nfl_window", lambda now=None: True)
+        mod.NflreadpyProvider(live_cache_duration=1800)
+        assert calls == [{"cache_mode": "filesystem"}]
+
     def test_refresh_clears_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cleared = []
         monkeypatch.setattr(mod, "_nfl_update_config", lambda **kw: None)
@@ -732,3 +772,22 @@ class TestLoadPandasFallback:
         assert out["season"].tolist() == [2024]
         # The bad byte should have been replaced with U+FFFD, not raised.
         assert "�" in out["stadium"].iloc[0]
+
+
+class TestIsLiveNflWindow:
+    @pytest.mark.parametrize(
+        "date, expected",
+        [
+            ("2026-10-04", True),   # Sunday
+            ("2026-10-05", True),   # Monday
+            ("2026-10-06", True),   # Tuesday (Monday night stats settling)
+            ("2026-10-08", True),   # Thursday
+            ("2026-10-07", False),  # Wednesday
+            ("2026-10-09", False),  # Friday
+            ("2026-07-12", False),  # offseason Sunday
+            ("2026-01-04", True),   # January Sunday
+        ],
+    )
+    def test_window(self, date: str, expected: bool) -> None:
+        import datetime as dt
+        assert mod.is_live_nfl_window(dt.datetime.fromisoformat(date)) is expected
