@@ -54,12 +54,15 @@ After install, four entry points are on your PATH:
 | ------------------ | ----------------------------------- | ------------------------------------ |
 | `fantasyfb`        | `fantasyfb.league:main`             | Weekly projections + lineup analysis |
 | `snake-draft`      | `fantasyfb.drafts.snake:main`       | Live snake-draft cockpit             |
-| `salary-cap-draft` | `fantasyfb.drafts.salary_cap:main`  | Live salary-cap (auction) draft tool |
+| `salary-cap-draft` | `fantasyfb.drafts.salary_cap:main`  | Live salary-cap draft tool         |
 | `draft-prep`       | `fantasyfb.drafts.prep:main`        | Pre-draft tiers / VORP / mocks       |
 
 ```bash
 # Weekly run for a team
 fantasyfb --team "My Team" --sims 1000 --adds --drops
+
+# Same run, as a self-contained interactive HTML report (or --format both)
+fantasyfb --team "My Team" --sims 1000 --adds --drops --format html
 
 # Pre-draft analytics
 draft-prep tiers --team "My Team"
@@ -73,8 +76,11 @@ salary-cap-draft --team "My Team"
 Run any command with `--help` for the full option list.
 
 NFL data (stats, schedules, rosters) is cached to disk for 24 hours, so
-repeated runs within that window work offline. Past the 24h mark you'll
-need a live connection again to refresh the cache — see
+repeated runs within that window work offline. The `fantasyfb` weekly
+CLI shortens that to 30 minutes on game days (September through
+January, every day except Wednesday and Friday), so reruns pick up
+finished games. Past the cache window you'll need a live connection
+again to refresh it — see
 [nflreadpy caching](docs/architecture.md#nflreadpy-caching) for details
 and the `--refresh-cache` flag.
 

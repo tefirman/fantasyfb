@@ -128,6 +128,14 @@ hitting the network again. In practice this means:
   force a fresh download and restart the clock, or construct
   `NflreadpyProvider(cache_duration=<seconds>)` yourself for a longer
   window (not currently exposed as a CLI flag).
+- **Game-day exception:** the `fantasyfb` weekly CLI uses a 30 minute
+  TTL instead of 24h in September through January on every day except
+  Wednesday and Friday (`is_live_nfl_window`), so a Sunday or Monday
+  rerun sees newly finished games and nflverse stat corrections without
+  `--refresh-cache`. An explicit `cache_duration` argument or the
+  `NFLREADPY_CACHE_DURATION` environment variable still wins, and the
+  draft CLIs keep the 24h default. This is the `live_cache_duration`
+  argument on `NflreadpyProvider`.
 - Past weeks' stats are immutable, so a stale cache is only a concern
   for the current week's in-progress data (live box scores) and depth
   charts, which change during the week.
