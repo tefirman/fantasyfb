@@ -116,9 +116,9 @@ def initialize_inputs():
         dest="refresh_cache",
         default=False,
         help="force a fresh pull of nflreadpy stats/rosters/schedule instead of "
-             "using the (up to 24h stale) filesystem cache -- use this when "
-             "checking live in-progress scores, since nflverse actively "
-             "corrects stats through midweek",
+             "using the filesystem cache (up to 24h stale, or 30 minutes on "
+             "game days) -- use this when checking live in-progress scores, "
+             "since nflverse actively corrects stats through midweek",
     )
 
     parser.add_option(

@@ -20,7 +20,7 @@ simulations to value pickups, trades, and draft picks.
 - **[Connecting a league](platforms.md)** — Yahoo OAuth setup, or the
   credential-free Sleeper/generic options.
 - **[First weekly report](quickstart.md)** — end-to-end walkthrough
-  from a fresh install to a finished Excel file.
+  from a fresh install to a finished Excel or HTML report.
 - **[CLI reference](cli/index.md)** — one page per entry point
   (`fantasyfb`, `snake-draft`, `salary-cap-draft`, `draft-prep`).
 - **[Architecture](architecture.md)** — what each subpackage does and
