@@ -59,7 +59,7 @@ All optional — turn on the ones you want.
 | `--pickups`  | str  | —       | Focused waiver analysis. Pass a comma-separated player list or `all`                                 |
 | `--trades`   | str  | —       | Trade explorer. Pass player names or `all`                                                            |
 | `--given`    | str  | —       | Players locked into the trade when using `--trades` (for multi-player builds)                         |
-| `--deltas`   | flag | off     | Per-game delta sheet — how much each matchup outcome shifts everyone's earnings                       |
+| `--deltas`   | flag | off     | Per-game deltas: how much each matchup outcome shifts everyone's earnings (Deltas sheet in Excel, Rooting guide tab in HTML) |
 
 ### Output
 

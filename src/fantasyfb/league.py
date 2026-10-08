@@ -941,8 +941,8 @@ def main():
 
     if options.deltas:
         deltas = league.perGameDelta(payouts=options.payouts)
-        if excel_exporter is not None:
-            excel_exporter.export_deltas(deltas)
+        for exporter in exporters:
+            exporter.export_deltas(deltas)
 
     for exporter in exporters:
         exporter.close()
