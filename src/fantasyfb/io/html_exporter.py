@@ -100,7 +100,7 @@ class FantasyHtmlExporter:
         }
         self.data = {
             "rosters": [], "available": [], "schedule": [], "standings": [],
-            "adds": [], "pickups": [], "drops": [], "trades": [],
+            "adds": [], "pickups": [], "drops": [], "trades": [], "deltas": [],
         }
 
     def export_rosters(self, rosters_df: pd.DataFrame):
@@ -131,6 +131,16 @@ class FantasyHtmlExporter:
         if key not in ("adds", "pickups", "drops", "trades"):
             raise ValueError(f"Unknown analysis table: {sheet_name!r}")
         self.data[key] = _records(data_df)
+
+    def export_deltas(self, deltas_df: pd.DataFrame):
+        """
+        Collect per-game deltas (the ``--deltas`` rooting guide).
+
+        ``deltas_df`` is the frame returned by ``League.perGameDelta``: one row
+        per hypothetical winner (``winner`` column), one column per team holding
+        that team's change in expected earnings if that winner wins.
+        """
+        self.data["deltas"] = _records(deltas_df)
 
     def _payload(self) -> dict:
         # The report is scoped to one team at a time, so "me" must be a team

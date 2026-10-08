@@ -130,6 +130,27 @@ class TestFantasyHtmlExporter:
         assert data["config"] == {"drop_safe_threshold": -1.0, "drop_depth_threshold": -9.0}
         assert data["adds"] == [] and data["pickups"] == []
 
+    def test_deltas_embedded_as_winner_matrix(self, exporter):
+        exporter.export_standings(_standings())
+        exporter.export_deltas(
+            pd.DataFrame(
+                {
+                    "winner": ["Alpha", "Bravo"],
+                    "Alpha": [12.5, -12.5],
+                    "Bravo": [-7.0, 7.0],
+                }
+            )
+        )
+        data = _data(exporter.render())
+        assert data["deltas"] == [
+            {"winner": "Alpha", "Alpha": 12.5, "Bravo": -7.0},
+            {"winner": "Bravo", "Alpha": -12.5, "Bravo": 7.0},
+        ]
+
+    def test_deltas_default_to_empty(self, exporter):
+        exporter.export_standings(_standings())
+        assert _data(exporter.render())["deltas"] == []
+
     def test_unknown_analysis_name_raises(self, exporter):
         with pytest.raises(ValueError):
             exporter.export_analysis(pd.DataFrame(), "Deltas")

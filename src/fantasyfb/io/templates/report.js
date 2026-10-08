@@ -12,10 +12,11 @@
   var ORD = { QB: 0, RB: 1, WR: 2, TE: 3, K: 4, DEF: 5 };
   var FA_LIMIT = 40;
 
-  var TABS = [["week", "My week"], ["stand", "Standings"], ["sched", "Schedule"], ["moves", "Moves"], ["fa", "Free agents"]]
+  var TABS = [["week", "My week"], ["stand", "Standings"], ["sched", "Schedule"], ["moves", "Moves"], ["root", "Rooting guide"], ["fa", "Free agents"]]
     .filter(function (t) {
       if (t[0] === "sched" && !HAS_SCHED) return false;
       if (t[0] === "moves" && !ANALYSES.some(function (k) { return (D[k] || []).length; })) return false;
+      if (t[0] === "root" && !(HAS_SCHED && (D.deltas || []).length)) return false;
       return true;
     });
   var MOVE_LABELS = { adds: "Adds", pickups: "Pickups", drops: "Drops", trades: "Trades" };
@@ -286,6 +287,61 @@
       '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:var(--space-6)">' + cards + "</div></section>";
   }
 
+  /* ---------- Rooting guide ---------- */
+  // Zero-centered diverging shading: red below zero, green above, clear at zero.
+  // Scaled to the 90th percentile of |delta| (not the max) so the large diagonal
+  // doesn't wash out everything else, with a gamma < 1 to boost small values.
+  function heat(v, scale) {
+    v = num(v);
+    if (!v || !(scale > 0)) return "transparent";
+    var f = Math.pow(Math.min(1, Math.abs(v) / scale), 0.6);
+    return (v < 0 ? "rgba(220,70,50," : "rgba(40,160,95,") + (0.08 + 0.62 * f).toFixed(3) + ")";
+  }
+  function deltaFor(winner, team) {
+    var r = find(D.deltas, "winner", winner);
+    return r ? num(r[team]) : 0;
+  }
+  function rootingCards() {
+    var games = sched.filter(function (g) { return g.week === CW; });
+    var mine = games.filter(function (g) { return g.team_1 === S.team || g.team_2 === S.team; });
+    var rest = games.filter(function (g) { return mine.indexOf(g) < 0; });
+    var card = function (g) {
+      var a = deltaFor(g.team_1, S.team), b = deltaFor(g.team_2, S.team);
+      var pick = Math.abs(a - b) < 0.005 ? null : (a > b ? g.team_1 : g.team_2);
+      var own = g.team_1 === S.team || g.team_2 === S.team;
+      var row = function (t, v) {
+        return '<span style="font-weight:' + (t === pick ? 600 : 400) + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t) + "</span>" +
+          '<span style="font-family:var(--font-heading);font-size:20px;color:' + dc(v) + '">' + money(v) + "</span>";
+      };
+      return '<div class="card blueprint" style="padding:var(--space-4);gap:var(--space-3);border-color:' + (own ? "var(--color-accent)" : "var(--color-divider)") + '">' + corners() +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline"><span class="card-kicker" style="color:var(--color-accent-700)">' +
+        (pick ? "Root for " + esc(pick) : "No preference") + "</span>" + (own ? '<span class="tag tag-accent">Your game</span>' : "") + "</div>" +
+        '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px var(--space-3);align-items:baseline">' + row(g.team_1, a) + row(g.team_2, b) + "</div>" +
+        sub("Change in " + S.team + " expected earnings if that team wins") + "</div>";
+    };
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:var(--space-6)">' + mine.concat(rest).map(card).join("") + "</div>";
+  }
+  function deltaMatrix() {
+    var teams = stand.map(function (s) { return s.team; }).sort();
+    var vals = [];
+    D.deltas.forEach(function (r) { teams.forEach(function (t) { var x = Math.abs(num(r[t])); if (x > 0) vals.push(x); }); });
+    vals.sort(function (x, y) { return x - y; });
+    var m = vals.length ? vals[Math.floor(0.9 * (vals.length - 1))] : 0;
+    var head = "<th>If this team wins</th>" + teams.map(function (t) { return TH_R(esc(t)); }).join("");
+    // Rows follow the column order so the diagonal (a team winning) lines up.
+    var rows = teams.map(function (w) { return find(D.deltas, "winner", w); }).filter(Boolean).map(function (r) {
+      return "<tr><td>" + esc(r.winner) + "</td>" + teams.map(function (t) {
+        return '<td style="text-align:right;background:' + heat(r[t], m) + '">' + money(r[t]) + "</td>";
+      }).join("") + "</tr>";
+    }).join("");
+    return table(Math.max(600, 120 + teams.length * 90), head, rows);
+  }
+  function tabRoot() {
+    return '<section style="display:flex;flex-direction:column;gap:var(--space-6)">' +
+      '<h3 style="margin:0">Rooting guide for ' + esc(S.team) + " · Week " + CW + "</h3>" + rootingCards() +
+      '<h3 style="margin:0">League-wide matrix</h3>' + sub("Each row is a winner; each column is the change in that team's expected earnings.") + deltaMatrix() + "</section>";
+  }
+
   /* ---------- Moves ---------- */
   var DELTA_COLS = [["wins_avg", "Δ Wins", wins], ["playoffs", "Δ Playoffs", pp], ["playoff_bye", "Δ Bye", pp], ["winner", "Δ Title", pp], ["earnings", "Δ Exp. $", money]];
   function dcell(row, col, fmt, bold) {
@@ -414,7 +470,7 @@
   /* ---------- render + events ---------- */
   function render() {
     renderHead();
-    var body = { week: tabWeek, stand: tabStand, sched: tabSched, moves: tabMoves, fa: tabFA }[S.tab]();
+    var body = { week: tabWeek, stand: tabStand, sched: tabSched, moves: tabMoves, root: tabRoot, fa: tabFA }[S.tab]();
     $("content").innerHTML = body;
     if (S.tab === "fa") paintFA();
     try { history.replaceState(null, "", "#tab=" + S.tab + "&team=" + encodeURIComponent(S.team)); } catch (e) { /* file:// or sandboxed */ }
