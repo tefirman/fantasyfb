@@ -1,0 +1,170 @@
+{% extends "base.html.j2" %}
+{% block main %}
+<section>
+  <div class="kicker">Monte Carlo season sims</div>
+  <h1 style="margin:0;font-size:52px;line-height:1">How's your season going to end?</h1>
+  <p class="muted" style="margin-top:var(--space-3);font-size:16px;max-width:620px">
+    Paste a Sleeper league link, pick your team, and fantasyfb simulates the rest of the
+    season thousands of times: playoff odds, expected payout, this week's matchups, and
+    which moves would help.
+  </p>
+</section>
+
+<form id="find" class="blueprint panel">
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <h2><span class="step">01</span>Find your league</h2>
+  <div class="row">
+    <div class="field">
+      <label for="league-input">Sleeper league URL or ID</label>
+      <input id="league-input" class="input" autocomplete="off" required
+             placeholder="https://sleeper.com/leagues/1234567890123456789/matchup">
+    </div>
+    <button class="btn btn-primary" type="submit" id="find-btn" style="min-height:36px">Find league</button>
+  </div>
+  <div id="find-error" class="error" role="alert" hidden></div>
+</form>
+
+<form id="run" class="blueprint panel" hidden>
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <div>
+    <h2><span class="step">02</span><span id="league-name"></span></h2>
+    <div id="league-meta" class="muted" style="font-size:14px"></div>
+  </div>
+
+  <div class="field">
+    <label for="team">Your team</label>
+    <select id="team" class="input" required></select>
+  </div>
+
+  <div class="field">
+    <label>Simulations</label>
+    <div class="seg" role="radiogroup">
+      {% for n in sim_choices %}
+      <label class="seg-opt"><input type="radio" name="sims" value="{{ n }}"{% if loop.first %} checked{% endif %}>{{ "{:,}".format(n) }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Payouts (1st / 2nd / 3rd)</label>
+    <div class="row">
+      <input class="input payout" type="number" min="0" step="any" value="60" aria-label="1st place payout" style="flex:1;min-width:80px">
+      <input class="input payout" type="number" min="0" step="any" value="30" aria-label="2nd place payout" style="flex:1;min-width:80px">
+      <input class="input payout" type="number" min="0" step="any" value="10" aria-label="3rd place payout" style="flex:1;min-width:80px">
+    </div>
+  </div>
+
+  <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:var(--space-3)">
+    <legend class="field" style="font-size:12px;margin-bottom:5px;color:var(--color-neutral-700)">Extra analysis (each one adds a few minutes)</legend>
+    <label class="check"><input type="checkbox" name="adds"><span>Free agent adds<small>Re-simulates the season with each of the best available free agents on your roster.</small></span></label>
+    <label class="check"><input type="checkbox" name="drops"><span>Drops<small>How much each player on your roster is worth to your season.</small></span></label>
+    <label class="check"><input type="checkbox" name="deltas"><span>Rooting guide<small>Which of this week's other matchups matter most to you.</small></span></label>
+  </fieldset>
+
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <button type="button" class="btn btn-ghost" id="change-league">Use a different league</button>
+    <button class="btn btn-primary" type="submit" id="run-btn" style="min-width:160px;min-height:40px;font-size:16px">Run simulation</button>
+  </div>
+  <div id="run-error" class="error" role="alert" hidden></div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var league = null;
+
+  function showError(el, msg) { el.textContent = msg; el.hidden = !msg; }
+  function busy(btn, on, label) {
+    btn.disabled = on;
+    if (on) { btn.dataset.label = btn.textContent; btn.textContent = label; }
+    else if (btn.dataset.label) { btn.textContent = btn.dataset.label; }
+  }
+  async function api(url, opts) {
+    var res = await fetch(url, opts);
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      var d = body.detail;
+      throw new Error(typeof d === "string" ? d : "Something went wrong (" + res.status + ").");
+    }
+    return body;
+  }
+
+  var STATUS = { pre_draft: "Pre-draft", drafting: "Drafting", in_season: "In season", complete: "Season complete" };
+
+  $("find").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    showError($("find-error"), "");
+    busy($("find-btn"), true, "Looking up…");
+    try {
+      league = await api("/api/leagues?q=" + encodeURIComponent($("league-input").value.trim()));
+      $("league-name").textContent = league.name;
+      $("league-meta").textContent = [league.season, league.teams.length + " teams", STATUS[league.status] || league.status].join(" · ");
+      var sel = $("team");
+      sel.innerHTML = "";
+      var saved = null;
+      try { saved = localStorage.getItem("fantasyfb.team." + league.league_id); } catch (err) {}
+      league.teams.forEach(function (t) {
+        var o = document.createElement("option");
+        o.value = t.name;
+        o.textContent = t.name === t.manager ? t.name : t.name + " (" + t.manager + ")";
+        if (t.name === saved) o.selected = true;
+        sel.appendChild(o);
+      });
+      try { localStorage.setItem("fantasyfb.league", league.league_id); } catch (err) {}
+      $("find").hidden = true;
+      $("run").hidden = false;
+      var draftPending = league.status === "pre_draft" || league.status === "drafting";
+      $("run-btn").disabled = draftPending;
+      showError($("run-error"), draftPending ? "This league hasn't finished drafting yet, so there's nothing to simulate." : "");
+    } catch (err) {
+      showError($("find-error"), err.message);
+    } finally {
+      busy($("find-btn"), false);
+    }
+  });
+
+  $("change-league").addEventListener("click", function () {
+    $("run").hidden = true;
+    $("find").hidden = false;
+    $("league-input").focus();
+  });
+
+  $("run").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    showError($("run-error"), "");
+    var form = e.target;
+    var body = {
+      league_id: league.league_id,
+      team: $("team").value,
+      sims: Number(form.querySelector("input[name=sims]:checked").value),
+      payouts: Array.prototype.map.call(document.querySelectorAll(".payout"), function (i) { return Number(i.value) || 0; }),
+      adds: form.adds.checked,
+      drops: form.drops.checked,
+      deltas: form.deltas.checked
+    };
+    try { localStorage.setItem("fantasyfb.team." + league.league_id, body.team); } catch (err) {}
+    busy($("run-btn"), true, "Queuing…");
+    try {
+      var run = await api("/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      window.location.href = run.url;
+    } catch (err) {
+      showError($("run-error"), err.message);
+      busy($("run-btn"), false);
+    }
+  });
+
+  // Pre-fill the last league used on this browser.
+  try {
+    var last = localStorage.getItem("fantasyfb.league");
+    if (last) $("league-input").value = last;
+  } catch (err) {}
+})();
+</script>
+{% endblock %}

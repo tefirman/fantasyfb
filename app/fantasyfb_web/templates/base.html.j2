@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}fantasyfb{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235980a6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/industry-styles.css">
+<style>
+body { margin: 0; background: var(--color-bg); font-variant-numeric: tabular-nums; }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent-900); }
+.kicker { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-700); }
+.muted { color: var(--color-neutral-700); }
+.panel { position: relative; padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
+.panel h2 { margin: 0; font-size: 26px; }
+.step { font-family: var(--font-heading); font-weight: var(--font-heading-weight); color: var(--color-accent-700); margin-right: var(--space-2); }
+.row { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end; }
+.row > .field { flex: 1; min-width: 160px; }
+.error { color: #9b2c2c; font-size: 14px; }
+.check { display: flex; gap: var(--space-3); align-items: flex-start; font-size: 14px; cursor: pointer; }
+.check input { accent-color: var(--color-accent); width: 16px; height: 16px; margin: 3px 0 0; flex: none; }
+.check small { display: block; color: var(--color-neutral-700); font-size: 12px; }
+[hidden] { display: none !important; }
+@media (max-width: 600px) {
+  main { padding: var(--space-6) 16px 48px !important; }
+  h1 { font-size: 40px !important; }
+  .panel { padding: var(--space-4); }
+}
+</style>
+</head>
+<body>
+<div style="min-height:100vh;color:var(--color-text);font-family:var(--font-body)">
+  <header class="nav" style="border-bottom:1px solid var(--color-divider)">
+    <a class="nav-brand" href="/" style="font-size:22px;color:inherit;text-decoration:none">fantasyfb</a>
+    <span class="muted" style="font-size:13px">Season simulations for Sleeper leagues</span>
+  </header>
+  <main style="max-width:880px;margin:0 auto;padding:var(--space-8) var(--space-6) 64px;display:flex;flex-direction:column;gap:var(--space-8)">
+    {% block main %}{% endblock %}
+    <footer style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);font-size:12px;color:var(--color-neutral-700);border-top:1px solid var(--color-divider);padding-top:var(--space-4)">
+      <span>Projections from nflverse · rosters from Sleeper's public API</span>
+      <span>No sign-in. Nothing is written to your league.</span>
+    </footer>
+  </main>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

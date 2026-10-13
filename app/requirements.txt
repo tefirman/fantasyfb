@@ -1,0 +1,6 @@
+# Web front end. Install alongside the package from the repo root:
+#   pip install -e . -r app/requirements.txt
+fastapi>=0.110
+uvicorn[standard]>=0.29
+# for fastapi.testclient in app/tests
+httpx>=0.27

@@ -1,0 +1,138 @@
+"""
+One simulation run for a Sleeper league: build a ``League``, run the season
+sims (plus any optional move analyses), and render the same interactive
+report the ``fantasyfb --format html`` CLI writes.
+
+This mirrors the report-building half of ``fantasyfb.league.main`` with the
+Yahoo-specific bits removed. Keep the two in step until that logic moves into
+the package as a reusable function.
+"""
+
+from __future__ import annotations
+
+import datetime
+from dataclasses import dataclass
+from typing import Callable, Tuple
+
+from fantasyfb.io.html_exporter import FantasyHtmlExporter
+
+# How many free agents per position the "adds" analysis re-simulates. Each one
+# is a full season sim, so this is the main knob on how long a run takes.
+ADDS_PER_POSITION = 5
+
+
+@dataclass(frozen=True)
+class RunOptions:
+    """Everything a run needs. Frozen so identical requests can be de-duplicated."""
+
+    league_id: str
+    team: str
+    season: int
+    sims: int = 1000
+    payouts: Tuple[float, float, float] = (60.0, 30.0, 10.0)
+    adds: bool = False
+    drops: bool = False
+    deltas: bool = False
+
+
+def _default_league_factory(opts: RunOptions):
+    # Imported lazily so the web app starts (and its tests run) without
+    # paying for the full package import up front.
+    from fantasyfb.league import League
+
+    return League(
+        name=opts.team,
+        season=opts.season,
+        num_sims=opts.sims,
+        platform="sleeper",
+        sleeper_league_id=opts.league_id,
+    )
+
+
+def top_free_agents(players, per_position: int = ADDS_PER_POSITION) -> list:
+    """
+    Names of the best available free agents by WAR, ``per_position`` per position.
+
+    Sleeper exposes no roster percentages, so ``possible_adds``'s usual
+    ``min_rostership`` filter can't narrow the pool. Without this its
+    per-position ``head()`` takes whichever free agents happen to come first
+    in ``players``, not the best ones.
+    """
+    available = players.loc[
+        players.fantasy_team.isnull()
+        & (players.until.isnull() | (players.until < 17))
+        & ~players.name.str.contains("Average_", na=False)
+    ]
+    return (
+        available.sort_values("WAR", ascending=False)
+        .groupby("position")
+        .head(per_position)
+        .name.tolist()
+    )
+
+
+def build_report(
+    opts: RunOptions,
+    progress: Callable[[str], None] = lambda stage: None,
+    league_factory: Callable[[RunOptions], object] = _default_league_factory,
+) -> str:
+    """
+    Run the pipeline for ``opts`` and return the report as an HTML string.
+
+    Args:
+        opts: what to run
+        progress: called with a short label as each stage starts
+        league_factory: builds the ``League``; injectable for tests
+    """
+    payouts = list(opts.payouts)
+
+    progress("Loading league, player pool, and projections")
+    league = league_factory(opts)
+
+    exporter = FantasyHtmlExporter(
+        output_path="",
+        week=league.week,
+        me=opts.team,
+        sims=league.num_sims,
+        day=datetime.datetime.now().strftime("%A"),
+        platform="Sleeper",
+    )
+
+    players = league.players
+    rosters = (
+        players.loc[~players.fantasy_team.isnull()]
+        .sort_values(by=["fantasy_team", "WAR"], ascending=[True, False])
+    )
+    exporter.export_rosters(rosters)
+    available = players.loc[
+        players.fantasy_team.isnull() & (players.until.isnull() | (players.until < 17))
+    ].sort_values(by="WAR", ascending=False)
+    exporter.export_available(available.drop(columns=["fantasy_team"]))
+
+    progress("Simulating the season")
+    schedule, standings = league.season_sims(True, payouts=payouts)
+    exporter.export_schedule(schedule)
+    exporter.export_standings(standings)
+
+    if opts.adds:
+        progress("Evaluating free agent adds")
+        adds = league.possible_adds(
+            focus_on=top_free_agents(league.players),
+            limit_per=ADDS_PER_POSITION,
+            payouts=payouts,
+            min_rostership=0.0,
+            verbose=False,
+        )
+        exporter.export_analysis(adds, "Adds")
+
+    if opts.drops:
+        progress("Evaluating drops")
+        drops = league.possible_drops(payouts=payouts, verbose=False)
+        exporter.export_analysis(drops, "Drops")
+
+    if opts.deltas:
+        progress("Building the rooting guide")
+        exporter.export_deltas(league.perGameDelta(payouts=payouts))
+
+    progress("Rendering report")
+    return exporter.render()
