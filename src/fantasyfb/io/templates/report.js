@@ -25,7 +25,8 @@
   var S = {
     team: D.me, tab: TABS[0][0], sKey: "earnings", sDir: -1, week: CW,
     mv: MOVES[0], aKey: "earnings", aDir: -1, addPos: "ALL", tf: "all",
-    faPos: "ALL", faAll: false, q: "", faMin: 0.05
+    faPos: "ALL", faAll: false, q: "", faMin: 0.05,
+    game: undefined  // selected Schedule game key; undefined = default to my matchup, null = collapsed
   };
 
   /* ---------- helpers ---------- */
@@ -206,11 +207,14 @@
         '<td style="width:120px">' + bar(war / maxWar, bench ? "var(--color-accent-400)" : "var(--color-accent)", fx(war, 2)) + "</td></tr>";
     }).join("");
   }
-  function lineupSection() {
-    var roster = (D.rosters || []).filter(function (p) { return p.fantasy_team === S.team; });
-    var starters = roster.filter(function (p) { return p.starter; }).sort(function (a, b) {
+  function startersOf(team) {
+    return (D.rosters || []).filter(function (p) { return p.fantasy_team === team && p.starter; }).sort(function (a, b) {
       return (ORD[a.position] - ORD[b.position]) || (b.points_avg - a.points_avg);
     });
+  }
+  function lineupSection() {
+    var roster = (D.rosters || []).filter(function (p) { return p.fantasy_team === S.team; });
+    var starters = startersOf(S.team);
     var bench = roster.filter(function (p) { return !p.starter; }).sort(function (a, b) { return b.WAR - a.WAR; });
     var total = starters.reduce(function (t, p) { return t + num(p.points_avg); }, 0);
     var hdr = function (title, right) {
@@ -259,6 +263,36 @@
   }
 
   /* ---------- Schedule ---------- */
+  function gameKey(g) { return g.team_1 + "|" + g.team_2; }
+  function selectedGame(games) {
+    if (S.game === null) return null;
+    var key = S.game;
+    if (key === undefined) {
+      var mine = games.filter(function (g) { return g.team_1 === S.team || g.team_2 === S.team; })[0];
+      return mine || null;
+    }
+    return games.filter(function (g) { return gameKey(g) === key; })[0] || null;
+  }
+  function gameLineups(g) {
+    var note = function (t) { return '<p style="margin:0;font-size:13px;color:var(--color-neutral-700)">' + t + "</p>"; };
+    var inner;
+    if (g.week !== CW) {
+      inner = note("Lineups are only available for the current week (Week " + CW + ").");
+    } else {
+      var side = function (team, pts) {
+        var starters = startersOf(team);
+        return '<div style="display:flex;flex-direction:column;gap:var(--space-3)">' +
+          '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4)"><h3 style="margin:0">' + esc(team) +
+          '</h3><span style="font-size:13px;color:var(--color-neutral-700)">' + fx(pts, 1) + " pts projected</span></div>" +
+          (starters.length
+            ? '<table class="table"><thead><tr><th>Pos</th><th>Player</th>' + TH_R("Proj") + TH_R("Matchup") + "<th>WAR</th></tr></thead><tbody>" + lineupRows(starters, false) + "</tbody></table>"
+            : note("No lineup available.")) + "</div>";
+      };
+      inner = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:var(--space-6);align-items:start">' +
+        side(g.team_1, g.points_avg_1) + side(g.team_2, g.points_avg_2) + "</div>";
+    }
+    return '<div style="display:flex;flex-direction:column;gap:var(--space-4)">' + inner + "</div>";
+  }
   function tabSched() {
     var weeks = sched.map(function (g) { return g.week; }).filter(function (w, i, a) { return a.indexOf(w) === i; }).sort(function (a, b) { return a - b; });
     var opts = weeks.map(function (w) {
@@ -267,13 +301,18 @@
     var chev = function (d, label, action) {
       return '<button class="btn btn-secondary btn-icon" data-action="' + action + '" aria-label="' + label + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="' + d + '"></path></svg></button>';
     };
-    var cards = sched.filter(function (g) { return g.week === S.week; }).map(function (g) {
+    var games = sched.filter(function (g) { return g.week === S.week; });
+    var sel = selectedGame(games);
+    var cards = games.map(function (g) {
       var past = g.week < CW, mine = g.team_1 === S.team || g.team_2 === S.team;
+      var open = sel === g;
       var fw1 = (past ? g.win_1 : g.win_1 >= 0.5) ? 600 : 400, fw2 = (past ? g.win_2 : g.win_2 > 0.5) ? 600 : 400;
       var row = function (t, p, fw) {
         return '<span style="font-weight:' + fw + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t) + '</span><span style="font-family:var(--font-heading);font-size:20px">' + fx(p, 1) + "</span>";
       };
-      return '<div class="card blueprint" style="padding:var(--space-4);gap:var(--space-3);border-color:' + (mine ? "var(--color-accent)" : "var(--color-divider)") + '">' + corners() +
+      return '<div class="card blueprint" data-action="pick-game" data-key="' + esc(gameKey(g)) + '" role="button" tabindex="0" aria-pressed="' + open +
+        '" style="padding:var(--space-4);gap:var(--space-3);cursor:pointer;background:' + (open ? "var(--color-accent-100)" : "transparent") +
+        ';border-color:' + (mine || open ? "var(--color-accent)" : "var(--color-divider)") + '">' + corners() +
         '<div style="display:flex;justify-content:space-between;align-items:baseline"><span class="card-kicker" style="color:var(--color-accent-700)">' + (past ? "Final" : "Projected") + "</span>" +
         (mine ? '<span class="tag tag-accent">Your team</span>' : "") + "</div>" +
         '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px var(--space-3);align-items:baseline">' + row(g.team_1, g.points_avg_1, fw1) + row(g.team_2, g.points_avg_2, fw2) + "</div>" +
@@ -284,7 +323,8 @@
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap"><h3 style="margin:0">League schedule · Week ' + S.week + "</h3>" +
       '<div style="display:flex;align-items:center;gap:var(--space-2)">' + chev("m15 18-6-6 6-6", "Previous week", "prev-week") +
       '<select class="input" style="width:auto" data-action="week">' + opts + "</select>" + chev("m9 18 6-6-6-6", "Next week", "next-week") + "</div></div>" +
-      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:var(--space-6)">' + cards + "</div></section>";
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:var(--space-6)">' + cards + "</div>" +
+      (sel ? gameLineups(sel) : '<p style="margin:0;font-size:13px;color:var(--color-neutral-700)">Click a game to see the lineups.</p>') + "</section>";
   }
 
   /* ---------- Rooting guide ---------- */
@@ -490,11 +530,22 @@
     if (a === "sort-stand") { var s = toggleSort(el.dataset.key, S.sKey, S.sDir, "team"); S.sKey = s.key; S.sDir = s.dir; }
     else if (a === "sort-adds") { var t = toggleSort(el.dataset.key, S.aKey, S.aDir); S.aKey = t.key; S.aDir = t.dir; }
     else if (a === "pick-team") { S.team = el.dataset.team; S.tab = "week"; }
-    else if (a === "prev-week") S.week = Math.max(weeks[0], S.week - 1);
-    else if (a === "next-week") S.week = Math.min(weeks[weeks.length - 1], S.week + 1);
+    else if (a === "pick-game") {
+      var games = sched.filter(function (g) { return g.week === S.week; }), cur = selectedGame(games);
+      S.game = cur && gameKey(cur) === el.dataset.key ? null : el.dataset.key;
+    }
+    else if (a === "prev-week") { S.week = Math.max(weeks[0], S.week - 1); S.game = undefined; }
+    else if (a === "next-week") { S.week = Math.min(weeks[weeks.length - 1], S.week + 1); S.game = undefined; }
     else if (a === "fa-more") { S.faAll = true; paintFA(); return; }
     else return;
     render();
+  });
+  document.addEventListener("keydown", function (e) {
+    var el = e.target;
+    if ((e.key === "Enter" || e.key === " ") && el.getAttribute && el.getAttribute("data-action") === "pick-game") {
+      e.preventDefault();
+      el.click();
+    }
   });
   document.addEventListener("change", function (e) {
     var el = e.target, a = el.getAttribute && el.getAttribute("data-action");
@@ -504,7 +555,7 @@
     else if (a === "move-view") S.mv = el.value;
     else if (a === "add-pos") S.addPos = el.value;
     else if (a === "trade-filter") S.tf = el.value;
-    else if (a === "week") S.week = +el.value;
+    else if (a === "week") { S.week = +el.value; S.game = undefined; }
     else if (a === "fa-pos") { S.faPos = el.value; S.faAll = false; }
     else return;
     render();
