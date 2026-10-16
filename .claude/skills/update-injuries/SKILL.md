@@ -52,6 +52,17 @@ via the platform client if a live session is available.
      repo root, if they exist.
    - If both are absent or empty, tell the user there's nothing to
      reconcile and stop.
+   - **Check that the files are fresh before researching anything.**
+     Look at each file's modification time (e.g. `ls -l`). If either
+     is older than about 24 hours, stop and tell the user how old it
+     is (e.g. "NewInjuries.csv was last regenerated Oct 13, 3 days
+     ago"), then ask whether to proceed anyway or regenerate first.
+     Also flag it if the two files' timestamps differ by more than a
+     few hours. Do not regenerate them from this skill (that means
+     building a `League`, which is expensive and network-bound), and
+     do not research stale data silently, since players hurt since
+     the last pull will be missing. If the user confirms the files
+     are current despite the timestamp, proceed.
 
 2. **Research each player needing a decision** (every row in
    `NewInjuries.csv`, plus every `OldInjuries.csv` row whose status is
