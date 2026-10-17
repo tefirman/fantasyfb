@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Matchup lineups in the HTML report's Schedule tab**: clicking a game card now shows both teams' projected starting lineups beneath the games, with your own matchup expanded by default and click-again to collapse. Lineups only exist for the current week, so cards for past or future weeks open a "lineups are only available for the current week" note instead. Report-only change, no new data in the payload.
 - **`--deltas` rooting guide in the HTML report** (#99): `--format html --deltas` previously dropped the per-game deltas silently, because only the Excel workbook had a Deltas sheet. `FantasyHtmlExporter` now has `export_deltas` (same signature as the Excel exporter), and the `fantasyfb` CLI feeds the deltas to every active exporter. The report gains a **Rooting guide** tab, shown only when `--deltas` ran. For the team picked in the Viewing selector it lists this week's games (their own game first) with the change in that team's expected earnings if either side wins and a "Root for ..." call, followed by the full league-wide matrix shaded red to green around zero. Test coverage added.
 
 ## [0.10.0] — 2026-10-06
