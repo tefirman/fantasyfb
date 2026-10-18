@@ -114,16 +114,26 @@ class JobManager:
                 for job in self._jobs.values():
                     if job.active and job.owner is None and job.opts == opts:
                         return job
-            if client_key is not None and any(
-                job.active and job.client_key == client_key for job in self._jobs.values()
-            ):
-                raise TooManyRuns()
+            existing = self._active_for(client_key)
+            if existing is not None:
+                raise TooManyRuns(existing)
             if sum(job.active for job in self._jobs.values()) >= self._max_jobs:
                 raise QueueFull()
             job = Job(id=uuid.uuid4().hex, opts=opts, owner=owner, auth=auth, client_key=client_key)
             self._jobs[job.id] = job
         self._pool.submit(self._run, job)
         return job
+
+    def _active_for(self, client_key: Optional[str]) -> Optional[Job]:
+        """The queued or running job started by ``client_key``. Caller holds the lock."""
+        if client_key is None:
+            return None
+        return next((j for j in self._jobs.values() if j.active and j.client_key == client_key), None)
+
+    def active_for(self, *client_keys: Optional[str]) -> Optional[Job]:
+        """The first queued or running job belonging to any of ``client_keys``."""
+        with self._lock:
+            return next((j for k in client_keys if (j := self._active_for(k))), None)
 
     def get(self, job_id: str) -> Optional[Job]:
         with self._lock:
@@ -230,7 +240,11 @@ class QueueFull(RuntimeError):
 
 
 class TooManyRuns(RuntimeError):
-    """This client already has a run in progress."""
+    """This client already has a run in progress (``job``)."""
+
+    def __init__(self, job: "Job"):
+        super().__init__("a run is already in progress")
+        self.job = job
 
 
 def _child_main(runner, opts, auth_state, conn) -> None:

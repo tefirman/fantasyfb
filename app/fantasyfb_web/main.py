@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 import requests
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -148,9 +148,18 @@ def create_app(
     def styles() -> Response:
         return Response(css, media_type="text/css", headers={"Cache-Control": "public, max-age=3600"})
 
+    def _client_keys(request: Request, session: Optional[Session]) -> List[str]:
+        """Who is asking, for the one-run-at-a-time limit: the signed-in session and/or the address."""
+        keys = []
+        if session and session.yahoo:
+            keys.append("session:" + session.id)
+        keys.append("ip:" + (request.client.host if request.client else "unknown"))
+        return keys
+
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
         session = _session(request)
+        active = jobs.active_for(*_client_keys(request, session))
         return templates.TemplateResponse(
             request,
             "index.html.j2",
@@ -159,6 +168,7 @@ def create_app(
                 "yahoo_enabled": yahoo_config is not None,
                 "yahoo_signed_in": bool(session and session.yahoo),
                 "moves_enabled": enable_moves,
+                "active_run": {"url": f"/runs/{active.id}", "team": active.opts.team} if active else None,
             },
         )
 
@@ -265,7 +275,7 @@ def create_app(
             raise HTTPException(422, "Adds and drops analysis isn't available on this server.")
         if body.platform not in ("sleeper", "yahoo"):
             raise HTTPException(422, "platform must be 'sleeper' or 'yahoo'.")
-        owner = auth = None
+        owner = auth = session = None
         if body.platform == "yahoo":
             session = _session(request)
             summary = _yahoo_teams(request)  # 401s when not signed in
@@ -290,12 +300,18 @@ def create_app(
         try:
             # One run at a time per person: the signed-in session for Yahoo,
             # the address for Sleeper (which has no sign-in).
-            client_key = ("session:" + owner) if owner else ("ip:" + (request.client.host if request.client else "unknown"))
+            client_key = _client_keys(request, session)[0]
             job = jobs.submit(opts, owner=owner, auth=auth, client_key=client_key)
         except QueueFull:
             raise HTTPException(503, "Too many simulations are queued right now. Try again shortly.")
-        except TooManyRuns:
-            raise HTTPException(429, "You already have a simulation in progress. Wait for it to finish first.")
+        except TooManyRuns as busy:
+            return JSONResponse(
+                {
+                    "detail": "You already have a simulation in progress. Wait for it to finish first.",
+                    "url": f"/runs/{busy.job.id}",
+                },
+                status_code=429,
+            )
         return {"id": job.id, "url": f"/runs/{job.id}"}
 
     def _get_job(request: Request, job_id: str):

@@ -140,3 +140,20 @@ def test_healthz_and_proxy_host_origin():
     # Behind a proxy the Host header can be internal; the public origin is still ours.
     assert client.post("/auth/logout", headers={"Origin": "https://my-space.hf.space"}).status_code == 204
     assert client.post("/auth/logout", headers={"Origin": "https://evil.example"}).status_code == 403
+
+
+def test_busy_response_links_to_the_run_in_progress_and_home_page_shows_it():
+    summary = {"league_id": "123456", "name": "L", "season": 2026, "status": "in_season",
+               "teams": [{"name": "Alpha", "manager": "a"}, {"name": "Bravo", "manager": "b"}]}
+    client = TestClient(create_app(runner=slow_runner, lookup=lambda i: summary))
+    assert 'id="active-run"' not in client.get("/").text
+    first = client.post("/api/runs", json={"league_id": "123456", "team": "Alpha"})
+    busy = client.post("/api/runs", json={"league_id": "123456", "team": "Bravo"})
+    assert busy.status_code == 429
+    assert busy.json()["url"] == first.json()["url"]
+    home = client.get("/").text
+    assert first.json()["url"] in home and 'id="active-run"' in home
+    deadline = time.time() + 5
+    while 'id="active-run"' in client.get("/").text and time.time() < deadline:
+        time.sleep(0.05)
+    assert 'id="active-run"' not in client.get("/").text  # finished runs aren't "in progress"
