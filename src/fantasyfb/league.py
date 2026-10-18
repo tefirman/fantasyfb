@@ -107,6 +107,10 @@ class League:
         """ Season of interest, defaults to most recent season when no value is provided """
         if client is not None:
             self.client = client
+            # A pre-connected client (e.g. a YahooFantasyClient the caller
+            # already ran connect_to_league on) carries its own league id.
+            self.name = name
+            self.lg_id = getattr(client, "lg_id", None)
         elif platform == "sleeper":
             if not sleeper_league_id:
                 raise ValueError("sleeper_league_id is required when platform='sleeper'")
