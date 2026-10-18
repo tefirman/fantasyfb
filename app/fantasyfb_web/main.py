@@ -27,7 +27,7 @@ from fantasyfb.data.yahoo_auth import YahooAuthError
 from fantasyfb.io import html_exporter
 
 from . import sleeper, yahoo
-from .jobs import DONE, FAILED, JobManager, QueueFull
+from .jobs import DONE, FAILED, JobManager, QueueFull, TooManyRuns
 from .pipeline import RunOptions, build_report
 from .sessions import COOKIE_NAME, Session, SessionStore
 
@@ -62,6 +62,9 @@ def create_app(
     sessions: Optional[SessionStore] = None,
     cookie_secure: Optional[bool] = None,
     enable_moves: Optional[bool] = None,
+    isolate: bool = False,
+    run_timeout: Optional[float] = None,
+    max_queued: Optional[int] = None,
 ) -> FastAPI:
     """
     Build the app. ``runner``, ``lookup``, and the ``yahoo_*`` hooks are
@@ -69,7 +72,13 @@ def create_app(
     """
     app = FastAPI(title="fantasyfb", docs_url=None, redoc_url=None)
     templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
-    jobs = JobManager(runner, max_workers=max_workers)
+    if run_timeout is None:
+        run_timeout = float(os.environ.get("FANTASYFB_RUN_TIMEOUT", 20 * 60))
+    if max_queued is None:
+        max_queued = int(os.environ.get("FANTASYFB_MAX_QUEUED", 10))
+    jobs = JobManager(
+        runner, max_workers=max_workers, max_jobs=max_queued, isolate=isolate, timeout_seconds=run_timeout
+    )
     sessions = sessions or SessionStore()
     if enable_moves is None:
         # Adds and drops are slow (a full season sim per candidate) and give
@@ -93,13 +102,26 @@ def create_app(
             path="/",
         )
 
+    def allowed_hosts(request: Request) -> set:
+        # The Host header, plus the public host from the configured redirect
+        # URI: behind a hosting proxy the two can differ, and the latter is
+        # ours by construction.
+        hosts = {request.headers.get("host")}
+        if yahoo_config is not None:
+            hosts.add(urlparse(yahoo_config.redirect_uri).netloc)
+        return hosts
+
+    @app.get("/healthz")
+    def healthz() -> Dict:
+        return {"ok": True}
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         # Cross-site POSTs already lack the SameSite=Lax cookie; this also
         # refuses any browser-declared foreign origin outright.
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             origin = request.headers.get("origin")
-            if origin and urlparse(origin).netloc != request.headers.get("host"):
+            if origin and urlparse(origin).netloc not in allowed_hosts(request):
                 return Response("Cross-origin request refused.", status_code=403)
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -266,9 +288,14 @@ def create_app(
             deltas=body.deltas,
         )
         try:
-            job = jobs.submit(opts, owner=owner, auth=auth)
+            # One run at a time per person: the signed-in session for Yahoo,
+            # the address for Sleeper (which has no sign-in).
+            client_key = ("session:" + owner) if owner else ("ip:" + (request.client.host if request.client else "unknown"))
+            job = jobs.submit(opts, owner=owner, auth=auth, client_key=client_key)
         except QueueFull:
             raise HTTPException(503, "Too many simulations are queued right now. Try again shortly.")
+        except TooManyRuns:
+            raise HTTPException(429, "You already have a simulation in progress. Wait for it to finish first.")
         return {"id": job.id, "url": f"/runs/{job.id}"}
 
     def _get_job(request: Request, job_id: str):
@@ -335,4 +362,4 @@ def _with_app_bar(html: str, job_id: str) -> str:
     return html.replace("<body>", "<body>" + _APP_BAR.replace("{id}", job_id), 1)
 
 
-app = create_app(yahoo_config=yahoo.YahooConfig.from_env())
+app = create_app(yahoo_config=yahoo.YahooConfig.from_env(), isolate=True)
