@@ -1,0 +1,265 @@
+{% extends "base.html.j2" %}
+{% block main %}
+<section>
+  <div class="kicker">Monte Carlo season sims</div>
+  <h1 style="margin:0;font-size:52px;line-height:1">How's your fantasy team looking?</h1>
+  <p class="muted" style="margin-top:var(--space-3);font-size:16px;max-width:620px">
+    Paste a Sleeper league link or sign in with Yahoo, pick your team, and fantasyfb simulates
+    the rest of the season thousands of times: playoff odds, expected payout, this week's matchups, and
+    which moves would help.
+  </p>
+</section>
+
+{% if yahoo_enabled %}
+<div class="seg" role="radiogroup" aria-label="Fantasy platform" id="platform-seg" style="align-self:flex-start">
+  <label class="seg-opt"><input type="radio" name="platform" value="yahoo" checked>Yahoo</label>
+  <label class="seg-opt"><input type="radio" name="platform" value="sleeper">Sleeper</label>
+</div>
+{% endif %}
+
+<form id="find" class="blueprint panel"{% if yahoo_enabled %} hidden{% endif %}>
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <h2><span class="step">01</span>Find your league</h2>
+  <div class="row">
+    <div class="field">
+      <label for="league-input">Sleeper league URL or ID</label>
+      <input id="league-input" class="input" autocomplete="off" required
+             placeholder="https://sleeper.com/leagues/1234567890123456789/matchup">
+    </div>
+    <button class="btn btn-primary" type="submit" id="find-btn" style="min-height:36px">Find league</button>
+  </div>
+  <div id="find-error" class="error" role="alert" hidden></div>
+</form>
+
+{% if yahoo_enabled %}
+<section id="yahoo-panel" class="blueprint panel">
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <h2><span class="step">01</span>Sign in with Yahoo</h2>
+  <div id="yahoo-signin">
+    <p class="muted" style="margin:0 0 var(--space-3);font-size:14px;max-width:560px">
+      You'll sign in on Yahoo's own page; fantasyfb never sees your password. It gets read-only
+      access to your fantasy teams, keeps the sign-in in server memory only (never on disk), and
+      forgets it when you sign out or after a couple of idle hours. Nothing is ever changed in your league.
+    </p>
+    <a class="btn btn-primary" href="/auth/yahoo/login" style="min-height:36px">Sign in with Yahoo</a>
+  </div>
+  <div id="yahoo-loading" class="muted" hidden>Loading your teams…</div>
+  <div class="row" id="yahoo-signed-in" hidden style="justify-content:space-between;align-items:center">
+    <span class="muted" style="font-size:14px">Signed in with Yahoo</span>
+    <button type="button" class="btn btn-ghost" id="yahoo-signout">Sign out</button>
+  </div>
+  <div id="yahoo-error" class="error" role="alert" hidden></div>
+</section>
+{% endif %}
+
+<form id="run" class="blueprint panel" hidden>
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <div>
+    <h2><span class="step">02</span><span id="league-name"></span></h2>
+    <div id="league-meta" class="muted" style="font-size:14px"></div>
+  </div>
+
+  <div class="field">
+    <label for="team">Your team</label>
+    <select id="team" class="input" required></select>
+  </div>
+
+  <div class="field">
+    <label>Simulations</label>
+    <div class="seg" role="radiogroup">
+      {% for n in sim_choices %}
+      <label class="seg-opt"><input type="radio" name="sims" value="{{ n }}"{% if loop.first %} checked{% endif %}>{{ "{:,}".format(n) }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Payouts (1st / 2nd / 3rd)</label>
+    <div class="row">
+      <input class="input payout" type="number" min="0" step="any" value="60" aria-label="1st place payout" style="flex:1;min-width:80px">
+      <input class="input payout" type="number" min="0" step="any" value="30" aria-label="2nd place payout" style="flex:1;min-width:80px">
+      <input class="input payout" type="number" min="0" step="any" value="10" aria-label="3rd place payout" style="flex:1;min-width:80px">
+    </div>
+  </div>
+
+  <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:var(--space-3)">
+    <legend class="field" style="font-size:12px;margin-bottom:5px;color:var(--color-neutral-700)">Extra analysis (adds a few minutes)</legend>
+    {% if moves_enabled %}<label class="check"><input type="checkbox" name="adds"><span>Free agent adds<small>Re-simulates the season with each of the best available free agents on your roster.</small></span></label>
+    <label class="check"><input type="checkbox" name="drops"><span>Drops<small>How much each player on your roster is worth to your season.</small></span></label>{% endif %}
+    <label class="check"><input type="checkbox" name="deltas"><span>Rooting guide<small>Which of this week's other matchups matter most to you.</small></span></label>
+  </fieldset>
+
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <button type="button" class="btn btn-ghost" id="change-league">Use a different league</button>
+    <button class="btn btn-primary" type="submit" id="run-btn" style="min-width:160px;min-height:40px;font-size:16px">Run simulation</button>
+  </div>
+  <div id="run-error" class="error" role="alert" hidden></div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var league = null;
+  var YAHOO_ENABLED = {{ 'true' if yahoo_enabled else 'false' }};
+  var YAHOO_SIGNED_IN = {{ 'true' if yahoo_signed_in else 'false' }};
+  var platform = "sleeper";
+
+  function showError(el, msg) { el.textContent = msg; el.hidden = !msg; }
+  function busy(btn, on, label) {
+    btn.disabled = on;
+    if (on) { btn.dataset.label = btn.textContent; btn.textContent = label; }
+    else if (btn.dataset.label) { btn.textContent = btn.dataset.label; }
+  }
+  async function api(url, opts) {
+    var res = await fetch(url, opts);
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      var d = body.detail;
+      throw new Error(typeof d === "string" ? d : "Something went wrong (" + res.status + ").");
+    }
+    return body;
+  }
+
+  var STATUS = { pre_draft: "Pre-draft", drafting: "Drafting", in_season: "In season", complete: "Season complete" };
+
+  // Fill in step 02 for a league (Sleeper lookup result or Yahoo team list).
+  function showLeague(found) {
+    league = found;
+    league.platform = league.platform || "sleeper";
+    var key = league.platform + "." + (league.league_id || "");
+    var yahoo = league.platform === "yahoo";
+    $("league-name").textContent = yahoo ? "Pick your Yahoo team" : league.name;
+    $("league-meta").textContent = yahoo
+      ? league.season + " season"
+      : [league.season, league.teams.length + " teams", STATUS[league.status] || league.status].join(" · ");
+    $("change-league").hidden = yahoo;
+    var sel = $("team");
+    sel.innerHTML = "";
+    var saved = null;
+    try { saved = localStorage.getItem("fantasyfb.team." + key); } catch (err) {}
+    league.teams.forEach(function (t) {
+      var o = document.createElement("option");
+      o.value = t.name;
+      o.textContent = t.name === t.manager ? t.name : t.name + " (" + t.manager + ")";
+      if (t.name === saved) o.selected = true;
+      sel.appendChild(o);
+    });
+    if (league.platform === "sleeper") {
+      try { localStorage.setItem("fantasyfb.league", league.league_id); } catch (err) {}
+    }
+    $("find").hidden = true;
+    if ($("yahoo-panel")) $("yahoo-panel").hidden = league.platform !== "yahoo";
+    $("run").hidden = false;
+    var draftPending = league.status === "pre_draft" || league.status === "drafting";
+    $("run-btn").disabled = draftPending;
+    showError($("run-error"), draftPending ? "This league hasn't finished drafting yet, so there's nothing to simulate." : "");
+  }
+
+  $("find").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    showError($("find-error"), "");
+    busy($("find-btn"), true, "Looking up…");
+    try {
+      showLeague(await api("/api/leagues?q=" + encodeURIComponent($("league-input").value.trim())));
+    } catch (err) {
+      showError($("find-error"), err.message);
+    } finally {
+      busy($("find-btn"), false);
+    }
+  });
+
+  $("change-league").addEventListener("click", function () {
+    $("run").hidden = true;
+    selectPlatform(league && league.platform === "yahoo" ? "yahoo" : "sleeper");
+  });
+
+  // ---- Platform switch and Yahoo sign-in ----
+  function selectPlatform(p) {
+    platform = p;
+    var yahoo = p === "yahoo";
+    $("run").hidden = true;
+    $("find").hidden = yahoo;
+    if ($("yahoo-panel")) $("yahoo-panel").hidden = !yahoo;
+    if (yahoo) loadYahooTeams(); else $("league-input").focus();
+  }
+
+  async function loadYahooTeams() {
+    if (!YAHOO_SIGNED_IN) {
+      $("yahoo-signin").hidden = false;
+      $("yahoo-signed-in").hidden = true;
+      return;
+    }
+    $("yahoo-signin").hidden = true;
+    $("yahoo-signed-in").hidden = false;
+    $("yahoo-loading").hidden = false;
+    showError($("yahoo-error"), "");
+    try {
+      showLeague(await api("/api/yahoo/teams"));
+    } catch (err) {
+      if (/sign in/i.test(err.message)) { YAHOO_SIGNED_IN = false; $("yahoo-signin").hidden = false; $("yahoo-signed-in").hidden = true; }
+      showError($("yahoo-error"), err.message);
+    } finally {
+      $("yahoo-loading").hidden = true;
+    }
+  }
+
+  if (YAHOO_ENABLED) {
+    Array.prototype.forEach.call(document.querySelectorAll("input[name=platform]"), function (r) {
+      r.addEventListener("change", function () { if (r.checked) selectPlatform(r.value); });
+    });
+    $("yahoo-signout").addEventListener("click", async function () {
+      await fetch("/auth/logout", { method: "POST" });
+      YAHOO_SIGNED_IN = false;
+      selectPlatform("yahoo");
+    });
+    var params = new URLSearchParams(window.location.search);
+    var notice = { denied: "Yahoo sign-in was cancelled.", failed: "Yahoo sign-in didn't complete. Try again." }[params.get("yahoo")];
+    // Yahoo is the default whenever it's configured.
+    var start = params.get("platform") === "sleeper" ? "sleeper" : "yahoo";
+    document.querySelector("input[name=platform][value=" + start + "]").checked = true;
+    selectPlatform(start);
+    if (notice) showError($("yahoo-error"), notice);
+    // Don't leave the callback's query string in the address bar or history.
+    if (window.location.search) window.history.replaceState(null, "", "/");
+  }
+
+  $("run").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    showError($("run-error"), "");
+    var form = e.target;
+    var body = {
+      platform: league.platform,
+      league_id: league.league_id || "",
+      team: $("team").value,
+      sims: Number(form.querySelector("input[name=sims]:checked").value),
+      payouts: Array.prototype.map.call(document.querySelectorAll(".payout"), function (i) { return Number(i.value) || 0; }),
+      adds: !!form.adds && form.adds.checked,
+      drops: !!form.drops && form.drops.checked,
+      deltas: form.deltas.checked
+    };
+    try { localStorage.setItem("fantasyfb.team." + league.platform + "." + (league.league_id || ""), body.team); } catch (err) {}
+    busy($("run-btn"), true, "Queuing…");
+    try {
+      var run = await api("/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      window.location.href = run.url;
+    } catch (err) {
+      showError($("run-error"), err.message);
+      busy($("run-btn"), false);
+    }
+  });
+
+  // Pre-fill the last league used on this browser.
+  try {
+    var last = localStorage.getItem("fantasyfb.league");
+    if (last) $("league-input").value = last;
+  } catch (err) {}
+})();
+</script>
+{% endblock %}

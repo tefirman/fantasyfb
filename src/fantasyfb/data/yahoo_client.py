@@ -19,6 +19,7 @@ from pytz import timezone
 from yahoo_oauth import OAuth2
 
 from .platform_client import FantasyPlatformClient
+from .yahoo_auth import YahooTokenAuth
 
 
 class YahooFantasyClient(FantasyPlatformClient):
@@ -29,16 +30,50 @@ class YahooFantasyClient(FantasyPlatformClient):
     for common fantasy football operations.
     """
 
-    def __init__(self):
-        """Initialize the Yahoo client with credentials and OAuth."""
+    def __init__(
+        self,
+        oauth: Optional[YahooTokenAuth] = None,
+        max_query_tries: Optional[int] = None,
+        retry_wait: float = 30,
+    ):
+        """
+        Initialize the Yahoo client with credentials and OAuth.
+
+        Args:
+            oauth: A user's tokens already held in memory (see
+                :class:`YahooTokenAuth`). When given, nothing is read from or
+                written to ``.env``/``oauth2.json`` and nothing prompts on
+                stdin, which is what a multi-user server needs.
+            max_query_tries: Give up (raise) after this many failed attempts
+                at one Yahoo query. The default, None, retries forever, which
+                suits a CLI someone is watching; a server should set a limit
+                so a revoked token can't hang a worker.
+            retry_wait: Seconds to wait between failed attempts.
+        """
         self.oauth = None
         self.gm = None
         self.lg = None
         self.lg_id = None
         self._my_team_key = None
+        self._injected_oauth = oauth is not None
+        self.max_query_tries = max_query_tries
+        self.retry_wait = retry_wait
 
-        self._load_credentials()
-        self._load_oauth()
+        if oauth is not None:
+            self.oauth = oauth
+        else:
+            self._load_credentials()
+            self._load_oauth()
+
+    def _retry_wait(self, label: str, attempt: int, exc: Optional[BaseException] = None):
+        """
+        Pause before retrying a failed query, or raise once ``max_query_tries``
+        attempts have failed. ``attempt`` is the 1-based count so far.
+        """
+        if self.max_query_tries is not None and attempt >= self.max_query_tries:
+            raise RuntimeError(f"{label} failed after {attempt} attempts.") from exc
+        print(f"{label}... Waiting {self.retry_wait:g} seconds and trying again...")
+        time.sleep(self.retry_wait)
     
     def _load_credentials(self):
         """Load user credentials from .env file."""
@@ -86,7 +121,14 @@ class YahooFantasyClient(FantasyPlatformClient):
         """
         if not self.oauth:
             return
-            
+
+        if self._injected_oauth:
+            # Refresh in place; never sleep, since a server worker shouldn't
+            # idle for up to an hour waiting on a token.
+            if self.oauth.token_age() >= threshold * 60:
+                self.oauth.refresh_access_token()
+            return
+
         diff = (
             datetime.datetime.now(timezone("GMT"))
             - datetime.datetime(1970, 1, 1, 0, 0, 0, 0, timezone("GMT"))
@@ -126,15 +168,15 @@ class YahooFantasyClient(FantasyPlatformClient):
         self.gm = yfa.Game(self.oauth, "nfl")
 
         # Get user's fantasy teams
+        attempt = 0
         while True:
             try:
                 profile = self.gm.yhandler.get_teams_raw()["fantasy_content"]
                 leagues = profile["users"]["0"]["user"][1]["games"]
                 break
             except Exception as e:
-                print("Teams query failed... Waiting 30 seconds and trying again...")
-                print(e)
-                time.sleep(30)
+                attempt += 1
+                self._retry_wait("Teams query failed", attempt, e)
 
         # Find NFL league(s) for the specified season
         for ind in range(leagues["count"] - 1, -1, -1):
@@ -182,7 +224,11 @@ class YahooFantasyClient(FantasyPlatformClient):
             raise ValueError(f"No NFL fantasy league found for season {season}.")
 
         names = list(name_to_lg_id.keys())
-        if len(names) > 1:
+        if self._injected_oauth:
+            # No one to prompt on a server: the caller must name a real team.
+            if team_name not in names:
+                raise ValueError(f"No Yahoo team named {team_name!r} for season {season}.")
+        elif len(names) > 1:
             # Multiple teams (possibly in different leagues) - use provided
             # name or prompt user
             while team_name not in names:
@@ -325,14 +371,15 @@ class YahooFantasyClient(FantasyPlatformClient):
             
             # Get rostered players
             for page_ind in range(100):
+                attempt = 0
                 while True:
                     try:
                         page = self.lg.yhandler.get_players_raw(self.lg_id, page_ind * 25, "T")
                         page = page["fantasy_content"]["league"][1]["players"]
                         break
-                    except:
-                        print("Players query failed... Waiting 30 seconds and trying again...")
-                        time.sleep(30)
+                    except Exception as e:
+                        attempt += 1
+                        self._retry_wait("Players query failed", attempt, e)
                 
                 if page == []:
                     break
@@ -354,14 +401,15 @@ class YahooFantasyClient(FantasyPlatformClient):
             
             # Get available players
             for page_ind in range(100):
+                attempt = 0
                 while True:
                     try:
                         page = self.lg.yhandler.get_players_raw(self.lg_id, page_ind * 25, "A")
                         page = page["fantasy_content"]["league"][1]["players"]
                         break
-                    except:
-                        print("Players query failed... Waiting 30 seconds and trying again...")
-                        time.sleep(30)
+                    except Exception as e:
+                        attempt += 1
+                        self._retry_wait("Players query failed", attempt, e)
                 
                 if page == []:
                     break
@@ -413,14 +461,15 @@ class YahooFantasyClient(FantasyPlatformClient):
         selected = pd.DataFrame(columns=["player_id", "selected_position", "fantasy_team"])
         
         for team in teams:
+            attempt = 0
             while True:
                 try:
                     tm = self.lg.to_team(team["team_key"])
                     players = pd.DataFrame(tm.roster(week))
                     break
-                except:
-                    print("Team roster query failed... Waiting 30 seconds and trying again...")
-                    time.sleep(30)
+                except Exception as e:
+                    attempt += 1
+                    self._retry_wait("Team roster query failed", attempt, e)
             
             if players.shape[0] == 0:
                 continue
@@ -451,6 +500,7 @@ class YahooFantasyClient(FantasyPlatformClient):
         roster_pcts = pd.DataFrame()
         
         for ind in range(players_df.shape[0] // chunk_size + 1):
+            attempt = 0
             while True:
                 try:
                     self.refresh_oauth()
@@ -474,11 +524,10 @@ class YahooFantasyClient(FantasyPlatformClient):
                     else:
                         pcts = {"count": 0}
                     break
-                except:
-                    err_message = traceback.format_exc()
-                    print(err_message)
-                    print("Roster percentage query failed... Waiting 30 seconds and trying again...")
-                    time.sleep(30)
+                except Exception as e:
+                    attempt += 1
+                    print(traceback.format_exc())
+                    self._retry_wait("Roster percentage query failed", attempt, e)
             
             for player_ind in range(pcts["count"]):
                 player = pcts[str(player_ind)]["player"]
@@ -535,14 +584,15 @@ class YahooFantasyClient(FantasyPlatformClient):
                 limit = min(limit, end_week + 1)
 
             for week in range(1, limit):
+                attempt = 0
                 while True:
                     try:
                         matchup = tm.yhandler.get_matchup_raw(tm.team_key, week)
                         matchup = matchup["fantasy_content"]["team"][1]["matchups"]
                         break
-                    except:
-                        print("Matchup query failed... Waiting 30 seconds and trying again...")
-                        time.sleep(30)
+                    except Exception as e:
+                        attempt += 1
+                        self._retry_wait("Matchup query failed", attempt, e)
                 
                 if "0" in matchup.keys():
                     team_1 = matchup["0"]["matchup"]["0"]["teams"]["0"]["team"]
