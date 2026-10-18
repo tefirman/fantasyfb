@@ -58,7 +58,7 @@ def client(seen):
             raise ValueError("No Sleeper team found matching name 'Bravo'")
         return "<html><body><h1>report for {}</h1></body></html>".format(opts.team)
 
-    return TestClient(create_app(runner=runner, lookup=fake_lookup))
+    return TestClient(create_app(runner=runner, lookup=fake_lookup, enable_moves=True))
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -197,3 +197,12 @@ def test_build_report_with_stub_league():
     assert adds_call["min_rostership"] == 0.0
     assert "WR Hurt" not in adds_call["focus_on"]
     assert adds_call["payouts"] == [100.0, 50.0, 0.0]
+
+
+def test_adds_and_drops_are_refused_unless_enabled():
+    off = TestClient(create_app(runner=lambda o, p: "<html></html>", lookup=fake_lookup, enable_moves=False))
+    for flag in ("adds", "drops"):
+        resp = off.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", flag: True})
+        assert resp.status_code == 422
+    assert 'name="adds"' not in off.get("/").text and 'name="drops"' not in off.get("/").text
+    assert off.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", "deltas": True}).status_code == 202

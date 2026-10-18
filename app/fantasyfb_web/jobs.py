@@ -18,6 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
+from fantasyfb.data.yahoo_auth import YahooAuthError
+
 from .pipeline import RunOptions
 
 log = logging.getLogger(__name__)
@@ -37,6 +39,11 @@ class Job:
     finished: Optional[float] = None
     html: Optional[str] = None
     error: Optional[str] = None
+    # Set for runs on private data (Yahoo): only the browser session that
+    # started it may see the result, and ``auth`` holds that user's tokens
+    # for the run's duration. ``repr=False`` keeps tokens out of logs.
+    owner: Optional[str] = None
+    auth: Optional[object] = field(default=None, repr=False)
 
     @property
     def active(self) -> bool:
@@ -67,16 +74,22 @@ class JobManager:
         self._ttl = ttl_seconds
         self._max_jobs = max_jobs
 
-    def submit(self, opts: RunOptions) -> Job:
-        """Queue a run, or return the identical run that's already queued or running."""
+    def submit(self, opts: RunOptions, owner: Optional[str] = None, auth: Optional[object] = None) -> Job:
+        """
+        Queue a run, or return the identical run that's already queued or running.
+
+        Runs with an ``owner`` are never shared: two users asking for the same
+        thing each get their own job, because the result is private.
+        """
         with self._lock:
             self._prune()
-            for job in self._jobs.values():
-                if job.active and job.opts == opts:
-                    return job
+            if owner is None:
+                for job in self._jobs.values():
+                    if job.active and job.owner is None and job.opts == opts:
+                        return job
             if sum(job.active for job in self._jobs.values()) >= self._max_jobs:
                 raise QueueFull()
-            job = Job(id=uuid.uuid4().hex, opts=opts)
+            job = Job(id=uuid.uuid4().hex, opts=opts, owner=owner, auth=auth)
             self._jobs[job.id] = job
         self._pool.submit(self._run, job)
         return job
@@ -102,7 +115,10 @@ class JobManager:
 
         job.status, job.started = RUNNING, time.time()
         try:
-            job.html = self._runner(job.opts, progress)
+            if job.auth is not None:
+                job.html = self._runner(job.opts, progress, auth=job.auth)
+            else:
+                job.html = self._runner(job.opts, progress)
             job.status = DONE
         except Exception as exc:  # surfaced to the user, so keep it short
             log.exception("Run %s failed", job.id)
@@ -110,6 +126,7 @@ class JobManager:
             job.status = FAILED
         finally:
             job.finished = time.time()
+            job.auth = None  # the session keeps the tokens; the job doesn't need them anymore
 
     def _prune(self) -> None:
         """Drop finished jobs older than the TTL. Caller holds the lock."""
@@ -130,4 +147,6 @@ def _user_message(exc: Exception) -> str:
     # found matching ..."); anything else is an internal failure.
     if isinstance(exc, ValueError):
         return str(exc)
+    if isinstance(exc, YahooAuthError):
+        return "Yahoo no longer accepts your sign-in. Sign in with Yahoo again and re-run."
     return f"The simulation failed ({type(exc).__name__}). Try again in a few minutes."
