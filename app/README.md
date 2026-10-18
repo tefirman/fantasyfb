@@ -67,9 +67,32 @@ with a one-time code that the server trades for tokens.
 - Yahoo queries give up after a few tries rather than retrying forever, so a revoked sign-in fails the
   run with a clear message instead of tying up the worker.
 
-**Deploying:** set `CONSUMER_KEY`, `CONSUMER_SECRET`, and `YAHOO_REDIRECT_URI` (the public https callback,
-also registered with Yahoo) as environment variables. Sessions are in memory, so it needs a single process.
-Set `FANTASYFB_COOKIE_SECURE=0` only for a deliberate plain-http dev setup (Yahoo itself won't redirect there).
+## Deploying
+
+The app is a single container. `app/Dockerfile` builds it from the repo root (`docker build -f app/Dockerfile -t fantasyfb-web .`), and a whitelist in `/.dockerignore` keeps local secrets such as `oauth2.json`, `.env`, and the `.pem` files out of the image. It listens on `$PORT` (default 7860), exposes `GET /healthz`, and runs behind a host's proxy (`--proxy-headers`), so the one-run-per-visitor limit sees the visitor's address.
+
+**Settings** (environment variables):
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `CONSUMER_KEY`, `CONSUMER_SECRET` | none | Your Yahoo app's credentials. Without them the page is Sleeper-only. Set them as secrets, never in the image. |
+| `YAHOO_REDIRECT_URI` | `https://localhost:8000/auth/yahoo/callback` | The public https callback. Must match a redirect URI registered on your Yahoo app exactly. |
+| `FANTASYFB_RUN_TIMEOUT` | `1200` | Seconds before a run is killed. |
+| `FANTASYFB_MAX_QUEUED` | `10` | Most runs queued or running at once. Each takes minutes, so a long queue is a long wait. |
+| `FANTASYFB_ENABLE_MOVES` | `0` | `1` turns on the adds and drops analyses. |
+| `FANTASYFB_COOKIE_SECURE` | `1` | `0` only for a deliberate plain-http dev setup. |
+
+**Limits built in:** each run executes in its own child process, so the timeout really stops it and a crash or out-of-memory kill fails only that run. Each visitor (the signed-in session for Yahoo, the IP address for Sleeper) can have one run in progress at a time.
+
+### Hugging Face Spaces (free)
+
+1. Create a Space at https://huggingface.co/new-space with the **Docker** SDK (blank template) and the free CPU hardware. Make it **Public** so friends can open it. The Space repo holds only a Dockerfile and a README, never secrets.
+2. Clone the Space repo, copy `deploy/huggingface/Dockerfile` and `deploy/huggingface/README.md` into it, and push. The Dockerfile clones this repo from GitHub, so the Space updates when you rebuild it. To pin a release, set `FANTASYFB_REF` in the Dockerfile to a tag.
+3. In the Space's Settings, under Variables and secrets, add `CONSUMER_KEY` and `CONSUMER_SECRET` as **secrets**, and `YAHOO_REDIRECT_URI` as a variable set to `https://<owner>-<space-name>.hf.space/auth/yahoo/callback`. Copy the exact URL from the Space's "Embed this Space" dialog (Direct URL), since the host is lowercase.
+4. Add that same redirect URI to your Yahoo app at https://developer.yahoo.com/apps/ (keep the localhost one too if Yahoo allows several).
+5. Share the **direct** `.hf.space` URL, not the `huggingface.co/spaces/...` page. That page embeds the app in an iframe, and browsers block the session cookie there, so sign-in would fail.
+
+Things to expect on the free tier: the Space sleeps after a period of inactivity and wakes on the next visit, a restart loses sessions and finished reports (users just sign in again), and the first run after a restart is slower because the nflverse data cache is empty again.
 
 ## Tests
 
@@ -103,10 +126,10 @@ doubles as an unguessable share link.
 - **Single process only.** Jobs and results live in memory and are lost on restart. Before running more
   than one worker, move to a real queue (RQ/Celery + Redis) and store reports somewhere durable.
 - **One run at a time.** A run is CPU-heavy and `League` writes to shared on-disk caches, so the pool has one
-  worker; extra runs queue. Identical requests that are already queued share one job.
+  worker; extra runs queue (up to `FANTASYFB_MAX_QUEUED`). Identical Sleeper requests that are already queued share one job.
 - **`pipeline.py` duplicates the report half of `fantasyfb.league.main`.** It should move into the package
   as a reusable function both can call.
-- **No rate limiting or abuse protection** beyond the queue cap.
+- **Abuse protection is basic.** There is a queue cap, one run per visitor, and a per-run timeout, but no per-IP request rate limiting or CAPTCHA.
 - **Adds and drops are off by default.** They're slow (a full season sim per candidate) and give an edge over other
   managers. The server refuses them and the page hides them unless `FANTASYFB_ENABLE_MOVES=1` is set. When on, Yahoo
   adds use the CLI's usual rostership filter, capped at 5 per position. Pickups and trades aren't exposed.

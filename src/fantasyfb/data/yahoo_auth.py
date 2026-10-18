@@ -66,6 +66,7 @@ class YahooTokenAuth:
         self.token_time = time.time() if token_time is None else token_time
         self.session = _bearer_session(access_token)
         self._lock = threading.Lock()
+        self._cleared = False
 
     def __repr__(self) -> str:
         # Never include tokens or secrets: reprs end up in logs and tracebacks.
@@ -116,9 +117,46 @@ class YahooTokenAuth:
             self.session = _bearer_session(self.access_token)
             return {"access_token": self.access_token}
 
+    def export_state(self) -> Dict[str, object]:
+        """
+        Everything needed to rebuild this object in another process on the
+        same machine (a run executes in a child process so it can be killed on
+        a timeout). Contains secrets: hand it only to a pipe or memory, never
+        a file, a log line, or a URL.
+        """
+        with self._lock:
+            return {
+                "consumer_key": self._consumer_key,
+                "consumer_secret": self._consumer_secret,
+                "access_token": self.access_token,
+                "refresh_token": self.refresh_token,
+                "redirect_uri": self.redirect_uri,
+                "token_time": self.token_time,
+            }
+
+    @classmethod
+    def from_state(cls, state: Dict[str, object]) -> "YahooTokenAuth":
+        return cls(**state)
+
+    def adopt(self, state: Dict[str, object]) -> None:
+        """
+        Take newer tokens from another copy of this login (the child process
+        may have refreshed them, and Yahoo may have rotated the refresh token).
+        Ignored if ``state`` is older than what we already hold.
+        """
+        with self._lock:
+            # After clear() (sign-out) nothing may bring the tokens back.
+            if self._cleared or float(state["token_time"]) < self.token_time:
+                return
+            self.access_token = state["access_token"]
+            self.refresh_token = state["refresh_token"]
+            self.token_time = float(state["token_time"])
+            self.session = _bearer_session(self.access_token)
+
     def clear(self) -> None:
         """Drop the tokens (on logout or session expiry)."""
         with self._lock:
+            self._cleared = True
             self.access_token = self.refresh_token = ""
             self._consumer_secret = ""
             self.session = requests.Session()

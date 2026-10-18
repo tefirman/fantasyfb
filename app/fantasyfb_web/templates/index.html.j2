@@ -10,6 +10,14 @@
   </p>
 </section>
 
+{% if active_run %}
+<div class="blueprint panel" id="active-run" style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);flex-wrap:wrap">
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <span>You have a simulation in progress for <strong>{{ active_run.team }}</strong>.</span>
+  <a class="btn btn-primary" href="{{ active_run.url }}" style="min-height:36px">View its progress</a>
+</div>
+{% endif %}
+
 {% if yahoo_enabled %}
 <div class="seg" role="radiogroup" aria-label="Fantasy platform" id="platform-seg" style="align-self:flex-start">
   <label class="seg-opt"><input type="radio" name="platform" value="yahoo" checked>Yahoo</label>
@@ -107,7 +115,17 @@
   var YAHOO_SIGNED_IN = {{ 'true' if yahoo_signed_in else 'false' }};
   var platform = "sleeper";
 
-  function showError(el, msg) { el.textContent = msg; el.hidden = !msg; }
+  function showError(el, msg, url) {
+    el.textContent = msg;
+    if (url) {
+      el.appendChild(document.createTextNode(" "));
+      var a = document.createElement("a");
+      a.href = url;
+      a.textContent = "View its progress";
+      el.appendChild(a);
+    }
+    el.hidden = !msg;
+  }
   function busy(btn, on, label) {
     btn.disabled = on;
     if (on) { btn.dataset.label = btn.textContent; btn.textContent = label; }
@@ -118,7 +136,9 @@
     var body = await res.json().catch(function () { return {}; });
     if (!res.ok) {
       var d = body.detail;
-      throw new Error(typeof d === "string" ? d : "Something went wrong (" + res.status + ").");
+      var err = new Error(typeof d === "string" ? d : "Something went wrong (" + res.status + ").");
+      err.url = body.url;
+      throw err;
     }
     return body;
   }
@@ -250,7 +270,7 @@
       });
       window.location.href = run.url;
     } catch (err) {
-      showError($("run-error"), err.message);
+      showError($("run-error"), err.message, err.url);
       busy($("run-btn"), false);
     }
   });
