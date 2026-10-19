@@ -9,6 +9,7 @@ files from the nflverse data releases, so it is fast and unauthenticated.
 import io
 import os
 import re
+import datetime
 import urllib.request
 import warnings
 from typing import Any, Callable, Iterable
@@ -257,6 +258,25 @@ def _years_in_range(start: int, finish: int) -> list[int]:
     return list(range(start // 100, finish // 100 + 1))
 
 
+# Cache TTL (seconds) the CLI uses on game days, in place of nflreadpy's 24h
+# default, so a rerun picks up newly finished games and midweek stat
+# corrections without needing --refresh-cache.
+LIVE_WEEK_CACHE_SECONDS = 30 * 60
+
+
+def is_live_nfl_window(now: datetime.datetime | None = None) -> bool:
+    """True when NFL games are likely being played or their stats still settling.
+
+    Calendar-only (it runs before any league or schedule is loaded): September
+    through January on Thursday, Saturday, Sunday, Monday, and Tuesday. Tuesday
+    is included because nflverse posts Monday night's box scores and applies
+    stat corrections after the games end. Wednesday and Friday are excluded:
+    nothing is playing, and a long cache is fine for a waiver-day run.
+    """
+    now = now or datetime.datetime.now()
+    return now.month in (9, 10, 11, 12, 1) and now.weekday() in (0, 1, 3, 5, 6)
+
+
 class NflreadpyProvider(NFLDataProvider):
     """Concrete NFLDataProvider backed by the nflreadpy parquet feeds."""
 
@@ -265,6 +285,7 @@ class NflreadpyProvider(NFLDataProvider):
         *,
         cache_mode: str | None = None,
         cache_duration: int | None = None,
+        live_cache_duration: int | None = None,
         refresh: bool = False,
     ) -> None:
         """
@@ -279,6 +300,11 @@ class NflreadpyProvider(NFLDataProvider):
                 already set, so an explicit user preference always wins.
             cache_duration: Override nflreadpy's cache TTL in seconds.
                 Left at nflreadpy's own default (24h) unless given.
+            live_cache_duration: Shorter cache TTL in seconds to use only
+                during a live NFL window (see ``is_live_nfl_window``), so
+                game-day runs see newly finished games. Ignored when
+                ``cache_duration`` is given or the NFLREADPY_CACHE_DURATION
+                env var is set, so an explicit choice always wins.
             refresh: Clear nflreadpy's cache before use, forcing a fresh
                 download on the next pull despite cache_mode. Escape hatch
                 for callers that explicitly want current data (e.g. a
@@ -289,6 +315,13 @@ class NflreadpyProvider(NFLDataProvider):
             config_updates["cache_mode"] = cache_mode
         elif "NFLREADPY_CACHE" not in os.environ:
             config_updates["cache_mode"] = "filesystem"
+        if (
+            cache_duration is None
+            and live_cache_duration is not None
+            and "NFLREADPY_CACHE_DURATION" not in os.environ
+            and is_live_nfl_window()
+        ):
+            cache_duration = live_cache_duration
         if cache_duration is not None:
             config_updates["cache_duration"] = cache_duration
         if config_updates:

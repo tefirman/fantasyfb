@@ -6,6 +6,7 @@ from fantasyfb.configs import (
     HALF_PPR_CONFIG,
     PPR_CONFIG,
     STANDARD_CONFIG,
+    apply_default_scoring_categories,
     get_league_config,
 )
 
@@ -58,3 +59,17 @@ class TestGetLeagueConfigDispatch:
 
     def test_unknown_platform_returns_none(self):
         assert get_league_config("espn") is None
+
+
+class TestDefaultKickerScoring:
+    def test_flat_fg_default_when_league_scores_no_field_goals(self):
+        assert apply_default_scoring_categories({})["FG 0-19"] == 3
+
+    def test_distance_scored_league_gets_no_flat_fg_points(self):
+        """Regression: a Yahoo league scoring kicks only by 'FG Yds' got a
+        default 3 per make stacked on top, overscoring every kicker."""
+        scoring = apply_default_scoring_categories({"FG Yds": 0.1})
+        assert scoring.get("FG 0-19", 0.0) == 0.0
+
+    def test_existing_fg_bucket_is_kept(self):
+        assert apply_default_scoring_categories({"FG 0-19": 4.0})["FG 0-19"] == 4.0

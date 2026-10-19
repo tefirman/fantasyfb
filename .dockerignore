@@ -1,0 +1,12 @@
+# Whitelist: only what the image needs. The repo root holds local secrets
+# (oauth2.json, .env, *.pem) and run outputs that must never enter an image.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+!app/
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+app/tests

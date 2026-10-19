@@ -218,3 +218,6 @@ notes/
 
 # macOS
 .DS_Store
+
+# Local https certs for the web app (mkcert)
+*.pem

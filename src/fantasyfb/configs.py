@@ -148,8 +148,10 @@ def apply_default_scoring_categories(scoring: dict):
         if category not in scoring:
             scoring[category] = 0.0
     
-    # Set default kicker scoring if missing
-    if "FG 0-19" not in scoring:
+    # Set default kicker scoring only when the league scores field goals in
+    # no way at all. A distance-based league ('FG Yds' only) must not get a
+    # flat 3 per make stacked on top of its per-yard points.
+    if not any(key.startswith("FG ") for key in scoring):
         scoring["FG 0-19"] = 3
     
     # Set default reception scoring if missing

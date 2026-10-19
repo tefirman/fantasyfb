@@ -1,7 +1,7 @@
 # First weekly report
 
-End-to-end walkthrough: from `pip install` to a spreadsheet open in
-Excel. Assumes you've already finished [Yahoo OAuth
+End-to-end walkthrough: from `pip install` to a report open in
+Excel or your browser. Assumes you've already finished [Yahoo OAuth
 setup](platforms.md#yahoo) — `.env` populated, `oauth2.json` will be
 generated on first run.
 
@@ -35,7 +35,8 @@ What happens:
 2. Pulls your league's scoring settings, roster spots, and current
    rosters.
 3. Pulls weekly NFL stats from `nflreadpy` (cached locally after the
-   first call).
+   first call; on game days the cache lasts 30 minutes instead of 24
+   hours, so reruns pick up finished games).
 4. Fits per-player projection rates and runs 1,000 Monte Carlo season
    simulations.
 5. Writes `FantasyFootballProjections_<Day>Week<N>.xlsx` to your
@@ -59,6 +60,18 @@ Tabs you'll see:
 | Standings     | End-of-season expected wins / playoffs / winner odds        |
 | Adds          | Every viable add, with earnings delta                       |
 | Drops         | Drops ranked by lowest earnings cost                        |
+
+### Prefer a web page to a spreadsheet?
+
+Add `--format html` (or `--format both` for the workbook too) to get
+one self-contained `.html` file instead. It opens offline in any
+browser and can be emailed. It has tabs for your week, standings, the
+league schedule, roster moves, and free agents, and a **Viewing** menu
+that rescopes the whole report to any team in the league.
+
+```bash
+fantasyfb --team "My Team" --sims 1000 --adds --drops --format html
+```
 
 ## 5. Common follow-ups
 
