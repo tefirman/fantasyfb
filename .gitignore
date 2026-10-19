@@ -211,6 +211,7 @@ cache/
 # Local data storage
 *.csv
 !examples/*.csv
+!tests/snapshots/*/injured_list.csv
 
 # personal notes/documentation
 notes/

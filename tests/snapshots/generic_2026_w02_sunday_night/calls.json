@@ -1,0 +1,614 @@
+{
+ "client": {
+  "[\"get_all_players\", [10], {}]": [
+   {
+    "__df__": "ddf2fb5e3158b001.parquet"
+   }
+  ],
+  "[\"get_current_week\", [], {}]": [
+   2
+  ],
+  "[\"get_fantasy_teams\", [], {}]": [
+   [
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "1"
+      ],
+      [
+       "name",
+       "Snapshot Team"
+      ],
+      [
+       "manager",
+       "Snapshot Team"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "2"
+      ],
+      [
+       "name",
+       "Team 2"
+      ],
+      [
+       "manager",
+       "Team 2"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "3"
+      ],
+      [
+       "name",
+       "Team 3"
+      ],
+      [
+       "manager",
+       "Team 3"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "4"
+      ],
+      [
+       "name",
+       "Team 4"
+      ],
+      [
+       "manager",
+       "Team 4"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "5"
+      ],
+      [
+       "name",
+       "Team 5"
+      ],
+      [
+       "manager",
+       "Team 5"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "6"
+      ],
+      [
+       "name",
+       "Team 6"
+      ],
+      [
+       "manager",
+       "Team 6"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "7"
+      ],
+      [
+       "name",
+       "Team 7"
+      ],
+      [
+       "manager",
+       "Team 7"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "8"
+      ],
+      [
+       "name",
+       "Team 8"
+      ],
+      [
+       "manager",
+       "Team 8"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "9"
+      ],
+      [
+       "name",
+       "Team 9"
+      ],
+      [
+       "manager",
+       "Team 9"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "10"
+      ],
+      [
+       "name",
+       "Team 10"
+      ],
+      [
+       "manager",
+       "Team 10"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "11"
+      ],
+      [
+       "name",
+       "Team 11"
+      ],
+      [
+       "manager",
+       "Team 11"
+      ]
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "team_key",
+       "12"
+      ],
+      [
+       "name",
+       "Team 12"
+      ],
+      [
+       "manager",
+       "Team 12"
+      ]
+     ]
+    }
+   ]
+  ],
+  "[\"get_league_config\", [], {}]": [
+   {
+    "__dict__": [
+     [
+      "scoring",
+      {
+       "__dict__": [
+        [
+         "Pass Yds",
+         0.04
+        ],
+        [
+         "Pass Comp",
+         0.0
+        ],
+        [
+         "Pass TD",
+         4.0
+        ],
+        [
+         "Pass 1D",
+         0.0
+        ],
+        [
+         "Pass 300+",
+         0.0
+        ],
+        [
+         "Pass 400+",
+         0.0
+        ],
+        [
+         "Int Thrown",
+         -1.0
+        ],
+        [
+         "Rush Yds",
+         0.1
+        ],
+        [
+         "Rush Att",
+         0.0
+        ],
+        [
+         "Rush TD",
+         6.0
+        ],
+        [
+         "Rush 1D",
+         0.0
+        ],
+        [
+         "Rush 100+",
+         0.0
+        ],
+        [
+         "Rush 200+",
+         0.0
+        ],
+        [
+         "Rec Yds",
+         0.1
+        ],
+        [
+         "Rec TD",
+         6.0
+        ],
+        [
+         "Rec 1D",
+         0.0
+        ],
+        [
+         "Rec 100+",
+         0.0
+        ],
+        [
+         "Rec 200+",
+         0.0
+        ],
+        [
+         "Rush+Rec 100+",
+         0.0
+        ],
+        [
+         "Rush+Rec 200+",
+         0.0
+        ],
+        [
+         "Ret Yds",
+         0.0
+        ],
+        [
+         "Ret TD",
+         6.0
+        ],
+        [
+         "TE Rec Bonus",
+         0.0
+        ],
+        [
+         "TE 1D Bonus",
+         0.0
+        ],
+        [
+         "2-PT",
+         2.0
+        ],
+        [
+         "Fum Lost",
+         -2.0
+        ],
+        [
+         "Fum Ret TD",
+         6.0
+        ],
+        [
+         "FG 0-19",
+         3.0
+        ],
+        [
+         "FG 20-29",
+         3.0
+        ],
+        [
+         "FG 30-39",
+         3.0
+        ],
+        [
+         "FG 40-49",
+         4.0
+        ],
+        [
+         "FG 50+",
+         5.0
+        ],
+        [
+         "PAT Made",
+         1.0
+        ],
+        [
+         "Sack",
+         1.0
+        ],
+        [
+         "Int",
+         2.0
+        ],
+        [
+         "Fum Rec",
+         2.0
+        ],
+        [
+         "TD",
+         6.0
+        ],
+        [
+         "Safe",
+         2.0
+        ],
+        [
+         "Blk Kick",
+         2.0
+        ],
+        [
+         "Pts Allow 0",
+         10.0
+        ],
+        [
+         "Pts Allow 1-6",
+         7.0
+        ],
+        [
+         "Pts Allow 7-13",
+         4.0
+        ],
+        [
+         "Pts Allow 14-20",
+         1.0
+        ],
+        [
+         "Pts Allow 21-27",
+         0.0
+        ],
+        [
+         "Pts Allow 28-34",
+         -1.0
+        ],
+        [
+         "Pts Allow 35+",
+         -4.0
+        ],
+        [
+         "XPR",
+         0.0
+        ],
+        [
+         "Rec",
+         1.0
+        ]
+       ]
+      }
+     ],
+     [
+      "roster_spots",
+      {
+       "__df__": "260bf675b6a12450.parquet"
+      }
+     ],
+     [
+      "settings",
+      {
+       "__dict__": [
+        [
+         "playoff_start_week",
+         15
+        ],
+        [
+         "num_playoff_teams",
+         6
+        ],
+        [
+         "end_week",
+         17
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  ],
+  "[\"get_my_team_key\", [], {}]": [
+   "1"
+  ],
+  "[\"get_roster_percentages\", [\"<DataFrame>\"], {\"chunk_size\": 25}]": [
+   null
+  ],
+  "[\"get_schedule\", [[{\"manager\": \"Snapshot Team\", \"name\": \"Snapshot Team\", \"team_key\": \"1\"}, {\"manager\": \"Team 2\", \"name\": \"Team 2\", \"team_key\": \"2\"}, {\"manager\": \"Team 3\", \"name\": \"Team 3\", \"team_key\": \"3\"}, {\"manager\": \"Team 4\", \"name\": \"Team 4\", \"team_key\": \"4\"}, {\"manager\": \"Team 5\", \"name\": \"Team 5\", \"team_key\": \"5\"}, {\"manager\": \"Team 6\", \"name\": \"Team 6\", \"team_key\": \"6\"}, {\"manager\": \"Team 7\", \"name\": \"Team 7\", \"team_key\": \"7\"}, {\"manager\": \"Team 8\", \"name\": \"Team 8\", \"team_key\": \"8\"}, {\"manager\": \"Team 9\", \"name\": \"Team 9\", \"team_key\": \"9\"}, {\"manager\": \"Team 10\", \"name\": \"Team 10\", \"team_key\": \"10\"}, {\"manager\": \"Team 11\", \"name\": \"Team 11\", \"team_key\": \"11\"}, {\"manager\": \"Team 12\", \"name\": \"Team 12\", \"team_key\": \"12\"}], 14, 15], {\"end_week\": 17}]": [
+   {
+    "__df__": "b2243bf7a14ebaa7.parquet"
+   }
+  ],
+  "[\"get_team_rosters\", [[{\"manager\": \"Snapshot Team\", \"name\": \"Snapshot Team\", \"team_key\": \"1\"}, {\"manager\": \"Team 2\", \"name\": \"Team 2\", \"team_key\": \"2\"}, {\"manager\": \"Team 3\", \"name\": \"Team 3\", \"team_key\": \"3\"}, {\"manager\": \"Team 4\", \"name\": \"Team 4\", \"team_key\": \"4\"}, {\"manager\": \"Team 5\", \"name\": \"Team 5\", \"team_key\": \"5\"}, {\"manager\": \"Team 6\", \"name\": \"Team 6\", \"team_key\": \"6\"}, {\"manager\": \"Team 7\", \"name\": \"Team 7\", \"team_key\": \"7\"}, {\"manager\": \"Team 8\", \"name\": \"Team 8\", \"team_key\": \"8\"}, {\"manager\": \"Team 9\", \"name\": \"Team 9\", \"team_key\": \"9\"}, {\"manager\": \"Team 10\", \"name\": \"Team 10\", \"team_key\": \"10\"}, {\"manager\": \"Team 11\", \"name\": \"Team 11\", \"team_key\": \"11\"}, {\"manager\": \"Team 12\", \"name\": \"Team 12\", \"team_key\": \"12\"}], 2], {}]": [
+   {
+    "__df__": "aa66e4d071bc4f8f.parquet"
+   }
+  ],
+  "[\"refresh_oauth\", [], {}]": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ]
+ },
+ "provider": {
+  "[\"get_depth_charts\", [], {}]": [
+   {
+    "__df__": "9750e852a4fd3388.parquet"
+   }
+  ],
+  "[\"get_player_stats\", [202401, 202601], {}]": [
+   {
+    "__df__": "f87943563230a491.parquet"
+   },
+   {
+    "__df__": "f87943563230a491.parquet"
+   }
+  ],
+  "[\"get_player_stats\", [202502, 202601], {}]": [
+   {
+    "__df__": "f4e1aeff09cc9b82.parquet"
+   }
+  ],
+  "[\"get_player_stats\", [202602, 202602], {}]": [
+   {
+    "__df__": "f19fe2686d200335.parquet"
+   },
+   {
+    "__df__": "f19fe2686d200335.parquet"
+   },
+   {
+    "__df__": "f19fe2686d200335.parquet"
+   },
+   {
+    "__df__": "f19fe2686d200335.parquet"
+   },
+   {
+    "__df__": "f19fe2686d200335.parquet"
+   },
+   {
+    "__df__": "f19fe2686d200335.parquet"
+   },
+   {
+    "__df__": "f19fe2686d200335.parquet"
+   }
+  ],
+  "[\"get_rosters\", [2025, 2026], {}]": [
+   {
+    "__df__": "c01992b5a97e3ef4.parquet"
+   },
+   {
+    "__df__": "c01992b5a97e3ef4.parquet"
+   }
+  ],
+  "[\"get_schedule\", [2018, 2026], {}]": [
+   {
+    "__df__": "f6b9b3225c2c0e2c.parquet"
+   }
+  ],
+  "[\"team_aliases\", [], {}]": [
+   {
+    "__df__": "689f85046450ba43.parquet"
+   },
+   {
+    "__df__": "689f85046450ba43.parquet"
+   }
+  ]
+ }
+}
