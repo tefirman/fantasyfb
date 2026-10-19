@@ -84,6 +84,10 @@ The app is a single container. `app/Dockerfile` builds it from the repo root (`d
 
 **Limits built in:** each run executes in its own child process, so the timeout really stops it and a crash or out-of-memory kill fails only that run. Each visitor (the signed-in session for Yahoo, the IP address for Sleeper) can have one run in progress at a time.
 
+### Google Cloud Run
+
+See [`deploy/cloudrun/README.md`](../deploy/cloudrun/README.md) for the build, deploy, and Yahoo redirect setup. It uses the same `app/Dockerfile`.
+
 ### Hugging Face Spaces (free)
 
 1. Create a Space at https://huggingface.co/new-space with the **Docker** SDK (blank template) and the free CPU hardware. Make it **Public** so friends can open it. The Space repo holds only a Dockerfile and a README, never secrets.

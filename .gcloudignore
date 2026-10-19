@@ -1,0 +1,23 @@
+# What `gcloud builds submit` uploads. Mirrors the whitelist in .dockerignore so
+# local secrets (oauth2.json, .env, *.pem) and run outputs never leave this machine.
+# The image only needs pyproject.toml, README.md, LICENSE, src/, and app/.
+#!include:.gitignore
+
+.git
+.gitignore
+.venv
+.env
+.env.*
+oauth2.json
+*.pem
+*.csv
+notes/
+site/
+build/
+dist/
+docs/
+tests/
+scripts/
+assets/
+examples/
+deploy/
