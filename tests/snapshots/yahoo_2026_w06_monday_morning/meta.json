@@ -1,0 +1,15 @@
+{
+  "platform": "yahoo",
+  "team": "Toothless Wonders",
+  "season": 2026,
+  "week": 6,
+  "as_of": "2026-10-19T08:46",
+  "seed": 0,
+  "description": "Real Yahoo league (Toothless Wonders), recorded Monday morning of week 6",
+  "recorded_at": "2026-10-19T08:46:38",
+  "versions": {
+    "pandas": "3.0.3",
+    "numpy": "2.4.5"
+  },
+  "current_week": 6
+}

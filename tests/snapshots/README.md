@@ -37,3 +37,4 @@ manager names, so only commit them if you're comfortable with that.
 | Snapshot | What it covers |
 | --- | --- |
 | `generic_2026_w02_sunday_night` | Synthetic 12-team PPR league (rosters snake-drafted on 2025 fantasy points, week 1 given fixed pseudo-random scores) on real 2026 NFL data. The clock is frozen at 11:30pm on Sunday of week 2: Thursday and Sunday games are final, and Monday night (LA vs. NYG) is still to play. |
+| `yahoo_2026_w06_monday_morning` | A real 10-team Yahoo league (Toothless Wonders) on real 2026 NFL data, recorded Monday morning of week 6: Thursday and Sunday games are final and Monday night is still to play. Manager names are first names only. |
