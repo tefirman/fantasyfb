@@ -89,7 +89,7 @@ A mapping can only point at `/`, not a path like `/fantasy`. Cookies are per hos
 
 ## Deploying from GitHub Actions (optional)
 
-`.github/workflows/deploy-cloud-run.yml` redeploys the app when `src/`, `app/`, `pyproject.toml`, or the workflow itself changes on `main`, and from the Actions tab (Deploy to Cloud Run, then Run workflow). It runs the hermetic app tests first, builds `app/Dockerfile` on the GitHub runner, pushes the image to Artifact Registry tagged with the commit SHA, and swaps it into the existing service with `gcloud run services update --image`, so the secrets, `YAHOO_REDIRECT_URI`, and the memory/CPU/instance settings are left alone. It ends by checking `/healthz`.
+`.github/workflows/deploy-cloud-run.yml` redeploys the app when `src/`, `app/`, `pyproject.toml`, or the workflow itself changes on `main`, and from the Actions tab (Deploy to Cloud Run, then Run workflow). It runs the hermetic app tests first, builds `app/Dockerfile` on the GitHub runner, pushes the image to Artifact Registry tagged with the commit SHA, and swaps it into the existing service with `gcloud run services update --image`, so the secrets, `YAHOO_REDIRECT_URI`, and the memory/CPU/instance settings are left alone. It ends by checking that `/` responds. (It can't use `/healthz`: Cloud Run's front end answers that path itself on `*.run.app` URLs, so it returns a 404 from Google and never reaches the app.)
 
 Docs and test-only merges don't trigger it. A deploy replaces the running instance, so a run in progress is lost and Yahoo users sign in again.
 
