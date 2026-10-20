@@ -15,6 +15,10 @@ COPY src ./src
 COPY app ./app
 RUN pip install . -r app/requirements.txt
 
+# WORKDIR is created as root, but a run writes NewInjuries.csv/OldInjuries.csv
+# to the working directory, so the unprivileged user needs to own it.
+RUN chown user:user /home/user/fantasyfb
+
 USER user
 ENV HOME=/home/user \
     NFLREADPY_CACHE_DIR=/home/user/.cache/nflreadpy \
