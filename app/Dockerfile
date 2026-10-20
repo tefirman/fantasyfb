@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Run as an unprivileged user (Hugging Face Spaces also requires uid 1000).
+# Run as an unprivileged user (some hosts, such as Hugging Face Spaces, require uid 1000).
 RUN useradd -m -u 1000 user
 WORKDIR /home/user/fantasyfb
 
@@ -14,6 +14,10 @@ COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 COPY app ./app
 RUN pip install . -r app/requirements.txt
+
+# WORKDIR is created as root, but a run writes NewInjuries.csv/OldInjuries.csv
+# to the working directory, so the unprivileged user needs to own it.
+RUN chown user:user /home/user/fantasyfb
 
 USER user
 ENV HOME=/home/user \

@@ -1,0 +1,20 @@
+# Builds app/Dockerfile (not a root Dockerfile, so `gcloud run deploy --source`
+# can't find it) and pushes the image to Artifact Registry.
+# Run from the repo root: see deploy/cloudrun/README.md.
+substitutions:
+  _REGION: us-west1
+  _REPO: fantasyfb
+  _IMAGE: fantasyfb-web
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - app/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest

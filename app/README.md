@@ -84,15 +84,9 @@ The app is a single container. `app/Dockerfile` builds it from the repo root (`d
 
 **Limits built in:** each run executes in its own child process, so the timeout really stops it and a crash or out-of-memory kill fails only that run. Each visitor (the signed-in session for Yahoo, the IP address for Sleeper) can have one run in progress at a time.
 
-### Hugging Face Spaces (free)
+### Google Cloud Run
 
-1. Create a Space at https://huggingface.co/new-space with the **Docker** SDK (blank template) and the free CPU hardware. Make it **Public** so friends can open it. The Space repo holds only a Dockerfile and a README, never secrets.
-2. Clone the Space repo, copy `deploy/huggingface/Dockerfile` and `deploy/huggingface/README.md` into it, and push. The Dockerfile clones this repo from GitHub, so the Space updates when you rebuild it. To pin a release, set `FANTASYFB_REF` in the Dockerfile to a tag.
-3. In the Space's Settings, under Variables and secrets, add `CONSUMER_KEY` and `CONSUMER_SECRET` as **secrets**, and `YAHOO_REDIRECT_URI` as a variable set to `https://<owner>-<space-name>.hf.space/auth/yahoo/callback`. Copy the exact URL from the Space's "Embed this Space" dialog (Direct URL), since the host is lowercase.
-4. Add that same redirect URI to your Yahoo app at https://developer.yahoo.com/apps/ (keep the localhost one too if Yahoo allows several).
-5. Share the **direct** `.hf.space` URL, not the `huggingface.co/spaces/...` page. That page embeds the app in an iframe, and browsers block the session cookie there, so sign-in would fail.
-
-Things to expect on the free tier: the Space sleeps after a period of inactivity and wakes on the next visit, a restart loses sessions and finished reports (users just sign in again), and the first run after a restart is slower because the nflverse data cache is empty again.
+See [`deploy/cloudrun/README.md`](../deploy/cloudrun/README.md) for the build, deploy, and Yahoo redirect setup. It uses the same `app/Dockerfile`.
 
 ## Tests
 
