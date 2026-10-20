@@ -2,7 +2,7 @@
 # can't find it) and pushes the image to Artifact Registry.
 # Run from the repo root: see deploy/cloudrun/README.md.
 substitutions:
-  _REGION: us-central1
+  _REGION: us-west1
   _REPO: fantasyfb
   _IMAGE: fantasyfb-web
 

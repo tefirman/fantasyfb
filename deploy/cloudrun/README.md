@@ -12,7 +12,7 @@ Cloud Run runs the same container as `app/Dockerfile`. It scales to zero when id
    gcloud config set project <project-id>
    gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
      artifactregistry.googleapis.com secretmanager.googleapis.com
-   gcloud artifacts repositories create fantasyfb --repository-format=docker --location=us-central1
+   gcloud artifacts repositories create fantasyfb --repository-format=docker --location=us-west1
    ```
 
 3. Store the Yahoo credentials as secrets (skip for a Sleeper-only app):
@@ -36,8 +36,8 @@ From the repo root:
 gcloud builds submit --config deploy/cloudrun/cloudbuild.yaml .
 
 gcloud run deploy fantasyfb-web \
-  --image us-central1-docker.pkg.dev/$(gcloud config get-value project)/fantasyfb/fantasyfb-web:latest \
-  --region us-central1 \
+  --image us-west1-docker.pkg.dev/$(gcloud config get-value project)/fantasyfb/fantasyfb-web:latest \
+  --region us-west1 \
   --memory 2Gi --cpu 1 \
   --min-instances 0 --max-instances 1 \
   --no-cpu-throttling \
@@ -56,20 +56,41 @@ Why these flags:
 
 The service URL (`https://fantasyfb-web-....run.app`) is only known after the first deploy, so Yahoo sign-in needs a second pass:
 
-1. Redeploy with the callback set:
+1. Set the callback on the service:
 
    ```bash
-   gcloud run services update fantasyfb-web --region us-central1 \
+   gcloud run services update fantasyfb-web --region us-west1 \
      --set-env-vars YAHOO_REDIRECT_URI=https://<service-url>/auth/yahoo/callback
    ```
 
-2. Add that exact URI to your Yahoo app at https://developer.yahoo.com/apps/. The app refuses a mismatch.
+2. Add that exact URI to your Yahoo app at https://developer.yahoo.com/apps/. The app refuses a mismatch. After saving, reopen the app's settings and check the URI is really there: if it didn't save, Yahoo only shows a generic "Something went wrong" page.
 
 Sleeper works before this step.
+
+If you later redeploy with the full `gcloud run deploy` command, add the same `--set-env-vars YAHOO_REDIRECT_URI=...` to it so the variable isn't dropped. `gcloud run services update --image ...` leaves it alone.
+
+## Custom domain (optional)
+
+The `*.run.app` URL is permanent, but you can also serve the app from a subdomain you own, such as `fantasy.example.com`. Cloud Run domain mappings are a preview feature (Google warns about latency and recommends a load balancer for production), which is fine for a small app. us-west1 supports them.
+
+1. Verify the base domain with `gcloud domains verify example.com` (skip if `gcloud domains list-user-verified` already lists it). It asks you to add a TXT record at your registrar.
+2. Map the subdomain:
+
+   ```bash
+   gcloud beta run domain-mappings create --service fantasyfb-web \
+     --domain fantasy.example.com --region us-west1
+   gcloud beta run domain-mappings describe --domain fantasy.example.com --region us-west1
+   ```
+
+3. Add the record that `describe` prints under `resourceRecords` at your registrar. For a subdomain it is a CNAME with host `fantasy` and value `ghs.googlehosted.com`. Enter the host as just the subdomain, and leave off the trailing dot if the form rejects it.
+4. Wait for the certificate (usually about 15 minutes, up to 24 hours), then repeat the Yahoo redirect URI steps above with the new domain.
+
+A mapping can only point at `/`, not a path like `/fantasy`. Cookies are per host, so users sign in again after the move.
 
 ## Things to expect
 
 - After about 15 idle minutes the instance scales to zero. The next visit takes a few seconds to start, and the first run is slower because the nflverse cache is empty.
 - A restart loses sessions and finished reports. Users sign in again.
+- A run writes `NewInjuries.csv`/`OldInjuries.csv` to its working directory, so `app/Dockerfile` makes that directory writable by the unprivileged user. Without it every run fails with a `PermissionError`.
 - To update, run the build and deploy commands again. The image installs from your local checkout, so commit or not as you like.
 - Other settings (`FANTASYFB_RUN_TIMEOUT`, `FANTASYFB_ENABLE_MOVES`, and so on) are listed in `app/README.md` and are passed with `--set-env-vars`.

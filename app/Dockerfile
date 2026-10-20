@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Run as an unprivileged user (Hugging Face Spaces also requires uid 1000).
+# Run as an unprivileged user (some hosts, such as Hugging Face Spaces, require uid 1000).
 RUN useradd -m -u 1000 user
 WORKDIR /home/user/fantasyfb
 
