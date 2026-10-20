@@ -25,7 +25,7 @@
   var S = {
     team: D.me, tab: TABS[0][0], sKey: "earnings", sDir: -1, week: CW,
     mv: MOVES[0], aKey: "earnings", aDir: -1, addPos: "ALL", tf: "all",
-    faPos: "ALL", faAll: false, q: "", faMin: 0.05,
+    faPos: "ALL", faAll: false, faKey: "WAR", faDir: -1, q: "", faMin: 0.05,
     game: undefined  // selected Schedule game key; undefined = default to my matchup, null = collapsed
   };
 
@@ -53,11 +53,12 @@
     }).join("") + "</div>";
   }
   function corners() { return '<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>'; }
-  function bar(frac, color, valueHtml, w) {
+  function bar(frac, color, valueHtml, w, valueFirst) {
     var f = Math.max(0, Math.min(1, frac || 0)) * 100;
-    return '<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--color-neutral-200);position:relative">' +
-      '<div style="position:absolute;top:0;bottom:0;left:0;width:' + f + '%;background:' + color + '"></div></div>' +
-      '<span style="font-size:12px;width:' + (w || 34) + 'px;text-align:right">' + valueHtml + "</span></div>";
+    var track = '<div style="flex:1;height:6px;background:var(--color-neutral-200);position:relative">' +
+      '<div style="position:absolute;top:0;bottom:0;left:0;width:' + f + '%;background:' + color + '"></div></div>';
+    var value = '<span style="font-size:12px;width:' + (w || 34) + 'px;text-align:' + (valueFirst ? "left" : "right") + '">' + valueHtml + "</span>";
+    return '<div style="display:flex;align-items:center;gap:6px">' + (valueFirst ? value + track : track + value) + "</div>";
   }
   function sortBtn(label, key, cur, dir, action, right) {
     var arrow = cur === key ? (dir > 0 ? "↑" : "↓") : "";
@@ -238,7 +239,7 @@
   }
 
   /* ---------- Standings ---------- */
-  function prob(frac, color, w) { return '<td style="width:140px">' + bar(frac, color, pct(frac), w || 40) + "</td>"; }
+  function prob(frac, color, w) { return '<td style="width:140px">' + bar(frac, color, pct(frac), w || 40, true) + "</td>"; }
   function tabStand() {
     var rows = stand.slice().sort(function (a, b) {
       return S.sKey === "team" ? S.sDir * String(a.team).localeCompare(b.team) : S.sDir * (num(a[S.sKey]) - num(b[S.sKey]));
@@ -255,7 +256,7 @@
     }).join("");
     var sb = function (l, k, r) { return sortBtn(l, k, S.sKey, S.sDir, "sort-stand", r); };
     var head = '<th style="width:32px">#</th>' + sb("Team", "team") + (HAS_SCHED ? "<th>Record</th>" : "") + sb("Proj. wins", "wins_avg", true) +
-      sb("Pts / gm", "per_game_avg", true) + sb("Playoffs", "playoffs") + sb("Bye", "playoff_bye") + sb("Title", "winner") + sb("Exp. $", "earnings", true);
+      sb("Pts / gm", "per_game_avg", true) + sb("Playoffs", "playoffs") + sb("First-round bye", "playoff_bye") + sb("Title", "winner") + sb("Exp. $", "earnings", true);
     return '<section style="display:flex;flex-direction:column;gap:var(--space-3)">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap"><h3 style="margin:0">Simulated final standings</h3>' +
       '<span style="font-size:13px;color:var(--color-neutral-700)">Click a column to sort · click a team to view it</span></div>' +
@@ -472,12 +473,20 @@
   }
 
   /* ---------- Free agents ---------- */
+  var FA_SORT_LABELS = { points_avg: "projection", matchup_factor: "matchup", WAR: "WAR", bye_week: "bye week", pct_rostered: "% rostered" };
   function faResults() {
     var q = S.q.trim().toLowerCase();
     var all = (D.available || []).filter(function (p) {
       return (p.pct_rostered || 0) >= S.faMin && (S.faPos === "ALL" || p.position === S.faPos) && (!q || String(p.name).toLowerCase().indexOf(q) >= 0 || String(p.current_team || "").toLowerCase() === q);
     });
+    /* missing values (e.g. no bye week) always sort last, whichever direction */
+    var fav = function (p) { var v = p[S.faKey]; return v == null || isNaN(v) ? null : +v; };
+    all.sort(function (a, b) {
+      var x = fav(a), y = fav(b);
+      return x === null || y === null ? (x === null) - (y === null) : S.faDir * (x - y);
+    });
     var shown = S.faAll ? all : all.slice(0, FA_LIMIT);
+    var sb = function (l, k, r) { return sortBtn(l, k, S.faKey, S.faDir, "sort-fa", r); };
     var rows = shown.map(function (p) {
       return "<tr><td>" + playerCell(p, true) + "</td><td>" + pos(p.position) + "</td>" +
         '<td style="text-align:right;white-space:nowrap">' + fx(p.points_avg, 1) + " " + sub("± " + fx(p.points_stdev, 1)) + "</td>" +
@@ -487,7 +496,7 @@
     }).join("");
     var more = all.length > shown.length
       ? '<div><button class="btn btn-secondary" data-action="fa-more">Show all ' + all.length + "</button></div>" : "";
-    return { count: all.length, html: table(820, "<th>Player</th><th>Pos</th>" + TH_R("Proj") + TH_R("Matchup") + "<th>WAR</th>" + TH_R("Bye") + TH_R("Rostered"), rows) + more };
+    return { count: all.length, html: table(820, "<th>Player</th><th>Pos</th>" + sb("Proj", "points_avg", true) + sb("Matchup", "matchup_factor", true) + sb("WAR", "WAR") + sb("Bye", "bye_week", true) + sb("Rostered", "pct_rostered", true), rows) + more };
   }
   function tabFA() {
     return '<section style="display:flex;flex-direction:column;gap:var(--space-3)">' +
@@ -503,7 +512,7 @@
   }
   function paintFA() {
     var r = faResults();
-    $("fa-count").textContent = r.count + " matching · sorted by WAR";
+    $("fa-count").textContent = r.count + " matching · sorted by " + FA_SORT_LABELS[S.faKey];
     $("fa-results").innerHTML = r.html;
   }
 
@@ -536,6 +545,7 @@
     }
     else if (a === "prev-week") { S.week = Math.max(weeks[0], S.week - 1); S.game = undefined; }
     else if (a === "next-week") { S.week = Math.min(weeks[weeks.length - 1], S.week + 1); S.game = undefined; }
+    else if (a === "sort-fa") { var f = toggleSort(el.dataset.key, S.faKey, S.faDir, "bye_week"); S.faKey = f.key; S.faDir = f.dir; paintFA(); return; }
     else if (a === "fa-more") { S.faAll = true; paintFA(); return; }
     else return;
     render();
