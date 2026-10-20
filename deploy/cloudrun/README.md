@@ -63,7 +63,7 @@ The service URL (`https://fantasyfb-web-....run.app`) is only known after the fi
      --set-env-vars YAHOO_REDIRECT_URI=https://<service-url>/auth/yahoo/callback
    ```
 
-2. Add that exact URI to your Yahoo app at https://developer.yahoo.com/apps/. The app refuses a mismatch. After saving, reopen the app's settings and check the URI is really there: if it didn't save, Yahoo only shows a generic "Something went wrong" page.
+2. Set that exact URI as the redirect URI on your Yahoo app at https://developer.yahoo.com/apps/. In practice Yahoo wants just the one the app sends, so replace any older value (`localhost`, the `run.app` URL) instead of adding to it, and change it again if you change domains. A leftover URI is enough to make sign-in fail. After saving, reopen the app's settings and check the URI is really there: if it didn't save, Yahoo only shows a generic "Something went wrong" page.
 
 Sleeper works before this step.
 
@@ -89,7 +89,7 @@ A mapping can only point at `/`, not a path like `/fantasy`. Cookies are per hos
 
 ## Deploying from GitHub Actions (optional)
 
-`.github/workflows/deploy-cloud-run.yml` redeploys the app when `src/`, `app/`, `pyproject.toml`, or the build config changes on `main`, and from the Actions tab (Deploy to Cloud Run, then Run workflow). It runs the hermetic app tests first, builds the image tagged with the commit SHA, and swaps it into the existing service with `gcloud run services update --image`, so the secrets, `YAHOO_REDIRECT_URI`, and the memory/CPU/instance settings are left alone. It ends by checking `/healthz`.
+`.github/workflows/deploy-cloud-run.yml` redeploys the app when `src/`, `app/`, `pyproject.toml`, or the workflow itself changes on `main`, and from the Actions tab (Deploy to Cloud Run, then Run workflow). It runs the hermetic app tests first, builds `app/Dockerfile` on the GitHub runner, pushes the image to Artifact Registry tagged with the commit SHA, and swaps it into the existing service with `gcloud run services update --image`, so the secrets, `YAHOO_REDIRECT_URI`, and the memory/CPU/instance settings are left alone. It ends by checking that `/` responds. (It can't use `/healthz`: Cloud Run's front end answers that path itself on `*.run.app` URLs, so it returns a 404 from Google and never reaches the app.)
 
 Docs and test-only merges don't trigger it. A deploy replaces the running instance, so a run in progress is lost and Yahoo users sign in again.
 
@@ -103,14 +103,14 @@ SA=github-deployer@${PROJECT_ID}.iam.gserviceaccount.com
 # 1. The service account the workflow acts as
 gcloud iam service-accounts create github-deployer --display-name="GitHub Actions deployer"
 
-# 2. What it may do: start builds, update the Cloud Run service, and read build logs
-for role in roles/cloudbuild.builds.editor roles/run.admin roles/logging.viewer roles/serviceusage.serviceUsageConsumer; do
+# 2. What it may do: update the Cloud Run service, and make API calls against this project
+for role in roles/run.admin roles/serviceusage.serviceUsageConsumer; do
   gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SA" --role=$role
 done
 
-# 3. Upload source to the Cloud Build bucket (check the name with: gcloud storage buckets list)
-gcloud storage buckets add-iam-policy-binding gs://${PROJECT_ID}_cloudbuild \
-  --member="serviceAccount:$SA" --role=roles/storage.objectAdmin
+# 3. Push images to the Artifact Registry repo only
+gcloud artifacts repositories add-iam-policy-binding fantasyfb --location=us-west1 \
+  --member="serviceAccount:$SA" --role=roles/artifactregistry.writer
 
 # 4. Let it deploy a service that runs as the default compute service account
 gcloud iam service-accounts add-iam-policy-binding ${PROJECT_NUMBER}-compute@developer.gserviceaccount.com \
@@ -140,6 +140,17 @@ gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER \
 ```
 
 Run the workflow once by hand from the Actions tab to confirm it works. If it fails on a permission, the error names the missing one; add that role to the service account.
+
+The image is built on the runner instead of in Cloud Build, so the service account needs no Cloud Build, logging, or storage roles. An earlier version of this setup used Cloud Build and failed with a bucket "forbidden" error that was hard to trace. If you set that version up, you can remove its extra grants:
+
+```bash
+for role in roles/cloudbuild.builds.editor roles/logging.viewer; do
+  gcloud projects remove-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SA" --role=$role
+done
+for role in roles/storage.objectAdmin roles/storage.legacyBucketReader roles/storage.admin; do
+  gcloud storage buckets remove-iam-policy-binding gs://${PROJECT_ID}_cloudbuild --member="serviceAccount:$SA" --role=$role
+done
+```
 
 ## Things to expect
 

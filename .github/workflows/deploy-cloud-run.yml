@@ -17,7 +17,6 @@ on:
       - "src/**"
       - "app/**"
       - "pyproject.toml"
-      - "deploy/cloudrun/cloudbuild.yaml"
       - ".github/workflows/deploy-cloud-run.yml"
   workflow_dispatch:
 
@@ -73,12 +72,25 @@ jobs:
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Build image
-        run: |
-          gcloud builds submit \
-            --config deploy/cloudrun/cloudbuild.yaml \
-            --substitutions "_REGION=${REGION},_TAG=${GITHUB_SHA}" \
-            .
+      # Built on the runner and pushed straight to Artifact Registry, so the
+      # service account needs no Cloud Build or staging-bucket access.
+      - name: Let Docker push to Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: app/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/fantasyfb/fantasyfb-web:${{ github.sha }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/fantasyfb/fantasyfb-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # Only the image changes. `services update` leaves the secrets,
       # YAHOO_REDIRECT_URI, and the memory/CPU/instance settings as they are.
@@ -91,4 +103,6 @@ jobs:
       - name: Check the service is up
         run: |
           url=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
-          curl -fsS --retry 5 --retry-delay 5 "${url}/healthz"
+          # Not /healthz: Cloud Run's front end reserves that path on *.run.app URLs and
+          # answers it with its own 404, so the request never reaches the app.
+          curl -fsS --retry 5 --retry-delay 5 -o /dev/null "${url}/"
