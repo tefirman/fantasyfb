@@ -87,6 +87,60 @@ The `*.run.app` URL is permanent, but you can also serve the app from a subdomai
 
 A mapping can only point at `/`, not a path like `/fantasy`. Cookies are per host, so users sign in again after the move.
 
+## Deploying from GitHub Actions (optional)
+
+`.github/workflows/deploy-cloud-run.yml` redeploys the app when `src/`, `app/`, `pyproject.toml`, or the build config changes on `main`, and from the Actions tab (Deploy to Cloud Run, then Run workflow). It runs the hermetic app tests first, builds the image tagged with the commit SHA, and swaps it into the existing service with `gcloud run services update --image`, so the secrets, `YAHOO_REDIRECT_URI`, and the memory/CPU/instance settings are left alone. It ends by checking `/healthz`.
+
+Docs and test-only merges don't trigger it. A deploy replaces the running instance, so a run in progress is lost and Yahoo users sign in again.
+
+It logs in to Google Cloud with Workload Identity Federation, so no key is stored in GitHub. GitHub proves to Google that the job comes from this repo, and Google lets it act as a deployer service account. One-time setup:
+
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+SA=github-deployer@${PROJECT_ID}.iam.gserviceaccount.com
+
+# 1. The service account the workflow acts as
+gcloud iam service-accounts create github-deployer --display-name="GitHub Actions deployer"
+
+# 2. What it may do: start builds, update the Cloud Run service, and read build logs
+for role in roles/cloudbuild.builds.editor roles/run.admin roles/logging.viewer roles/serviceusage.serviceUsageConsumer; do
+  gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SA" --role=$role
+done
+
+# 3. Upload source to the Cloud Build bucket (check the name with: gcloud storage buckets list)
+gcloud storage buckets add-iam-policy-binding gs://${PROJECT_ID}_cloudbuild \
+  --member="serviceAccount:$SA" --role=roles/storage.objectAdmin
+
+# 4. Let it deploy a service that runs as the default compute service account
+gcloud iam service-accounts add-iam-policy-binding ${PROJECT_NUMBER}-compute@developer.gserviceaccount.com \
+  --member="serviceAccount:$SA" --role=roles/iam.serviceAccountUser
+
+# 5. Trust GitHub's identity tokens, but only from this repo
+gcloud iam workload-identity-pools create github --location=global --display-name="GitHub Actions"
+gcloud iam workload-identity-pools providers create-oidc fantasyfb-repo \
+  --location=global --workload-identity-pool=github \
+  --issuer-uri=https://token.actions.githubusercontent.com \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="assertion.repository=='tefirman/fantasyfb'"
+
+# 6. Let identities from that repo act as the service account
+gcloud iam service-accounts add-iam-policy-binding $SA \
+  --role=roles/iam.workloadIdentityUser \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/attribute.repository/tefirman/fantasyfb"
+```
+
+Then give the workflow three repository variables (not secrets, since none is sensitive):
+
+```bash
+gh variable set GCP_PROJECT_ID --body "$PROJECT_ID"
+gh variable set GCP_SERVICE_ACCOUNT --body "$SA"
+gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER \
+  --body "projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/providers/fantasyfb-repo"
+```
+
+Run the workflow once by hand from the Actions tab to confirm it works. If it fails on a permission, the error names the missing one; add that role to the service account.
+
 ## Things to expect
 
 - After about 15 idle minutes the instance scales to zero. The next visit takes a few seconds to start, and the first run is slower because the nflverse cache is empty.

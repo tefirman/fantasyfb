@@ -1,0 +1,94 @@
+name: Deploy to Cloud Run
+
+# Redeploys the web app when something it ships changes on main, or on demand
+# (Actions -> Deploy to Cloud Run -> Run workflow). One-time Google Cloud and
+# GitHub setup is in deploy/cloudrun/README.md ("Deploying from GitHub Actions").
+#
+# Repository variables (Settings -> Secrets and variables -> Actions -> Variables).
+# None of these is sensitive, since auth is keyless (Workload Identity Federation):
+#   GCP_PROJECT_ID                  the Google Cloud project ID
+#   GCP_WORKLOAD_IDENTITY_PROVIDER  projects/<number>/locations/global/workloadIdentityPools/github/providers/fantasyfb-repo
+#   GCP_SERVICE_ACCOUNT             github-deployer@<project-id>.iam.gserviceaccount.com
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "app/**"
+      - "pyproject.toml"
+      - "deploy/cloudrun/cloudbuild.yaml"
+      - ".github/workflows/deploy-cloud-run.yml"
+  workflow_dispatch:
+
+# One deploy at a time. A newer run waits instead of cancelling one that is
+# midway through swapping the service's image.
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+env:
+  REGION: us-west1
+  SERVICE: fantasyfb-web
+
+jobs:
+  test:
+    name: App tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package + app deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" -r app/requirements.txt
+
+      # Hermetic (Sleeper and the simulation are stubbed). The full suite runs in test.yml.
+      - name: Run app tests
+        run: pytest -q app/tests tests/test_yahoo_auth.py
+
+  deploy:
+    name: Build and deploy
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # lets the job exchange its GitHub token for Google credentials
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Build image
+        run: |
+          gcloud builds submit \
+            --config deploy/cloudrun/cloudbuild.yaml \
+            --substitutions "_REGION=${REGION},_TAG=${GITHUB_SHA}" \
+            .
+
+      # Only the image changes. `services update` leaves the secrets,
+      # YAHOO_REDIRECT_URI, and the memory/CPU/instance settings as they are.
+      - name: Deploy new image
+        run: |
+          gcloud run services update "${SERVICE}" \
+            --region "${REGION}" \
+            --image "${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/fantasyfb/fantasyfb-web:${GITHUB_SHA}"
+
+      - name: Check the service is up
+        run: |
+          url=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')
+          curl -fsS --retry 5 --retry-delay 5 "${url}/healthz"
