@@ -31,13 +31,20 @@ There are two signals to fold together each run:
 1. **`NewInjuries.csv`** (repo root of `fantasyfb`, if present) — players
    `player_data_manager.py` flagged this week as newly showing an
    injury designation (O/D/SUSP/IR/PUP-R/PUP-P/NFI-R/NA/COVID-19) on a
-   roster that isn't yet reflected in `injured_list.csv`. Columns:
+   roster but have either no `until` value in `injured_list.csv` or an
+   `until` earlier than the current week (so it needs a new estimate).
+   Columns:
    `player_id_sr, name, position, status`.
 2. **`OldInjuries.csv`** (repo root of `fantasyfb`, if present) —
-   players whose `injured_list.csv` `until` week has passed but who
-   are still carrying an active designation in the day's pull. These
-   need their `until` re-estimated (likely still out) or the row
-   dropped (likely activated/healthy — double check status first).
+   the opposite of `NewInjuries.csv`: players who have an `until` value
+   in `injured_list.csv` that is >= the current week (so the list says
+   they'll miss one or more upcoming games) but who no longer carry an
+   out designation in the day's pull, i.e. they look healthy. Columns:
+   `player_id_sr, name, position` (no status, since they have none).
+   Roughly 99% of the time these are players whose timelines we
+   overestimated and who are back earlier than expected, so the default
+   action is to drop the row. No research is needed unless the user
+   asks for it.
 
 If neither file exists, fall back to asking the user for the current
 week's Yahoo roster export, or pulling injury designations directly
@@ -65,8 +72,8 @@ via the platform client if a live session is available.
      are current despite the timestamp, proceed.
 
 2. **Research each player needing a decision** (every row in
-   `NewInjuries.csv`, plus every `OldInjuries.csv` row whose status is
-   still one of the injury designations above). For each:
+   `NewInjuries.csv`; `OldInjuries.csv` rows are proposed as drops and
+   need no research). For each:
    - Web search `"<player name>" injury <current NFL season year>` and
      similar, favoring recent beat-reporter and team-source reporting
      (local beat writers, ESPN/NFL Network injury desks,
