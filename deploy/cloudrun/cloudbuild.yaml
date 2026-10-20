@@ -1,7 +1,7 @@
 # Builds app/Dockerfile (not a root Dockerfile, so `gcloud run deploy --source`
-# can't find it) and pushes the image to Artifact Registry. The image is tagged
-# with _TAG (the GitHub Action passes the commit SHA) and also as :latest.
-# Run from the repo root: see deploy/cloudrun/README.md.
+# can't find it) and pushes the image to Artifact Registry, tagged with _TAG and
+# also as :latest. This is for manual builds from your machine; the GitHub Action
+# builds on its own runner instead. Run from the repo root: see deploy/cloudrun/README.md.
 substitutions:
   _REGION: us-west1
   _REPO: fantasyfb
