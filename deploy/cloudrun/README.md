@@ -63,7 +63,7 @@ The service URL (`https://fantasyfb-web-....run.app`) is only known after the fi
      --set-env-vars YAHOO_REDIRECT_URI=https://<service-url>/auth/yahoo/callback
    ```
 
-2. Add that exact URI to your Yahoo app at https://developer.yahoo.com/apps/. The app refuses a mismatch. After saving, reopen the app's settings and check the URI is really there: if it didn't save, Yahoo only shows a generic "Something went wrong" page.
+2. Set that exact URI as the redirect URI on your Yahoo app at https://developer.yahoo.com/apps/. In practice Yahoo wants just the one the app sends, so replace any older value (`localhost`, the `run.app` URL) instead of adding to it, and change it again if you change domains. A leftover URI is enough to make sign-in fail. After saving, reopen the app's settings and check the URI is really there: if it didn't save, Yahoo only shows a generic "Something went wrong" page.
 
 Sleeper works before this step.
 
