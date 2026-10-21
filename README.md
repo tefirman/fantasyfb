@@ -14,7 +14,7 @@
 
 **Docs:** <https://tefirman.github.io/fantasyfb/>
 
-**Try it in your browser:** <https://fantasy.taylorfirman.com/> runs season sims for a Sleeper or Yahoo league and shows the same interactive report as `fantasyfb --format html`, with nothing to install. It is a lighter version of the CLI, so adds, drops, and the rooting guide are left to the package.
+**Try it in your browser:** <https://fantasy.taylorfirman.com/> (Sleeper and Yahoo leagues, nothing to install)
 
 ## Install
 
