@@ -10,6 +10,7 @@ Run locally with::
 from __future__ import annotations
 
 import hmac
+import json
 import logging
 import os
 import secrets
@@ -38,6 +39,32 @@ _HERE = os.path.dirname(__file__)
 # the reports it produces can't drift apart.
 _CSS_PATH = os.path.join(html_exporter._TEMPLATE_DIR, "industry-styles.css")
 _LOGO_PATH = os.path.join(os.path.dirname(__file__), "static", "fantasyfb_logo.png")
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+_ICON_SIZES = (180, 192, 512)
+
+# "Add to Home Screen" support: a manifest plus the iOS-specific tags, which
+# Safari still reads from the page rather than the manifest.
+_MANIFEST = {
+    "name": "fantasyfb",
+    "short_name": "fantasyfb",
+    "description": "Season simulations for Sleeper and Yahoo leagues",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#f2f2f3",
+    "theme_color": "#1d2d3d",
+    "icons": [
+        {"src": f"/static/icon-{n}.png", "sizes": f"{n}x{n}", "type": "image/png"} for n in (192, 512)
+    ],
+}
+_PWA_HEAD = (
+    '<link rel="manifest" href="/manifest.webmanifest">'
+    '<link rel="apple-touch-icon" href="/static/icon-180.png">'
+    '<meta name="theme-color" content="#1d2d3d">'
+    '<meta name="apple-mobile-web-app-capable" content="yes">'
+    '<meta name="apple-mobile-web-app-title" content="fantasyfb">'
+    '<meta name="apple-mobile-web-app-status-bar-style" content="default">'
+)
 
 SIM_CHOICES = (1000, 5000, 10000)
 
@@ -156,6 +183,25 @@ def create_app(
     @app.get("/static/fantasyfb_logo.png")
     def logo_png() -> Response:
         return Response(logo, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+    icons = {}
+    for n in _ICON_SIZES:
+        with open(os.path.join(_STATIC_DIR, f"icon-{n}.png"), "rb") as f:
+            icons[n] = f.read()
+
+    @app.get("/static/icon-{size}.png")
+    def icon_png(size: int) -> Response:
+        if size not in icons:
+            raise HTTPException(404, "No such icon.")
+        return Response(icons[size], media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+    @app.get("/manifest.webmanifest")
+    def manifest() -> Response:
+        return Response(
+            json.dumps(_MANIFEST),
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     @app.get("/static/industry-styles.css")
     def styles() -> Response:
@@ -398,6 +444,7 @@ _APP_BAR = (
 
 
 def _with_app_bar(html: str, job_id: str) -> str:
+    html = html.replace("</head>", _PWA_HEAD + "</head>", 1)
     return html.replace("<body>", "<body>" + _APP_BAR.replace("{id}", job_id), 1)
 
 
