@@ -117,6 +117,7 @@ def test_run_end_to_end(client, seen):
     page = client.get(f"/runs/{job_id}")
     assert "report for Alpha" in page.text
     assert "Run another league" in page.text  # app bar injected
+    assert "github.com/tefirman/fantasyfb" in page.text and "/static/fantasyfb_logo.png" in page.text
     download = client.get(f"/runs/{job_id}/download")
     assert "attachment" in download.headers["content-disposition"]
     assert "Run another league" not in download.text  # file is the plain report
