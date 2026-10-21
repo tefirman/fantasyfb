@@ -300,7 +300,7 @@
       return '<option value="' + w + '"' + (w === S.week ? " selected" : "") + ">Week " + w + (w < CW ? " · final" : w === CW ? " · this week" : "") + "</option>";
     }).join("");
     var chev = function (d, label, action) {
-      return '<button class="btn btn-secondary btn-icon" data-action="' + action + '" aria-label="' + label + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="' + d + '"></path></svg></button>';
+      return '<button class="btn btn-secondary btn-icon no-print" data-action="' + action + '" aria-label="' + label + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="' + d + '"></path></svg></button>';
     };
     var games = sched.filter(function (g) { return g.week === S.week; });
     var sel = selectedGame(games);
@@ -495,7 +495,7 @@
         '<td style="text-align:right">' + esc(p.bye_week == null ? "" : p.bye_week) + '</td><td style="text-align:right">' + pct(p.pct_rostered || 0) + "</td></tr>";
     }).join("");
     var more = all.length > shown.length
-      ? '<div><button class="btn btn-secondary" data-action="fa-more">Show all ' + all.length + "</button></div>" : "";
+      ? '<div class="no-print"><button class="btn btn-secondary" data-action="fa-more">Show all ' + all.length + "</button></div>" : "";
     return { count: all.length, html: table(820, "<th>Player</th><th>Pos</th>" + sb("Proj", "points_avg", true) + sb("Matchup", "matchup_factor", true) + sb("WAR", "WAR") + sb("Bye", "bye_week", true) + sb("Rostered", "pct_rostered", true), rows) + more };
   }
   function tabFA() {
@@ -517,11 +517,37 @@
   }
 
   /* ---------- render + events ---------- */
+  var TAB_VIEWS = { week: tabWeek, stand: tabStand, sched: tabSched, moves: tabMoves, root: tabRoot, fa: tabFA };
+  function paintTab() {
+    $("content").innerHTML = TAB_VIEWS[S.tab]();
+    if (S.tab === "fa") paintFA();
+  }
+
+  /* "Save as PDF": stage every tab, one per page, in #print-all and open the
+     print dialog. The staged copy only shows under @media print, and afterprint
+     clears it, so a plain Ctrl+P still prints just the tab on screen. */
+  function printAll() {
+    var keep = S.tab;
+    var pages = TABS.map(function (t) {
+      S.tab = t[0];
+      paintTab();
+      return '<section class="print-page" style="display:flex;flex-direction:column;gap:var(--space-6)"><h2 style="margin:0">' +
+        esc(t[1]) + " \u00b7 " + esc(S.team) + "</h2>" + $("content").innerHTML + "</section>";
+    });
+    S.tab = keep;
+    paintTab();
+    $("print-all").innerHTML = pages.join("");
+    document.documentElement.classList.add("print-all");
+    window.print();
+  }
+  window.addEventListener("afterprint", function () {
+    document.documentElement.classList.remove("print-all");
+    $("print-all").innerHTML = "";
+  });
+
   function render() {
     renderHead();
-    var body = { week: tabWeek, stand: tabStand, sched: tabSched, moves: tabMoves, root: tabRoot, fa: tabFA }[S.tab]();
-    $("content").innerHTML = body;
-    if (S.tab === "fa") paintFA();
+    paintTab();
     try { history.replaceState(null, "", "#tab=" + S.tab + "&team=" + encodeURIComponent(S.team)); } catch (e) { /* file:// or sandboxed */ }
   }
 
@@ -546,6 +572,7 @@
     else if (a === "prev-week") { S.week = Math.max(weeks[0], S.week - 1); S.game = undefined; }
     else if (a === "next-week") { S.week = Math.min(weeks[weeks.length - 1], S.week + 1); S.game = undefined; }
     else if (a === "sort-fa") { var f = toggleSort(el.dataset.key, S.faKey, S.faDir, "bye_week"); S.faKey = f.key; S.faDir = f.dir; paintFA(); return; }
+    else if (a === "print") { printAll(); return; }
     else if (a === "fa-more") { S.faAll = true; paintFA(); return; }
     else return;
     render();

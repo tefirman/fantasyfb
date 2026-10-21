@@ -98,6 +98,17 @@ class TestFantasyHtmlExporter:
         assert "poweredby_yahoo_h_purple.png" in yahoo and "https://www.yahoo.com/?ilc=401" in yahoo
         assert "poweredby.yahoo.com" not in render("Sleeper")
 
+    def test_print_stylesheet_and_save_as_pdf_button(self, exporter):
+        exporter.export_rosters(_players("Alpha"))
+        exporter.export_standings(_standings())
+        html = exporter.render()
+        assert "@media print" in html and "@page" in html and "print-color-adjust: exact" in html
+        assert 'data-action="print"' in html and "window.print()" in html
+        # the button stages every tab in #print-all; a plain Ctrl+P still prints one tab
+        assert 'id="print-all"' in html and "html.print-all #content" in html and "afterprint" in html
+        # controls that make no sense on paper are tagged to be hidden
+        assert 'id="tabs" class="no-print"' in html
+
     def test_nan_becomes_null_and_ints_stay_ints(self, exporter):
         exporter.export_rosters(_players("Alpha"))
         exporter.export_standings(_standings())
