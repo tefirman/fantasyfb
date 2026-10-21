@@ -30,6 +30,18 @@
   --md-primary-fg-color:           #24466b;
   --md-accent-fg-color:            #93c775;
   --md-accent-fg-color--transparent: rgba(147, 199, 117, 0.15);
+
+  /* Links default to the primary color, which is nearly the page
+     background in slate. Use a light blue from the same family. */
+  --md-typeset-a-color:            #8db7e6;
+}
+
+/* The homepage logo is navy-on-transparent, so give it a light backing
+   chip in dark mode, like the header logo has. */
+[data-md-color-scheme="slate"] .md-typeset img[alt="fantasyfb"] {
+  background: hsla(0, 0%, 100%, 0.9);
+  border-radius: 12px;
+  padding: 8px;
 }
 
 /* The header logo mark is navy-on-transparent, same family as the

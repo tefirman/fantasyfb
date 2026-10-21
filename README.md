@@ -14,6 +14,8 @@
 
 **Docs:** <https://tefirman.github.io/fantasyfb/>
 
+**Try it in your browser:** <https://fantasy.taylorfirman.com/>
+
 ## Install
 
 ```bash

@@ -14,6 +14,12 @@ simulations to value pickups, trades, and draft picks.
 </tr>
 </table>
 
+!!! tip "Try it in your browser"
+    The [fantasyfb web app](https://fantasy.taylorfirman.com/) runs season
+    sims for a Sleeper or Yahoo league with nothing to install. It is a
+    lighter version of the CLI, so adds, drops, and the rooting guide are
+    left to the package.
+
 ## What's here
 
 - **[Install](install.md)** — `pip install fantasyfb` plus dev setup.
