@@ -300,7 +300,7 @@
       return '<option value="' + w + '"' + (w === S.week ? " selected" : "") + ">Week " + w + (w < CW ? " · final" : w === CW ? " · this week" : "") + "</option>";
     }).join("");
     var chev = function (d, label, action) {
-      return '<button class="btn btn-secondary btn-icon" data-action="' + action + '" aria-label="' + label + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="' + d + '"></path></svg></button>';
+      return '<button class="btn btn-secondary btn-icon no-print" data-action="' + action + '" aria-label="' + label + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="' + d + '"></path></svg></button>';
     };
     var games = sched.filter(function (g) { return g.week === S.week; });
     var sel = selectedGame(games);
@@ -495,7 +495,7 @@
         '<td style="text-align:right">' + esc(p.bye_week == null ? "" : p.bye_week) + '</td><td style="text-align:right">' + pct(p.pct_rostered || 0) + "</td></tr>";
     }).join("");
     var more = all.length > shown.length
-      ? '<div><button class="btn btn-secondary" data-action="fa-more">Show all ' + all.length + "</button></div>" : "";
+      ? '<div class="no-print"><button class="btn btn-secondary" data-action="fa-more">Show all ' + all.length + "</button></div>" : "";
     return { count: all.length, html: table(820, "<th>Player</th><th>Pos</th>" + sb("Proj", "points_avg", true) + sb("Matchup", "matchup_factor", true) + sb("WAR", "WAR") + sb("Bye", "bye_week", true) + sb("Rostered", "pct_rostered", true), rows) + more };
   }
   function tabFA() {
@@ -546,6 +546,7 @@
     else if (a === "prev-week") { S.week = Math.max(weeks[0], S.week - 1); S.game = undefined; }
     else if (a === "next-week") { S.week = Math.min(weeks[weeks.length - 1], S.week + 1); S.game = undefined; }
     else if (a === "sort-fa") { var f = toggleSort(el.dataset.key, S.faKey, S.faDir, "bye_week"); S.faKey = f.key; S.faDir = f.dir; paintFA(); return; }
+    else if (a === "print") { window.print(); return; }
     else if (a === "fa-more") { S.faAll = true; paintFA(); return; }
     else return;
     render();

@@ -375,7 +375,7 @@ def create_app(
 # Slim bar added above a report when the app serves it, so a viewer can get
 # back to the picker. The downloaded file stays exactly what the CLI writes.
 _APP_BAR = (
-    '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;'
+    '<div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:12px;'
     'padding:8px 20px;font:13px Barlow,system-ui,sans-serif;background:#1d2d3d;color:#eef6ff">'
     '<span style="display:inline-flex;align-items:center;gap:14px">'
     '<a href="/" style="display:inline-flex;background:#eef6ff;border-radius:4px;padding:2px 5px" title="fantasyfb">'
