@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Web app can be added to an iPhone or Android home screen, and the report fits a phone**: the app now serves a web manifest (`/manifest.webmanifest`), 180/192/512px icons, and the iOS home screen tags (`apple-touch-icon`, `apple-mobile-web-app-capable`, theme color), so "Add to Home Screen" gives a fantasyfb icon and a full-screen launch without the browser bar. Reports the app serves get the same tags. At phone width (600px and under) the HTML report now uses a 36px team title instead of 52px, 16px side padding, a full-width team picker, scrollable tabs, and 44px tap targets, and form inputs use 16px text so iOS doesn't zoom the page on focus. The web app header hides its tagline on phones so "Source on GitHub" stays on one line. Checked by rendering the landing page and a sample report in a 390px-wide frame in headless Chrome. There is no service worker, so the app still needs a connection, and reports are never cached since they hold league data.
 
+### Fixed
+- **Season path on the HTML report's My week tab was crowded on phones**: the weekly cells sat in a grid with `minmax(0,1fr)` columns, so a full season on a narrow screen squeezed each week below its content and the "Wk N", W/L or win percentage, and "vs Opponent" text overlapped. Each week now has an 80px minimum column width, so on a phone the strip scrolls sideways and nothing overlaps, while on a laptop the weeks still fill the row (a 14-week season is unchanged; a season long enough that weeks would drop under 80px now scrolls there too). Checked by rendering a 14-week schedule at 390px and 1280px in headless Chrome.
+
 ## [0.11.0] — 2026-10-20
 
 ### Added
