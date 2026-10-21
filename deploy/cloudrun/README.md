@@ -158,4 +158,4 @@ done
 - A restart loses sessions and finished reports. Users sign in again.
 - A run writes `NewInjuries.csv`/`OldInjuries.csv` to its working directory, so `app/Dockerfile` makes that directory writable by the unprivileged user. Without it every run fails with a `PermissionError`.
 - To update, run the build and deploy commands again. The image installs from your local checkout, so commit or not as you like.
-- Other settings (`FANTASYFB_RUN_TIMEOUT`, `FANTASYFB_ENABLE_MOVES`, and so on) are listed in `app/README.md` and are passed with `--set-env-vars`.
+- Other settings (`FANTASYFB_RUN_TIMEOUT`, `FANTASYFB_ENABLE_MOVES`, `FANTASYFB_ENABLE_ROOTING`, and so on) are listed in `app/README.md` and are passed with `--set-env-vars`.

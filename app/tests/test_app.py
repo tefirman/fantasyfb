@@ -58,7 +58,7 @@ def client(seen):
             raise ValueError("No Sleeper team found matching name 'Bravo'")
         return "<html><body><h1>report for {}</h1></body></html>".format(opts.team)
 
-    return TestClient(create_app(runner=runner, lookup=fake_lookup, enable_moves=True))
+    return TestClient(create_app(runner=runner, lookup=fake_lookup, enable_moves=True, enable_rooting=True))
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -220,4 +220,13 @@ def test_adds_and_drops_are_refused_unless_enabled():
         resp = off.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", flag: True})
         assert resp.status_code == 422
     assert 'name="adds"' not in off.get("/").text and 'name="drops"' not in off.get("/").text
-    assert off.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", "deltas": True}).status_code == 202
+
+
+def test_rooting_guide_is_refused_unless_enabled():
+    off = TestClient(create_app(runner=lambda o, p: "<html></html>", lookup=fake_lookup, enable_rooting=False))
+    resp = off.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", "deltas": True})
+    assert resp.status_code == 422
+    assert 'name="deltas"' not in off.get("/").text
+    on = TestClient(create_app(runner=lambda o, p: "<html></html>", lookup=fake_lookup, enable_rooting=True))
+    assert 'name="deltas"' in on.get("/").text
+    assert on.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", "deltas": True}).status_code == 202

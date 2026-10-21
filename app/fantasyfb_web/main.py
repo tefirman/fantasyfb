@@ -63,6 +63,7 @@ def create_app(
     sessions: Optional[SessionStore] = None,
     cookie_secure: Optional[bool] = None,
     enable_moves: Optional[bool] = None,
+    enable_rooting: Optional[bool] = None,
     isolate: bool = False,
     run_timeout: Optional[float] = None,
     max_queued: Optional[int] = None,
@@ -85,6 +86,10 @@ def create_app(
         # Adds and drops are slow (a full season sim per candidate) and give
         # an edge over other managers, so the hosted app leaves them off.
         enable_moves = os.environ.get("FANTASYFB_ENABLE_MOVES", "0") == "1"
+    if enable_rooting is None:
+        # The rooting guide computes a delta for every game in the league,
+        # which is too slow for the hosted app until it is sped up.
+        enable_rooting = os.environ.get("FANTASYFB_ENABLE_ROOTING", "0") == "1"
     if cookie_secure is None:
         # Secure cookies need https, which Yahoo requires of the redirect
         # anyway. Only turn this off deliberately.
@@ -176,6 +181,7 @@ def create_app(
                 "yahoo_enabled": yahoo_config is not None,
                 "yahoo_signed_in": bool(session and session.yahoo),
                 "moves_enabled": enable_moves,
+                "rooting_enabled": enable_rooting,
                 "active_run": {"url": f"/runs/{active.id}", "team": active.opts.team} if active else None,
             },
         )
@@ -281,6 +287,8 @@ def create_app(
             raise HTTPException(422, "Payouts can't be negative.")
         if (body.adds or body.drops) and not enable_moves:
             raise HTTPException(422, "Adds and drops analysis isn't available on this server.")
+        if body.deltas and not enable_rooting:
+            raise HTTPException(422, "The rooting guide isn't available on this server.")
         if body.platform not in ("sleeper", "yahoo"):
             raise HTTPException(422, "platform must be 'sleeper' or 'yahoo'.")
         owner = auth = session = None
