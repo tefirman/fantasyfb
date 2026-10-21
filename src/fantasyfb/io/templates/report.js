@@ -517,11 +517,37 @@
   }
 
   /* ---------- render + events ---------- */
+  var TAB_VIEWS = { week: tabWeek, stand: tabStand, sched: tabSched, moves: tabMoves, root: tabRoot, fa: tabFA };
+  function paintTab() {
+    $("content").innerHTML = TAB_VIEWS[S.tab]();
+    if (S.tab === "fa") paintFA();
+  }
+
+  /* "Save as PDF": stage every tab, one per page, in #print-all and open the
+     print dialog. The staged copy only shows under @media print, and afterprint
+     clears it, so a plain Ctrl+P still prints just the tab on screen. */
+  function printAll() {
+    var keep = S.tab;
+    var pages = TABS.map(function (t) {
+      S.tab = t[0];
+      paintTab();
+      return '<section class="print-page" style="display:flex;flex-direction:column;gap:var(--space-6)"><h2 style="margin:0">' +
+        esc(t[1]) + " \u00b7 " + esc(S.team) + "</h2>" + $("content").innerHTML + "</section>";
+    });
+    S.tab = keep;
+    paintTab();
+    $("print-all").innerHTML = pages.join("");
+    document.documentElement.classList.add("print-all");
+    window.print();
+  }
+  window.addEventListener("afterprint", function () {
+    document.documentElement.classList.remove("print-all");
+    $("print-all").innerHTML = "";
+  });
+
   function render() {
     renderHead();
-    var body = { week: tabWeek, stand: tabStand, sched: tabSched, moves: tabMoves, root: tabRoot, fa: tabFA }[S.tab]();
-    $("content").innerHTML = body;
-    if (S.tab === "fa") paintFA();
+    paintTab();
     try { history.replaceState(null, "", "#tab=" + S.tab + "&team=" + encodeURIComponent(S.team)); } catch (e) { /* file:// or sandboxed */ }
   }
 
@@ -546,7 +572,7 @@
     else if (a === "prev-week") { S.week = Math.max(weeks[0], S.week - 1); S.game = undefined; }
     else if (a === "next-week") { S.week = Math.min(weeks[weeks.length - 1], S.week + 1); S.game = undefined; }
     else if (a === "sort-fa") { var f = toggleSort(el.dataset.key, S.faKey, S.faDir, "bye_week"); S.faKey = f.key; S.faDir = f.dir; paintFA(); return; }
-    else if (a === "print") { window.print(); return; }
+    else if (a === "print") { printAll(); return; }
     else if (a === "fa-more") { S.faAll = true; paintFA(); return; }
     else return;
     render();

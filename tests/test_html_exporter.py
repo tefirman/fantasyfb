@@ -104,6 +104,8 @@ class TestFantasyHtmlExporter:
         html = exporter.render()
         assert "@media print" in html and "@page" in html and "print-color-adjust: exact" in html
         assert 'data-action="print"' in html and "window.print()" in html
+        # the button stages every tab in #print-all; a plain Ctrl+P still prints one tab
+        assert 'id="print-all"' in html and "html.print-all #content" in html and "afterprint" in html
         # controls that make no sense on paper are tagged to be hidden
         assert 'id="tabs" class="no-print"' in html
 
