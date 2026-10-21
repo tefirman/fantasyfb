@@ -185,7 +185,7 @@
       var s = side(g, S.team), past = g.week < CW, now = g.week === CW;
       var title = "Week " + g.week + " vs " + s.opp + " — " + (past ? (s.win ? "Won" : "Lost") + " " + fx(s.my, 1) + "–" + fx(s.op, 1) : pct(s.win) + " to win");
       var fill = past ? (s.win ? "var(--color-accent-700)" : "var(--color-neutral-400)") : s.win >= 0.5 ? "var(--color-accent)" : "var(--color-accent-300)";
-      return '<div title="' + esc(title) + '" style="min-width:56px;padding:var(--space-3) var(--space-2);border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:var(--space-2);background:' + (now ? "var(--color-accent-100)" : "transparent") + '">' +
+      return '<div title="' + esc(title) + '" style="padding:var(--space-3) var(--space-2);border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:var(--space-2);background:' + (now ? "var(--color-accent-100)" : "transparent") + '">' +
         '<div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-neutral-700)">Wk ' + g.week + "</div>" +
         '<div style="height:64px;display:flex;align-items:flex-end;border-bottom:1px solid var(--color-divider)"><div style="width:100%;height:' + (past ? 100 : num(s.win) * 100) + "%;background:" + fill + '"></div></div>' +
         '<div style="font-family:var(--font-heading);font-size:18px;line-height:1">' + (past ? (s.win ? "W" : "L") : pct(s.win)) + "</div>" +
@@ -195,7 +195,7 @@
     return '<section style="display:flex;flex-direction:column;gap:var(--space-3)">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap"><h3 style="margin:0">Season path</h3>' +
       '<span style="font-size:13px;color:var(--color-neutral-700)">' + note + "</span></div>" +
-      '<div class="blueprint" style="display:grid;grid-template-columns:repeat(' + games.length + ',minmax(0,1fr));overflow-x:auto">' + corners() + cols + "</div></section>";
+      '<div class="blueprint" style="display:grid;grid-template-columns:repeat(' + games.length + ',minmax(80px,1fr));overflow-x:auto">' + corners() + cols + "</div></section>";
   }
 
   function lineupRows(list, bench) {
