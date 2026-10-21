@@ -40,7 +40,7 @@ _HERE = os.path.dirname(__file__)
 _CSS_PATH = os.path.join(html_exporter._TEMPLATE_DIR, "industry-styles.css")
 _LOGO_PATH = os.path.join(os.path.dirname(__file__), "static", "fantasyfb_logo.png")
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-_ICON_SIZES = (180, 192, 512)
+_ICON_SIZES = (32, 180, 192, 512)
 
 # "Add to Home Screen" support: a manifest plus the iOS-specific tags, which
 # Safari still reads from the page rather than the manifest.
@@ -58,6 +58,7 @@ _MANIFEST = {
     ],
 }
 _PWA_HEAD = (
+    '<link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">'
     '<link rel="manifest" href="/manifest.webmanifest">'
     '<link rel="apple-touch-icon" href="/static/icon-180.png">'
     '<meta name="theme-color" content="#1d2d3d">'
@@ -66,14 +67,16 @@ _PWA_HEAD = (
     '<meta name="apple-mobile-web-app-status-bar-style" content="default">'
 )
 
-SIM_CHOICES = (1000, 5000, 10000)
+# Each simulation is CPU the single instance has to spare, so a free-text count
+# is bounded. 1,000 is the suggested default: quick and reliable.
+DEFAULT_SIMS, MIN_SIMS, MAX_SIMS = 1000, 100, 10000
 
 
 class RunRequest(BaseModel):
     platform: str = "sleeper"
     league_id: str = ""
     team: str = Field(min_length=1, max_length=200)
-    sims: int = 1000
+    sims: int = DEFAULT_SIMS
     payouts: List[float] = Field(default=[60.0, 30.0, 10.0], min_length=3, max_length=3)
     adds: bool = False
     drops: bool = False
@@ -223,7 +226,9 @@ def create_app(
             request,
             "index.html.j2",
             {
-                "sim_choices": SIM_CHOICES,
+                "default_sims": DEFAULT_SIMS,
+                "min_sims": MIN_SIMS,
+                "max_sims": MAX_SIMS,
                 "yahoo_enabled": yahoo_config is not None,
                 "yahoo_signed_in": bool(session and session.yahoo),
                 "moves_enabled": enable_moves,
@@ -327,8 +332,8 @@ def create_app(
 
     @app.post("/api/runs", status_code=202)
     def create_run(request: Request, body: RunRequest) -> Dict:
-        if body.sims not in SIM_CHOICES:
-            raise HTTPException(422, f"sims must be one of {list(SIM_CHOICES)}")
+        if not MIN_SIMS <= body.sims <= MAX_SIMS:
+            raise HTTPException(422, f"sims must be between {MIN_SIMS:,} and {MAX_SIMS:,}")
         if any(p < 0 for p in body.payouts):
             raise HTTPException(422, "Payouts can't be negative.")
         if (body.adds or body.drops) and not enable_moves:

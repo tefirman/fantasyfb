@@ -94,8 +94,19 @@ def test_home_screen_support(client):
     for icon in manifest.json()["icons"]:
         assert client.get(icon["src"]).headers["content-type"] == "image/png"
     assert client.get("/static/icon-180.png").status_code == 200
+    assert 'href="/static/icon-32.png"' in client.get("/").text  # tab favicon
     assert client.get("/static/icon-999.png").status_code == 404
     assert 'rel="manifest"' in client.get("/").text
+
+
+def test_sims_is_a_free_number_within_bounds(client, seen):
+    page = client.get("/").text
+    assert 'name="sims"' in page and 'type="number"' in page and 'value="1000"' in page
+    for sims in (100, 2500, 10000):
+        resp = client.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", "sims": sims})
+        assert resp.status_code == 202
+        wait_for(client, resp.json()["id"])  # one run per visitor at a time
+    assert client.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", "sims": 99}).status_code == 422
 
 
 def test_yahoo_attribution_only_on_yahoo_app():
@@ -146,6 +157,7 @@ def test_run_failure_shows_message(client):
 @pytest.mark.parametrize("body,code", [
     ({"league_id": LEAGUE_ID, "team": "Nobody"}, 422),
     ({"league_id": LEAGUE_ID, "team": "Alpha", "sims": 7}, 422),
+    ({"league_id": LEAGUE_ID, "team": "Alpha", "sims": 10001}, 422),
     ({"league_id": LEAGUE_ID, "team": "Alpha", "payouts": [1, 2]}, 422),
     ({"league_id": LEAGUE_ID, "team": "Alpha", "payouts": [-1, 2, 3]}, 422),
     ({"league_id": "garbage", "team": "Alpha"}, 400),
