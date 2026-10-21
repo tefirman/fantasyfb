@@ -80,6 +80,20 @@ def test_index_and_styles(client):
     assert "Find your league" in page.text
     css = client.get("/static/industry-styles.css")
     assert css.status_code == 200 and "--color-accent" in css.text
+    logo = client.get("/static/fantasyfb_logo.png")
+    assert logo.status_code == 200 and logo.headers["content-type"] == "image/png"
+    assert "github.com/tefirman/fantasyfb" in page.text
+    assert "poweredby.yahoo.com" not in page.text  # Sleeper-only: no Yahoo data shown
+
+
+def test_yahoo_attribution_only_on_yahoo_app():
+    from fantasyfb_web import yahoo
+
+    cfg = yahoo.YahooConfig("k", "s", "https://localhost:8000/auth/yahoo/callback")
+    page = TestClient(create_app(yahoo_config=cfg)).get("/").text
+    assert "poweredby.yahoo.com/poweredby_yahoo_h_purple.png" in page
+    assert "https://www.yahoo.com/?ilc=401" in page
+
 
 
 def test_league_lookup(client):
@@ -103,6 +117,7 @@ def test_run_end_to_end(client, seen):
     page = client.get(f"/runs/{job_id}")
     assert "report for Alpha" in page.text
     assert "Run another league" in page.text  # app bar injected
+    assert "github.com/tefirman/fantasyfb" in page.text and "/static/fantasyfb_logo.png" in page.text
     download = client.get(f"/runs/{job_id}/download")
     assert "attachment" in download.headers["content-disposition"]
     assert "Run another league" not in download.text  # file is the plain report
