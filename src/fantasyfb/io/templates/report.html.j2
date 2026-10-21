@@ -9,6 +9,17 @@
 body { margin: 0; background: var(--color-bg); }
 a { color: var(--color-accent-700); }
 a:hover { color: var(--color-accent-900); }
+/* Phones: tighter padding, a title that fits, a team picker that can shrink,
+   and 44px tap targets for the tab and filter buttons. */
+@media (max-width: 600px) {
+  main { padding: var(--space-6) 16px 48px !important; gap: var(--space-6) !important; }
+  #team-name { font-size: 36px !important; overflow-wrap: anywhere; }
+  #team-select { min-width: 0 !important; width: 100% !important; font-size: 16px !important; }
+  header.nav > div:last-child, header.nav label { width: 100%; }
+  #tabs { max-width: 100%; overflow-x: auto; }
+  #tabs button, .btn { min-height: 44px; }
+  input, select { font-size: 16px; }
+}
 /* Printing / Save as PDF: prints the tab on screen. Keep colors and bars,
    use landscape for the wide tables, and don't split rows or cards. */
 @page { size: landscape; margin: 0.5in; }

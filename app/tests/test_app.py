@@ -86,6 +86,18 @@ def test_index_and_styles(client):
     assert "poweredby.yahoo.com" not in page.text  # Sleeper-only: no Yahoo data shown
 
 
+def test_home_screen_support(client):
+    manifest = client.get("/manifest.webmanifest")
+    assert manifest.status_code == 200
+    assert manifest.headers["content-type"].startswith("application/manifest+json")
+    assert manifest.json()["display"] == "standalone"
+    for icon in manifest.json()["icons"]:
+        assert client.get(icon["src"]).headers["content-type"] == "image/png"
+    assert client.get("/static/icon-180.png").status_code == 200
+    assert client.get("/static/icon-999.png").status_code == 404
+    assert 'rel="manifest"' in client.get("/").text
+
+
 def test_yahoo_attribution_only_on_yahoo_app():
     from fantasyfb_web import yahoo
 
