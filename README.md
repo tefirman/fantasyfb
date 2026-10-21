@@ -14,7 +14,7 @@
 
 **Docs:** <https://tefirman.github.io/fantasyfb/>
 
-**Try it in your browser:** <https://fantasy.taylorfirman.com/> (Sleeper and Yahoo leagues, nothing to install)
+**Try it in your browser:** <https://fantasy.taylorfirman.com/>
 
 ## Install
 
