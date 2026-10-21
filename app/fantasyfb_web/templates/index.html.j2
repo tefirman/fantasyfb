@@ -90,12 +90,12 @@
     </div>
   </div>
 
-  <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:var(--space-3)">
+  {% if moves_enabled or rooting_enabled %}<fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:var(--space-3)">
     <legend class="field" style="font-size:12px;margin-bottom:5px;color:var(--color-neutral-700)">Extra analysis (adds a few minutes)</legend>
     {% if moves_enabled %}<label class="check"><input type="checkbox" name="adds"><span>Free agent adds<small>Re-simulates the season with each of the best available free agents on your roster.</small></span></label>
     <label class="check"><input type="checkbox" name="drops"><span>Drops<small>How much each player on your roster is worth to your season.</small></span></label>{% endif %}
-    <label class="check"><input type="checkbox" name="deltas"><span>Rooting guide<small>Which of this week's other matchups matter most to you.</small></span></label>
-  </fieldset>
+    {% if rooting_enabled %}<label class="check"><input type="checkbox" name="deltas"><span>Rooting guide<small>Which of this week's other matchups matter most to you.</small></span></label>{% endif %}
+  </fieldset>{% endif %}
 
   <div class="row" style="justify-content:space-between;align-items:center">
     <button type="button" class="btn btn-ghost" id="change-league">Use a different league</button>
@@ -258,7 +258,7 @@
       payouts: Array.prototype.map.call(document.querySelectorAll(".payout"), function (i) { return Number(i.value) || 0; }),
       adds: !!form.adds && form.adds.checked,
       drops: !!form.drops && form.drops.checked,
-      deltas: form.deltas.checked
+      deltas: !!form.deltas && form.deltas.checked
     };
     try { localStorage.setItem("fantasyfb.team." + league.platform + "." + (league.league_id || ""), body.team); } catch (err) {}
     busy($("run-btn"), true, "Queuing…");

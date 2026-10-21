@@ -165,7 +165,7 @@ def test_yahoo_run_requires_sign_in():
 
 def test_yahoo_run_end_to_end_and_tokens_dropped_from_job():
     seen = []
-    app = make_app(seen)
+    app = make_app(seen, enable_rooting=True)
     browser = sign_in(new_browser(app))
     resp = browser.post("/api/runs", json={"platform": "yahoo", "team": "Gridiron Gang", "deltas": True})
     assert resp.status_code == 202
