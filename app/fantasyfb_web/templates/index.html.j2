@@ -73,12 +73,9 @@
   </div>
 
   <div class="field">
-    <label>Simulations</label>
-    <div class="seg" role="radiogroup">
-      {% for n in sim_choices %}
-      <label class="seg-opt"><input type="radio" name="sims" value="{{ n }}"{% if loop.first %} checked{% endif %}>{{ "{:,}".format(n) }}</label>
-      {% endfor %}
-    </div>
+    <label for="sims">Simulations</label>
+    <input id="sims" class="input" type="number" inputmode="numeric" name="sims" min="{{ min_sims }}" max="{{ max_sims }}" step="1" value="{{ default_sims }}" required>
+    <small class="muted" style="font-size:12px">{{ "{:,}".format(default_sims) }} is quick and reliable. More takes proportionally longer (up to {{ "{:,}".format(max_sims) }}).</small>
   </div>
 
   <div class="field">
@@ -254,7 +251,7 @@
       platform: league.platform,
       league_id: league.league_id || "",
       team: $("team").value,
-      sims: Number(form.querySelector("input[name=sims]:checked").value),
+      sims: Math.round(Number(form.querySelector("input[name=sims]").value)),
       payouts: Array.prototype.map.call(document.querySelectorAll(".payout"), function (i) { return Number(i.value) || 0; }),
       adds: !!form.adds && form.adds.checked,
       drops: !!form.drops && form.drops.checked,
