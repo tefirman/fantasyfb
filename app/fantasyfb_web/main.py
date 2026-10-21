@@ -37,6 +37,7 @@ _HERE = os.path.dirname(__file__)
 # Share the report's design system rather than copying it, so the app and
 # the reports it produces can't drift apart.
 _CSS_PATH = os.path.join(html_exporter._TEMPLATE_DIR, "industry-styles.css")
+_LOGO_PATH = os.path.join(os.path.dirname(__file__), "static", "fantasyfb_logo.png")
 
 SIM_CHOICES = (1000, 5000, 10000)
 
@@ -143,6 +144,13 @@ def create_app(
             raise HTTPException(404, "Sleeper has no league with that ID.")
         except requests.RequestException:
             raise HTTPException(502, "Couldn't reach Sleeper. Try again in a minute.")
+
+    with open(_LOGO_PATH, "rb") as f:
+        logo = f.read()
+
+    @app.get("/static/fantasyfb_logo.png")
+    def logo_png() -> Response:
+        return Response(logo, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
     @app.get("/static/industry-styles.css")
     def styles() -> Response:

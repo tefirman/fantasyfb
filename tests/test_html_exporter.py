@@ -87,6 +87,17 @@ class TestFantasyHtmlExporter:
         assert not re.search(r"<script[^>]+src=", html)
         assert not re.search(r'<link[^>]+href="https?://(?!fonts)', html)
 
+    def test_yahoo_attribution_only_for_yahoo_reports(self, tmp_path):
+        def render(platform):
+            exp = FantasyHtmlExporter(str(tmp_path / "r.html"), week=3, me="Alpha", platform=platform)
+            exp.export_rosters(_players("Alpha"))
+            exp.export_standings(_standings())
+            return exp.render()
+
+        yahoo = render("Yahoo")
+        assert "poweredby_yahoo_h_purple.png" in yahoo and "https://www.yahoo.com/?ilc=401" in yahoo
+        assert "poweredby.yahoo.com" not in render("Sleeper")
+
     def test_nan_becomes_null_and_ints_stay_ints(self, exporter):
         exporter.export_rosters(_players("Alpha"))
         exporter.export_standings(_standings())
