@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from unittest.mock import Mock, patch
 
 from fantasyfb.data import sleeper_client
@@ -36,6 +37,7 @@ SFB16_SCORING_SETTINGS = {
     "pts_allow_0": 0.0,
     # per-play "long play" bonuses -- intentionally unsupported
     "pass_cmp_40p": 10.0, "rush_40p": 10.0, "rec_40p": 10.0,
+    "rec_20_29": 10.0, "rec_30_39": 10.0,
 }
 
 SFB16_ROSTER_POSITIONS = ["FLEX"] * 8 + ["SUPER_FLEX"] * 2 + ["BN"] * 10
@@ -78,6 +80,22 @@ class TestTranslateScoringSettings:
         settings["pr_yd"] = 0.2
         scoring = sleeper_client.translate_scoring_settings(settings)
         assert scoring["Ret Yds"] == 0.2
+
+    def test_warns_about_unsupported_nonzero_categories(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sleeper_client.translate_scoring_settings(SFB16_SCORING_SETTINGS)
+        message = " ".join(str(w.message) for w in caught)
+        for key in ("pass_cmp_40p", "rush_40p", "rec_40p", "rec_20_29", "rec_30_39"):
+            assert key in message
+
+    def test_no_warning_when_unsupported_categories_are_zero_or_absent(self):
+        settings = {k: v for k, v in SFB16_SCORING_SETTINGS.items()
+                    if k not in sleeper_client.UNSUPPORTED_SCORING_KEYS}
+        settings["bonus_sack_2p"] = 0.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            sleeper_client.translate_scoring_settings(settings)
 
     def test_missing_keys_default_to_zero(self):
         scoring = sleeper_client.translate_scoring_settings({})

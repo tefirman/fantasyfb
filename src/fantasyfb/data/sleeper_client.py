@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import warnings
 from typing import Dict, List, Optional
 
 import pandas as pd
@@ -161,6 +162,20 @@ def translate_scoring_settings(scoring_settings: Dict[str, float]) -> Dict[str, 
         Dict keyed by fantasyfb scoring category names.
     """
     from ..configs import apply_default_scoring_categories
+
+    ignored = {
+        key: scoring_settings[key]
+        for key in UNSUPPORTED_SCORING_KEYS
+        if scoring_settings.get(key)
+    }
+    if ignored:
+        details = ", ".join(f"{key} ({value:g})" for key, value in ignored.items())
+        warnings.warn(
+            "This league scores categories fantasyfb can't project yet, so "
+            f"projections will run low: {details}. Per-play bonuses need "
+            "play-by-play data, which the scorer doesn't use.",
+            stacklevel=2,
+        )
 
     scoring: Dict[str, float] = {}
     for sleeper_key, fantasyfb_key in _DIRECT_SCORING_MAP.items():
