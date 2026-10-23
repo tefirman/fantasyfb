@@ -125,5 +125,10 @@ class TestReportFlag:
         assert '"median_win": true' in on
         assert "D.median_win" in on  # report.js computes the combined record
 
+    def test_record_column_is_a_sort_button_ranked_by_win_percentage(self):
+        html = self._render(median_win=True)
+        assert 'data-action="sort-stand" data-key="record"' in html
+        assert 'S.sKey === "record"' in html and "recPct" in html
+
     def test_flag_defaults_to_off(self):
         assert '"median_win": false' in self._render()
