@@ -78,6 +78,12 @@ _DIRECT_SCORING_MAP = {
     "bonus_rec_yd_200": "Rec 200+",
     "bonus_rush_rec_yd_100": "Rush+Rec 100+",
     "bonus_rush_rec_yd_200": "Rush+Rec 200+",
+    "rec_20_29": "Rec 20-29",
+    "rec_30_39": "Rec 30-39",
+    "rec_40p": "Rec 40+",
+    "rush_40p": "Rush 40+",
+    "pass_cmp_40p": "Pass Comp 40+",
+    "pass_td_40p": "Pass TD 40+",
     "sack": "Sack",
     "int": "Int",
     "fum_rec": "Fum Rec",
@@ -108,26 +114,16 @@ _RET_TD_KEYS = ("st_td", "def_st_td")
 # non-zero when they differ.
 _RET_YD_KEYS = ("kr_yd", "pr_yd")
 
-# Sleeper keys that are intentionally NOT translated: per-play "long play"
-# bonuses (a 40+ yard completion/rush, a 20-29/30-39/40+ yard reception)
-# require play-by-play data to compute -- FantasyScorer only has per-game
-# box-score aggregates. Listed here so a future pass wiring up
-# nflreadpy play-by-play knows exactly what's missing.
+# Sleeper keys that are intentionally NOT translated: the defensive per-game
+# bonuses (2+ sack games, 10+ tackle games). Listed here so the user is
+# warned (see translate_scoring_settings) instead of the points vanishing.
 UNSUPPORTED_SCORING_KEYS = (
-    "pass_cmp_40p", "pass_td_40p", "rush_40p",
-    "rec_40p", "rec_20_29", "rec_30_39",
     "bonus_sack_2p", "bonus_tkl_10p",
 )
 
 # Plain-language names for the warning, which is shown to end users in the
 # web app's report as well as logged.
 _UNSUPPORTED_LABELS = {
-    "pass_cmp_40p": "40+ yard completions",
-    "pass_td_40p": "40+ yard passing TDs",
-    "rush_40p": "40+ yard rushes",
-    "rec_40p": "40+ yard receptions",
-    "rec_20_29": "20-29 yard receptions",
-    "rec_30_39": "30-39 yard receptions",
     "bonus_sack_2p": "2+ sack games",
     "bonus_tkl_10p": "10+ tackle games",
 }

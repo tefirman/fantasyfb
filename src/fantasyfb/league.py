@@ -13,7 +13,7 @@ import pandas as pd
 import os
 import numpy as np
 import datetime
-from .scoring.fantasy_scoring import FantasyScorer
+from .scoring.fantasy_scoring import FantasyScorer, LONG_PLAY_CATEGORIES
 from .configs import get_league_config, apply_default_scoring_categories
 from .sim.schedule_manager import ScheduleManager
 from .projections.engine_v2 import ProjectionEngineV2
@@ -269,7 +269,25 @@ class League:
             finish (int): year and number of the last week of interest (YYYYWW, e.g. 202307 = week 7 of 2023).
             path (str, optional): retained for backward compatibility, unused.
         """
-        self.stats = self.nfl_provider.get_player_stats(start, finish)
+        self.stats = self._add_long_plays(
+            self.nfl_provider.get_player_stats(start, finish), start, finish
+        )
+
+    def _add_long_plays(self, stats: pd.DataFrame, start: int, finish: int) -> pd.DataFrame:
+        """
+        Attach per-game long-play counts when the league scores them.
+
+        Leagues that don't (every Yahoo league, the generic league, SFB-style
+        weights of zero) get ``stats`` back untouched, with no extra download.
+        """
+        if not any(self.scoring.get(category) for category in LONG_PLAY_CATEGORIES):
+            return stats
+        counts = self.nfl_provider.get_long_play_counts(start, finish)
+        counts = counts.drop_duplicates(subset=["player_id_sr", "season", "week"])
+        long_play_cols = [c for c in counts.columns if c in LONG_PLAY_CATEGORIES.values()]
+        stats = stats.merge(counts, how="left", on=["player_id_sr", "season", "week"])
+        stats[long_play_cols] = stats[long_play_cols].fillna(0)
+        return stats
 
     def add_points(self):
         """
@@ -522,8 +540,11 @@ class League:
 
         # Pull just this week's box scores and run them through the same
         # scorer load_stats uses, so the numbers match league settings.
-        actual = self.nfl_provider.get_player_stats(
-            self.season * 100 + week, self.season * 100 + week
+        actual = self._add_long_plays(
+            self.nfl_provider.get_player_stats(
+                self.season * 100 + week, self.season * 100 + week
+            ),
+            self.season * 100 + week, self.season * 100 + week,
         )
         if actual.empty:
             return empty
