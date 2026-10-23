@@ -202,6 +202,7 @@ def test_top_free_agents_ranks_by_war_and_skips_placeholders():
 class StubLeague:
     week = 6
     num_sims = 1000
+    settings: dict = {}
 
     def __init__(self):
         self.players = _players()
@@ -251,6 +252,15 @@ def test_build_report_shows_unsupported_scoring_notice():
     assert 'id="notices"' in html and "Scores 40+ yard rushes (10 pts)" in html
     # an ordinary run has no banner
     assert 'id="notices"' not in build_report(opts, league_factory=lambda o: StubLeague())
+
+
+def test_build_report_flags_median_game_leagues():
+    class MedianLeague(StubLeague):
+        settings = {"median_win": True}
+
+    opts = RunOptions(league_id=LEAGUE_ID, team="Alpha", season=2026)
+    assert '"median_win": true' in build_report(opts, league_factory=lambda o: MedianLeague())
+    assert '"median_win": false' in build_report(opts, league_factory=lambda o: StubLeague())
 
 
 def test_adds_and_drops_are_refused_unless_enabled():

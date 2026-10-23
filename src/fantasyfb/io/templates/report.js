@@ -81,14 +81,44 @@
   var TH_R = function (t) { return '<th style="text-align:right">' + t + "</th>"; };
 
   /* ---------- derived data ---------- */
-  function recOf(t) {
-    var w = 0, l = 0;
+  // With a median game, each completed week also pays a win to every team
+  // above that week's median score, and a loss to every team below it.
+  var MEDIAN = {};
+  if (D.median_win) {
+    var weekPts = {};
+    sched.forEach(function (g) {
+      if (g.week >= CW) return;
+      (weekPts[g.week] = weekPts[g.week] || {})[g.team_1] = g.points_avg_1;
+      weekPts[g.week][g.team_2] = g.points_avg_2;
+    });
+    Object.keys(weekPts).forEach(function (wk) {
+      var vals = Object.keys(weekPts[wk]).map(function (t) { return weekPts[wk][t]; }).sort(function (a, b) { return a - b; });
+      var n = vals.length, mid = n % 2 ? vals[(n - 1) / 2] : (vals[n / 2 - 1] + vals[n / 2]) / 2;
+      Object.keys(weekPts[wk]).forEach(function (t) {
+        var r = MEDIAN[t] = MEDIAN[t] || { w: 0, l: 0, t: 0 }, p = weekPts[wk][t];
+        p > mid ? r.w++ : p < mid ? r.l++ : r.t++;
+      });
+    });
+  }
+  function recCounts(t) {
+    var w = 0, l = 0, ties = 0;
     sched.forEach(function (g) {
       if (g.week >= CW) return;
       if (g.team_1 === t) g.win_1 ? w++ : l++;
       if (g.team_2 === t) g.win_2 ? w++ : l++;
     });
-    return w + "–" + l;
+    var m = MEDIAN[t];
+    if (m) { w += m.w; l += m.l; ties += m.t; }
+    return { w: w, l: l, t: ties };
+  }
+  function recOf(t) {
+    var r = recCounts(t);
+    return r.w + "–" + r.l + (r.t ? "–" + r.t : "");
+  }
+  // Win percentage (a tie counts half), used to sort the Record column.
+  function recPct(t) {
+    var r = recCounts(t), n = r.w + r.l + r.t;
+    return n ? (r.w + 0.5 * r.t) / n : 0;
   }
   function side(g, team) {
     return g.team_1 === team
@@ -242,7 +272,9 @@
   function prob(frac, color, w) { return '<td style="width:140px">' + bar(frac, color, pct(frac), w || 40, true) + "</td>"; }
   function tabStand() {
     var rows = stand.slice().sort(function (a, b) {
-      return S.sKey === "team" ? S.sDir * String(a.team).localeCompare(b.team) : S.sDir * (num(a[S.sKey]) - num(b[S.sKey]));
+      if (S.sKey === "team") return S.sDir * String(a.team).localeCompare(b.team);
+      if (S.sKey === "record") return S.sDir * (recPct(a.team) - recPct(b.team));
+      return S.sDir * (num(a[S.sKey]) - num(b[S.sKey]));
     }).map(function (s, i) {
       var me = s.team === S.team;
       return '<tr data-action="pick-team" data-team="' + esc(s.team) + '" style="background:' + (me ? "var(--color-accent-100)" : "transparent") + ';cursor:pointer">' +
@@ -255,7 +287,7 @@
         '<td style="text-align:right;font-weight:500">$' + fx(s.earnings, 0) + "</td></tr>";
     }).join("");
     var sb = function (l, k, r) { return sortBtn(l, k, S.sKey, S.sDir, "sort-stand", r); };
-    var head = '<th style="width:32px">#</th>' + sb("Team", "team") + (HAS_SCHED ? "<th>Record</th>" : "") + sb("Proj. wins", "wins_avg", true) +
+    var head = '<th style="width:32px">#</th>' + sb("Team", "team") + (HAS_SCHED ? sb("Record", "record") : "") + sb("Proj. wins", "wins_avg", true) +
       sb("Pts / gm", "per_game_avg", true) + sb("Playoffs", "playoffs") + sb("First-round bye", "playoff_bye") + sb("Title", "winner") + sb("Exp. $", "earnings", true);
     return '<section style="display:flex;flex-direction:column;gap:var(--space-3)">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap"><h3 style="margin:0">Simulated final standings</h3>' +

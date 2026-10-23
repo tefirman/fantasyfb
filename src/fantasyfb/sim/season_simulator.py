@@ -215,6 +215,9 @@ class SeasonSimulator:
                 - num_playoff_teams: Number of teams making playoffs
                 - uses_playoff_reseeding: Whether to reseed after each round
                 - num_teams: Total teams in league
+                - median_win: Optional. When true, each regular-season week
+                  also pays a win to every team scoring above that week's
+                  league median (half a win for a tie at the median)
             roster_spots: Roster-spots DataFrame (position/count columns) or
                 {slot: count} dict.  Required when ``simulate_season`` is
                 called with ``best_ball=True``.
@@ -466,6 +469,17 @@ class SeasonSimulator:
         standings = pd.concat([team1_records, team2_records], ignore_index=True)
 
         standings = standings[standings['week'] < self.settings['playoff_start_week']]
+
+        if self.settings.get('median_win'):
+            # Rank every team against the same week's scores in the same
+            # simulation. Completed weeks carry their real scores in every
+            # simulation, so they pay out the real median result.
+            median = standings.groupby(['num_sim', 'week'])['points'].transform('median')
+            standings['wins'] = (
+                standings['wins']
+                + (standings['points'] > median)
+                + 0.5 * (standings['points'] == median)
+            )
 
         standings = (
             standings.groupby(['num_sim', 'team'])

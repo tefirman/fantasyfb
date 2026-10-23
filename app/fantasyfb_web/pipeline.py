@@ -120,6 +120,7 @@ def build_report(
         day=datetime.datetime.now().strftime("%A"),
         platform=opts.platform.capitalize(),
         notices=notices,
+        median_win=bool(league.settings.get("median_win")),
     )
 
     players = league.players

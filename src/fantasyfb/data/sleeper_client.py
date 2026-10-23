@@ -441,7 +441,7 @@ class SleeperClient(FantasyPlatformClient):
 
         Returns:
             Dict with 'settings' (playoff_start_week, num_playoff_teams,
-            end_week), 'scoring', and 'roster_spots' keys.
+            end_week, median_win), 'scoring', and 'roster_spots' keys.
         """
         league = fetch_league(self.league_id)
         config = get_league_config(self.league_id)
@@ -456,6 +456,10 @@ class SleeperClient(FantasyPlatformClient):
             "playoff_start_week": playoff_start_week,
             "num_playoff_teams": num_playoff_teams,
             "end_week": playoff_start_week + (2 if num_playoff_teams == 6 else 1),
+            # Sleeper's "median game" option: every week each team also gets
+            # a win or loss against the league's median score. Sleeper stores
+            # it as league_average_match, but it compares to the median.
+            "median_win": bool(raw_settings.get("league_average_match")),
         }
         config["settings"] = settings
         return config

@@ -708,7 +708,8 @@ class League:
             'playoff_start_week': self.settings['playoff_start_week'],
             'num_playoff_teams': self.settings['num_playoff_teams'],
             'uses_playoff_reseeding': self.settings.get('uses_playoff_reseeding', False),
-            'num_teams': len(self.teams)
+            'num_teams': len(self.teams),
+            'median_win': self.settings.get('median_win', False),
         }
         
         # Use the new SeasonSimulator for regular season AND playoffs
@@ -857,6 +858,7 @@ def main():
             sims=league.num_sims,
             day=datetime.datetime.now().strftime("%A"),
             bestball=bool(options.bestball),
+            median_win=bool(league.settings.get("median_win")),
             drop_safe_threshold=options.drop_safe_threshold,
             drop_depth_threshold=options.drop_depth_threshold,
         )
