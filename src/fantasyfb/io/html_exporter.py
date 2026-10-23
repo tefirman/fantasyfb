@@ -71,6 +71,7 @@ class FantasyHtmlExporter:
         platform: str = "Yahoo",
         bestball: bool = False,
         notices: Optional[List[str]] = None,
+        median_win: bool = False,
         drop_safe_threshold: float = -4.0,
         drop_depth_threshold: float = -12.0,
     ):
@@ -83,6 +84,8 @@ class FantasyHtmlExporter:
             day: Weekday label shown in the header (e.g. "Wednesday")
             platform: Fantasy platform name shown in the footer
             bestball: Whether the report is for a best ball run
+            median_win: Whether the league also awards a win or loss against the
+                weekly median score, which the report adds to each team's record
             notices: Caveats shown in a banner at the top of the report
                 (e.g. scoring categories the projections can't cover)
             drop_safe_threshold: A drop whose expected-earnings delta is above
@@ -98,6 +101,7 @@ class FantasyHtmlExporter:
         self.platform = platform
         self.bestball = bestball
         self.notices = list(notices or [])
+        self.median_win = median_win
         self.config = {
             "drop_safe_threshold": drop_safe_threshold,
             "drop_depth_threshold": drop_depth_threshold,
@@ -157,6 +161,7 @@ class FantasyHtmlExporter:
             "sims": self.sims,
             "me": me,
             "bestball": self.bestball,
+            "median_win": self.median_win,
             "config": self.config,
         }
         payload.update(self.data)

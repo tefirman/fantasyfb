@@ -81,14 +81,35 @@
   var TH_R = function (t) { return '<th style="text-align:right">' + t + "</th>"; };
 
   /* ---------- derived data ---------- */
+  // With a median game, each completed week also pays a win to every team
+  // above that week's median score, and a loss to every team below it.
+  var MEDIAN = {};
+  if (D.median_win) {
+    var weekPts = {};
+    sched.forEach(function (g) {
+      if (g.week >= CW) return;
+      (weekPts[g.week] = weekPts[g.week] || {})[g.team_1] = g.points_avg_1;
+      weekPts[g.week][g.team_2] = g.points_avg_2;
+    });
+    Object.keys(weekPts).forEach(function (wk) {
+      var vals = Object.keys(weekPts[wk]).map(function (t) { return weekPts[wk][t]; }).sort(function (a, b) { return a - b; });
+      var n = vals.length, mid = n % 2 ? vals[(n - 1) / 2] : (vals[n / 2 - 1] + vals[n / 2]) / 2;
+      Object.keys(weekPts[wk]).forEach(function (t) {
+        var r = MEDIAN[t] = MEDIAN[t] || { w: 0, l: 0, t: 0 }, p = weekPts[wk][t];
+        p > mid ? r.w++ : p < mid ? r.l++ : r.t++;
+      });
+    });
+  }
   function recOf(t) {
-    var w = 0, l = 0;
+    var w = 0, l = 0, ties = 0;
     sched.forEach(function (g) {
       if (g.week >= CW) return;
       if (g.team_1 === t) g.win_1 ? w++ : l++;
       if (g.team_2 === t) g.win_2 ? w++ : l++;
     });
-    return w + "–" + l;
+    var m = MEDIAN[t];
+    if (m) { w += m.w; l += m.l; ties += m.t; }
+    return w + "–" + l + (ties ? "–" + ties : "");
   }
   function side(g, team) {
     return g.team_1 === team
