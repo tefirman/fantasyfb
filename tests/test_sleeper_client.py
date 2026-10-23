@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from unittest.mock import Mock, patch
 
 from fantasyfb.data import sleeper_client
@@ -36,6 +37,7 @@ SFB16_SCORING_SETTINGS = {
     "pts_allow_0": 0.0,
     # per-play "long play" bonuses -- intentionally unsupported
     "pass_cmp_40p": 10.0, "rush_40p": 10.0, "rec_40p": 10.0,
+    "rec_20_29": 10.0, "rec_30_39": 10.0,
 }
 
 SFB16_ROSTER_POSITIONS = ["FLEX"] * 8 + ["SUPER_FLEX"] * 2 + ["BN"] * 10
@@ -78,6 +80,32 @@ class TestTranslateScoringSettings:
         settings["pr_yd"] = 0.2
         scoring = sleeper_client.translate_scoring_settings(settings)
         assert scoring["Ret Yds"] == 0.2
+
+    def test_warns_about_unsupported_nonzero_categories(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sleeper_client.translate_scoring_settings(SFB16_SCORING_SETTINGS)
+        assert [w.category for w in caught] == [sleeper_client.UnsupportedScoringWarning]
+        message = str(caught[0].message)
+        for label in ("40+ yard completions", "40+ yard rushes", "40+ yard receptions",
+                      "20-29 yard receptions", "30-39 yard receptions"):
+            assert label in message
+        assert "2+ sack games" not in message  # zero in this league
+
+    def test_warns_about_negative_unsupported_categories(self):
+        settings = {"rush_40p": -2.0}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sleeper_client.translate_scoring_settings(settings)
+        assert "40+ yard rushes (-2 pts)" in str(caught[0].message)
+
+    def test_no_warning_when_unsupported_categories_are_zero_or_absent(self):
+        settings = {k: v for k, v in SFB16_SCORING_SETTINGS.items()
+                    if k not in sleeper_client.UNSUPPORTED_SCORING_KEYS}
+        settings["bonus_sack_2p"] = 0.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            sleeper_client.translate_scoring_settings(settings)
 
     def test_missing_keys_default_to_zero(self):
         scoring = sleeper_client.translate_scoring_settings({})
