@@ -134,7 +134,7 @@ _UNSUPPORTED_LABELS = {
 
 
 class UnsupportedScoringWarning(UserWarning):
-    """A league scores categories fantasyfb can't project, so projections run low."""
+    """A league scores categories fantasyfb can't project, so projections may be off."""
 
 
 # Sleeper roster-slot labels -> fantasyfb roster_spots position labels.
@@ -190,8 +190,7 @@ def translate_scoring_settings(scoring_settings: Dict[str, float]) -> Dict[str, 
         details = ", ".join(f"{_UNSUPPORTED_LABELS.get(key, key)} ({value:g} pts)" for key, value in ignored.items())
         warnings.warn(
             "This league scores categories fantasyfb can't project yet, so "
-            f"projections will run low: {details}. These per-play bonuses need "
-            "play-by-play data, which the projections don't use yet.",
+            f"projections may be off: {details}.",
             UnsupportedScoringWarning,
             stacklevel=2,
         )

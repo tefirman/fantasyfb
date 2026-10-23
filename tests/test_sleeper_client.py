@@ -92,6 +92,13 @@ class TestTranslateScoringSettings:
             assert label in message
         assert "2+ sack games" not in message  # zero in this league
 
+    def test_warns_about_negative_unsupported_categories(self):
+        settings = {"rush_40p": -2.0}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sleeper_client.translate_scoring_settings(settings)
+        assert "40+ yard rushes (-2 pts)" in str(caught[0].message)
+
     def test_no_warning_when_unsupported_categories_are_zero_or_absent(self):
         settings = {k: v for k, v in SFB16_SCORING_SETTINGS.items()
                     if k not in sleeper_client.UNSUPPORTED_SCORING_KEYS}
