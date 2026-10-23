@@ -127,7 +127,8 @@ class TestReportFlag:
 
     def test_record_column_is_a_sort_button_ranked_by_win_percentage(self):
         html = self._render(median_win=True)
-        assert 'data-action="sort-stand" data-key="record"' in html
+        # the header button is built in report.js, so check the script wiring
+        assert 'sb("Record", "record")' in html
         assert 'S.sKey === "record"' in html and "recPct" in html
 
     def test_flag_defaults_to_off(self):
