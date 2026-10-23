@@ -98,6 +98,17 @@ class TestFantasyHtmlExporter:
         assert "poweredby_yahoo_h_purple.png" in yahoo and "https://www.yahoo.com/?ilc=401" in yahoo
         assert "poweredby.yahoo.com" not in render("Sleeper")
 
+    def test_notices_render_as_escaped_banner_only_when_given(self, tmp_path):
+        def render(notices):
+            exp = FantasyHtmlExporter(str(tmp_path / "r.html"), week=3, me="Alpha", notices=notices)
+            exp.export_rosters(_players("Alpha"))
+            exp.export_standings(_standings())
+            return exp.render()
+
+        html = render(["Scores 40+ yard rushes <b>(10 pts)</b>"])
+        assert 'id="notices"' in html and "Scores 40+ yard rushes &lt;b&gt;(10 pts)&lt;/b&gt;" in html
+        assert 'id="notices"' not in render(None)
+
     def test_print_stylesheet_and_save_as_pdf_button(self, exporter):
         exporter.export_rosters(_players("Alpha"))
         exporter.export_standings(_standings())

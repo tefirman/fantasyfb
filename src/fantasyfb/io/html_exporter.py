@@ -10,7 +10,7 @@ works offline and can be emailed.
 
 import json
 import os
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -70,6 +70,7 @@ class FantasyHtmlExporter:
         day: Optional[str] = None,
         platform: str = "Yahoo",
         bestball: bool = False,
+        notices: Optional[List[str]] = None,
         drop_safe_threshold: float = -4.0,
         drop_depth_threshold: float = -12.0,
     ):
@@ -82,6 +83,8 @@ class FantasyHtmlExporter:
             day: Weekday label shown in the header (e.g. "Wednesday")
             platform: Fantasy platform name shown in the footer
             bestball: Whether the report is for a best ball run
+            notices: Caveats shown in a banner at the top of the report
+                (e.g. scoring categories the projections can't cover)
             drop_safe_threshold: A drop whose expected-earnings delta is above
                 this value gets the "Safe to cut" verdict
             drop_depth_threshold: Above this (but not above the safe
@@ -94,6 +97,7 @@ class FantasyHtmlExporter:
         self.day = day
         self.platform = platform
         self.bestball = bestball
+        self.notices = list(notices or [])
         self.config = {
             "drop_safe_threshold": drop_safe_threshold,
             "drop_depth_threshold": drop_depth_threshold,
@@ -179,6 +183,7 @@ class FantasyHtmlExporter:
         return env.get_template("report.html.j2").render(
             week=self.week,
             bestball=self.bestball,
+            notices=self.notices,
             platform=self.platform,
             css=Markup(_read("industry-styles.css")),
             js=Markup(_read("report.js")),

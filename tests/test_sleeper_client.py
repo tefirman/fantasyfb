@@ -85,9 +85,12 @@ class TestTranslateScoringSettings:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             sleeper_client.translate_scoring_settings(SFB16_SCORING_SETTINGS)
-        message = " ".join(str(w.message) for w in caught)
-        for key in ("pass_cmp_40p", "rush_40p", "rec_40p", "rec_20_29", "rec_30_39"):
-            assert key in message
+        assert [w.category for w in caught] == [sleeper_client.UnsupportedScoringWarning]
+        message = str(caught[0].message)
+        for label in ("40+ yard completions", "40+ yard rushes", "40+ yard receptions",
+                      "20-29 yard receptions", "30-39 yard receptions"):
+            assert label in message
+        assert "2+ sack games" not in message  # zero in this league
 
     def test_no_warning_when_unsupported_categories_are_zero_or_absent(self):
         settings = {k: v for k, v in SFB16_SCORING_SETTINGS.items()

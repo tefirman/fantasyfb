@@ -10,9 +10,11 @@ two in step until that logic moves into the package as a reusable function.
 from __future__ import annotations
 
 import datetime
+import warnings
 from dataclasses import dataclass
 from typing import Callable, Tuple
 
+from fantasyfb.data.sleeper_client import UnsupportedScoringWarning
 from fantasyfb.io.html_exporter import FantasyHtmlExporter
 
 # How many free agents per position the "adds" analysis re-simulates. Each one
@@ -100,7 +102,15 @@ def build_report(
     payouts = list(opts.payouts)
 
     progress("Loading league, player pool, and projections")
-    league = league_factory(opts, auth) if auth is not None else league_factory(opts)
+    # Categories the projections can't cover surface in the report, where the
+    # person who ran it will see them; a warning alone would only reach the
+    # server log.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UnsupportedScoringWarning)
+        league = league_factory(opts, auth) if auth is not None else league_factory(opts)
+    notices = [
+        str(w.message) for w in caught if issubclass(w.category, UnsupportedScoringWarning)
+    ]
 
     exporter = FantasyHtmlExporter(
         output_path="",
@@ -109,6 +119,7 @@ def build_report(
         sims=league.num_sims,
         day=datetime.datetime.now().strftime("%A"),
         platform=opts.platform.capitalize(),
+        notices=notices,
     )
 
     players = league.players

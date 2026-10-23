@@ -119,6 +119,24 @@ UNSUPPORTED_SCORING_KEYS = (
     "bonus_sack_2p", "bonus_tkl_10p",
 )
 
+# Plain-language names for the warning, which is shown to end users in the
+# web app's report as well as logged.
+_UNSUPPORTED_LABELS = {
+    "pass_cmp_40p": "40+ yard completions",
+    "pass_td_40p": "40+ yard passing TDs",
+    "rush_40p": "40+ yard rushes",
+    "rec_40p": "40+ yard receptions",
+    "rec_20_29": "20-29 yard receptions",
+    "rec_30_39": "30-39 yard receptions",
+    "bonus_sack_2p": "2+ sack games",
+    "bonus_tkl_10p": "10+ tackle games",
+}
+
+
+class UnsupportedScoringWarning(UserWarning):
+    """A league scores categories fantasyfb can't project, so projections run low."""
+
+
 # Sleeper roster-slot labels -> fantasyfb roster_spots position labels.
 _POSITION_MAP = {
     "QB": "QB",
@@ -169,11 +187,12 @@ def translate_scoring_settings(scoring_settings: Dict[str, float]) -> Dict[str, 
         if scoring_settings.get(key)
     }
     if ignored:
-        details = ", ".join(f"{key} ({value:g})" for key, value in ignored.items())
+        details = ", ".join(f"{_UNSUPPORTED_LABELS.get(key, key)} ({value:g} pts)" for key, value in ignored.items())
         warnings.warn(
             "This league scores categories fantasyfb can't project yet, so "
-            f"projections will run low: {details}. Per-play bonuses need "
-            "play-by-play data, which the scorer doesn't use.",
+            f"projections will run low: {details}. These per-play bonuses need "
+            "play-by-play data, which the projections don't use yet.",
+            UnsupportedScoringWarning,
             stacklevel=2,
         )
 

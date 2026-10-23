@@ -56,6 +56,9 @@ a:hover { color: var(--color-accent-900); }
   </header>
 
   <main style="max-width:1280px;margin:0 auto;padding:var(--space-8) var(--space-6) 64px;display:flex;flex-direction:column;gap:var(--space-8)">
+    {% if notices %}<div id="notices" role="note" style="display:flex;flex-direction:column;gap:var(--space-2)">
+      {% for notice in notices %}<div style="padding:var(--space-3) var(--space-4);border-left:4px solid var(--color-accent-600);background:var(--color-accent-100);font-size:14px;color:var(--color-neutral-900)">{{ notice }}</div>{% endfor %}
+    </div>{% endif %}
     <section style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:var(--space-4)">
       <div>
         <div id="kicker" style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)"></div>

@@ -238,6 +238,21 @@ def test_build_report_with_stub_league():
     assert adds_call["payouts"] == [100.0, 50.0, 0.0]
 
 
+def test_build_report_shows_unsupported_scoring_notice():
+    import warnings
+    from fantasyfb.data.sleeper_client import UnsupportedScoringWarning
+
+    def factory(opts):
+        warnings.warn("Scores 40+ yard rushes (10 pts)", UnsupportedScoringWarning)
+        return StubLeague()
+
+    opts = RunOptions(league_id=LEAGUE_ID, team="Alpha", season=2026)
+    html = build_report(opts, league_factory=factory)
+    assert 'id="notices"' in html and "Scores 40+ yard rushes (10 pts)" in html
+    # an ordinary run has no banner
+    assert 'id="notices"' not in build_report(opts, league_factory=lambda o: StubLeague())
+
+
 def test_adds_and_drops_are_refused_unless_enabled():
     off = TestClient(create_app(runner=lambda o, p: "<html></html>", lookup=fake_lookup, enable_moves=False))
     for flag in ("adds", "drops"):
