@@ -9,6 +9,20 @@ import pandas as pd
 from typing import Dict, Union
 
 
+# Per-play "long play" bonuses: scoring category -> per-game count column.
+# The counts come from play-by-play (NFLDataProvider.get_long_play_counts),
+# not box scores. A league that doesn't score them never loads those
+# columns, so these categories default to 0 and leave points unchanged.
+LONG_PLAY_CATEGORIES = {
+    'Rec 20-29': 'rec_20_29',
+    'Rec 30-39': 'rec_30_39',
+    'Rec 40+': 'rec_40p',
+    'Rush 40+': 'rush_40p',
+    'Pass Comp 40+': 'pass_cmp_40p',
+    'Pass TD 40+': 'pass_td_40p',
+}
+
+
 class FantasyScorer:
     """
     Calculates fantasy points from player statistics using configurable scoring rules.
@@ -37,6 +51,8 @@ class FantasyScorer:
                 - 'PAT Made', 'PAT Miss', 'FG 0-19', 'FG Yds'
                 - 'TE Rec Bonus', 'TE 1D Bonus'
                 - 'Pass 300+', 'Rush 100+', 'Rec 100+'
+                - 'Rec 20-29', 'Rec 30-39', 'Rec 40+', 'Rush 40+',
+                  'Pass Comp 40+', 'Pass TD 40+' (see LONG_PLAY_CATEGORIES)
                 - '2-PT', 'Off Fumb TD'
                 - 'Sack', 'Int', 'Fum Rec', 'TFL', 'Safe', 'Blk Kick',
                   'Pts Allow 0', etc.
@@ -56,6 +72,7 @@ class FantasyScorer:
             'TE Rec Bonus', 'TE 1D Bonus', 'Pass 300+', 'Pass 400+',
             'Rush 100+', 'Rush 200+', 'Rec 100+', 'Rec 200+',
             'Rush+Rec 100+', 'Rush+Rec 200+',
+            *LONG_PLAY_CATEGORIES,
             'Sack', 'Int', 'Fum Rec', 'TFL', 'Pts Allow 0', 'Pts Allow 1-6',
             'Pts Allow 7-13', 'Pts Allow 14-20', 'Pts Allow 21-27',
             'Pts Allow 28-34', 'Pts Allow 35+',
@@ -168,6 +185,13 @@ class FantasyScorer:
             combined_yds = offense_df['rush_yds'] + offense_df['rec_yds']
             points.loc[combined_yds >= 100] += self.scoring['Rush+Rec 100+']
             points.loc[combined_yds >= 200] += self.scoring['Rush+Rec 200+']
+
+        # Long-play bonuses: tiers are exclusive per play (a 45-yard catch is
+        # a 40+ catch, not also a 30-39), which the per-game counts already
+        # reflect. Skipped entirely when the league doesn't score them.
+        for category, column in LONG_PLAY_CATEGORIES.items():
+            if self.scoring[category] and column in offense_df.columns:
+                points += offense_df[column].fillna(0) * self.scoring[category]
 
         return points
     

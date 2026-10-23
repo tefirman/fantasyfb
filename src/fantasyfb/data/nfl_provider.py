@@ -42,6 +42,28 @@ class NFLDataProvider(ABC):
         position == "DEF" and player_id_sr set to the team abbreviation.
         """
 
+    # Per-game counts of the per-play "long play" bonuses FantasyScorer can
+    # score (see scoring.fantasy_scoring.LONG_PLAY_CATEGORIES). Box scores
+    # can't produce them, so they're an optional extra rather than part of
+    # get_player_stats.
+    LONG_PLAY_COLUMNS = (
+        "rec_20_29", "rec_30_39", "rec_40p", "rush_40p",
+        "pass_cmp_40p", "pass_td_40p",
+    )
+
+    def get_long_play_counts(self, start: int, finish: int) -> pd.DataFrame:
+        """Per-player per-game counts of long plays for the YYYYWW range.
+
+        Columns: player_id_sr, season, week, then LONG_PLAY_COLUMNS (counts
+        of 20-29 / 30-39 / 40+ yard receptions, 40+ yard rushes, 40+ yard
+        completions, and 40+ yard passing TDs). Only players with at least
+        one such play need a row. The default returns no rows, so a provider
+        without play-by-play data scores long-play bonuses as zero.
+        """
+        return pd.DataFrame(
+            columns=["player_id_sr", "season", "week", *self.LONG_PLAY_COLUMNS]
+        )
+
     @abstractmethod
     def get_schedule(self, start_year: int, end_year: int) -> pd.DataFrame:
         """NFL schedule with one row per team-game (two rows per game).

@@ -385,6 +385,70 @@ class NflreadpyProvider(NFLDataProvider):
         stats = stats[(as_of >= start) & (as_of <= finish)].reset_index(drop=True)
         return stats
 
+    _PBP_COLUMNS = [
+        "season", "week", "season_type", "play_type", "complete_pass",
+        "pass_touchdown", "passing_yards", "receiving_yards", "rushing_yards",
+        "passer_player_id", "receiver_player_id", "rusher_player_id",
+    ]
+
+    def get_long_play_counts(self, start: int, finish: int) -> pd.DataFrame:
+        """Count long plays per player-game from nflverse play-by-play.
+
+        Tiers are exclusive per play: a 45-yard catch counts once, as a 40+
+        reception. Plays nullified by penalty are excluded (nflverse marks
+        them `no_play`). A season whose play-by-play isn't published yet is
+        skipped with a warning, the same way player stats degrade.
+        """
+        empty = super().get_long_play_counts(start, finish)
+        current = nfl.get_current_season()
+        frames = []
+        for season in [s for s in _years_in_range(start, finish) if s <= current]:
+            try:
+                pbp = _load_pandas(
+                    lambda **kw: nfl.load_pbp(**kw).select(self._PBP_COLUMNS),
+                    per_season=True, seasons=[season],
+                )
+            except (ConnectionError, ValueError):
+                warnings.warn(
+                    f"Skipping play-by-play for season {season}: nflverse "
+                    f"parquet not available (download failed), so long-play "
+                    f"bonuses are not counted for it.",
+                )
+                continue
+            frames.append(self._count_long_plays(pbp))
+        if not frames:
+            return empty
+        counts = pd.concat(frames, ignore_index=True)
+        as_of = counts["season"] * 100 + counts["week"]
+        return counts[(as_of >= start) & (as_of <= finish)].reset_index(drop=True)
+
+    @classmethod
+    def _count_long_plays(cls, pbp: pd.DataFrame) -> pd.DataFrame:
+        pbp = pbp[pbp["season_type"] == "REG"]
+        passes = pbp[(pbp["play_type"] == "pass") & (pbp["complete_pass"] == 1)]
+        runs = pbp[pbp["play_type"] == "run"]
+
+        rec_yds = passes["receiving_yards"]
+        pass_yds = passes["passing_yards"]
+        parts = [
+            ("receiver_player_id", "rec_20_29", passes, rec_yds.between(20, 29)),
+            ("receiver_player_id", "rec_30_39", passes, rec_yds.between(30, 39)),
+            ("receiver_player_id", "rec_40p", passes, rec_yds >= 40),
+            ("rusher_player_id", "rush_40p", runs, runs["rushing_yards"] >= 40),
+            ("passer_player_id", "pass_cmp_40p", passes, pass_yds >= 40),
+            ("passer_player_id", "pass_td_40p", passes,
+             (pass_yds >= 40) & (passes["pass_touchdown"] == 1)),
+        ]
+        series = []
+        for id_col, name, plays, mask in parts:
+            hit = plays[mask & plays[id_col].notna()]
+            series.append(
+                hit.groupby([id_col, "season", "week"]).size().rename(name)
+                .rename_axis(["player_id_sr", "season", "week"])
+            )
+        counts = pd.concat(series, axis=1).fillna(0).astype(int)
+        return counts.reindex(columns=list(cls.LONG_PLAY_COLUMNS), fill_value=0).reset_index()
+
     def _build_offense(self, raw: pd.DataFrame) -> pd.DataFrame:
         offense = raw[raw["position"].isin(["QB", "RB", "WR", "TE", "K"])].copy()
 

@@ -35,9 +35,11 @@ SFB16_SCORING_SETTINGS = {
     "sack": 0.0, "int": 0.0, "fum_rec": 0.0, "safe": 0.0, "blk_kick": 0.0,
     "fgm_0_19": 0.0, "xpm": 0.0,
     "pts_allow_0": 0.0,
-    # per-play "long play" bonuses -- intentionally unsupported
+    # per-play "long play" bonuses
     "pass_cmp_40p": 10.0, "rush_40p": 10.0, "rec_40p": 10.0,
     "rec_20_29": 10.0, "rec_30_39": 10.0,
+    # defensive per-game bonuses -- intentionally unsupported (zero in SFB16)
+    "bonus_sack_2p": 0.0, "bonus_tkl_10p": 0.0,
 }
 
 SFB16_ROSTER_POSITIONS = ["FLEX"] * 8 + ["SUPER_FLEX"] * 2 + ["BN"] * 10
@@ -81,23 +83,35 @@ class TestTranslateScoringSettings:
         scoring = sleeper_client.translate_scoring_settings(settings)
         assert scoring["Ret Yds"] == 0.2
 
-    def test_warns_about_unsupported_nonzero_categories(self):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            sleeper_client.translate_scoring_settings(SFB16_SCORING_SETTINGS)
-        assert [w.category for w in caught] == [sleeper_client.UnsupportedScoringWarning]
-        message = str(caught[0].message)
-        for label in ("40+ yard completions", "40+ yard rushes", "40+ yard receptions",
-                      "20-29 yard receptions", "30-39 yard receptions"):
-            assert label in message
-        assert "2+ sack games" not in message  # zero in this league
+    def test_long_play_bonuses_are_translated(self):
+        scoring = sleeper_client.translate_scoring_settings(SFB16_SCORING_SETTINGS)
+        assert scoring["Rec 20-29"] == 10.0
+        assert scoring["Rec 30-39"] == 10.0
+        assert scoring["Rec 40+"] == 10.0
+        assert scoring["Rush 40+"] == 10.0
+        assert scoring["Pass Comp 40+"] == 10.0
+        assert scoring["Pass TD 40+"] == 0.0
 
-    def test_warns_about_negative_unsupported_categories(self):
-        settings = {"rush_40p": -2.0}
+    def test_sfb16_scoring_no_longer_warns(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            sleeper_client.translate_scoring_settings(SFB16_SCORING_SETTINGS)
+
+    def test_warns_about_unsupported_nonzero_categories(self):
+        settings = {**SFB16_SCORING_SETTINGS, "bonus_sack_2p": 3.0}
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             sleeper_client.translate_scoring_settings(settings)
-        assert "40+ yard rushes (-2 pts)" in str(caught[0].message)
+        assert [w.category for w in caught] == [sleeper_client.UnsupportedScoringWarning]
+        message = str(caught[0].message)
+        assert "2+ sack games (3 pts)" in message
+        assert "10+ tackle games" not in message  # zero in this league
+
+    def test_warns_about_negative_unsupported_categories(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sleeper_client.translate_scoring_settings({"bonus_tkl_10p": -2.0})
+        assert "10+ tackle games (-2 pts)" in str(caught[0].message)
 
     def test_no_warning_when_unsupported_categories_are_zero_or_absent(self):
         settings = {k: v for k, v in SFB16_SCORING_SETTINGS.items()

@@ -142,6 +142,8 @@ def apply_default_scoring_categories(scoring: dict):
         'TE Rec Bonus', 'TE 1D Bonus', 'Pass 300+', 'Pass 400+',
         'Rush 100+', 'Rush 200+', 'Rec 100+', 'Rec 200+',
         'Rush+Rec 100+', 'Rush+Rec 200+',
+        'Rec 20-29', 'Rec 30-39', 'Rec 40+', 'Rush 40+',
+        'Pass Comp 40+', 'Pass TD 40+',
     ]
     
     for category in default_categories:
