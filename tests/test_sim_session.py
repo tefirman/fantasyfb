@@ -134,3 +134,33 @@ def test_session_leaves_rosters_and_lineups_consistent(replay_league):
     pd.testing.assert_series_equal(before, after)
     starters = league.players[league.players.starter & league.players.fantasy_team.notna()]
     assert set(starters.fantasy_team) == {t["name"] for t in league.teams}
+
+
+def test_results_do_not_depend_on_row_order(replay_league):
+    # Players tied on points (often several at exactly 0.0 on bye or when out)
+    # must fill lineup slots the same way however the rows happen to be
+    # ordered, or the same roster projects differently from one run, or one
+    # machine, to the next. A drop that leaves a lineup hole is what exposes it,
+    # because tied zero-point players then compete for the open slot.
+    league = replay_league
+    me = _my_team(league)
+    original = league.players.copy()
+    mine = original[(original.fantasy_team == me)
+                    & ~original.name.str.contains("Average_")]
+    try:
+        for seed in range(4):
+            league.players = original.copy()
+            if seed:
+                league.players = original.sample(frac=1, random_state=seed).reset_index(drop=True)
+            session = league.season_sim_session(True, PAYOUTS)
+            session.standings()
+            for name in mine.nlargest(3, "WAR").name:
+                league.players.loc[league.players.name == name, "fantasy_team"] = None
+                try:
+                    got = session.standings([me])
+                    want = _slow_standings(league, session)
+                finally:
+                    league.players.loc[league.players.name == name, "fantasy_team"] = me
+                _assert_same(got, want)
+    finally:
+        league.players = original

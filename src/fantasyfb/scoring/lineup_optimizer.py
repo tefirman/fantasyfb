@@ -66,8 +66,13 @@ class LineupOptimizer:
                 players[col] = players[col].fillna(1.0)
         players["points_avg"] = players["points_rate"] * players["matchup_factor"]
         
-        # Sort by projected points
-        players = players.sort_values(by="points_avg", ascending=False)
+        # Sort by projected points. Players tied on points (typically several
+        # at exactly 0.0 on bye or when out) are ordered by player id so which
+        # one fills a lineup slot doesn't depend on the row order or the
+        # platform's sort implementation.
+        players = players.sort_values(
+            by=["points_avg", "player_id_sr"], ascending=[False, True], kind="stable"
+        )
         
         # Initialize starter and injury flags
         players["starter"] = False
