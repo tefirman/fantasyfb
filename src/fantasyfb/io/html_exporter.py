@@ -72,6 +72,7 @@ class FantasyHtmlExporter:
         bestball: bool = False,
         notices: Optional[List[str]] = None,
         median_win: bool = False,
+        sfb: bool = False,
         drop_safe_threshold: float = -4.0,
         drop_depth_threshold: float = -12.0,
     ):
@@ -86,6 +87,9 @@ class FantasyHtmlExporter:
             bestball: Whether the report is for a best ball run
             median_win: Whether the league also awards a win or loss against the
                 weekly median score, which the report adds to each team's record
+            sfb: Whether the league is part of the Scott Fish Bowl, whose playoffs
+                are field-wide. The report then shows the chance of reaching 13+
+                wins in place of bracket, bye, title and payout odds
             notices: Caveats shown in a banner at the top of the report
                 (e.g. scoring categories the projections can't cover)
             drop_safe_threshold: A drop whose expected-earnings delta is above
@@ -102,6 +106,16 @@ class FantasyHtmlExporter:
         self.bestball = bestball
         self.notices = list(notices or [])
         self.median_win = median_win
+        self.sfb = sfb
+        if sfb:
+            self.notices.append(
+                "Scott Fish Bowl league: the regular season is the first 11 weeks. "
+                "\u201cPlayoffs\u201d is the chance of reaching 13+ wins, which "
+                "qualifies automatically. The rest of the field is chosen on points "
+                "across every league, so the true odds are somewhat higher. Bye, "
+                "title and payout odds aren\u2019t shown because the playoffs are "
+                "field-wide."
+            )
         self.config = {
             "drop_safe_threshold": drop_safe_threshold,
             "drop_depth_threshold": drop_depth_threshold,
@@ -162,6 +176,7 @@ class FantasyHtmlExporter:
             "me": me,
             "bestball": self.bestball,
             "median_win": self.median_win,
+            "sfb": self.sfb,
             "config": self.config,
         }
         payload.update(self.data)
