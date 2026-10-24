@@ -75,6 +75,29 @@ def exporter(tmp_path):
     return FantasyHtmlExporter(str(tmp_path / "r.html"), week=3, me="Alpha", sims=1000, day="Wednesday")
 
 
+class TestFreeAgentFilter:
+    @staticmethod
+    def _render(available):
+        exp = FantasyHtmlExporter("unused.html", week=3, me="Alpha")
+        exp.export_rosters(_players("Alpha"))
+        exp.export_standings(_standings())
+        exp.export_available(available)
+        return exp.render()
+
+    def test_players_with_a_sleeper_rank_are_filtered_by_it(self):
+        html = self._render(_players(None).assign(sleeper_rank=100.0))
+        assert '"fa_by_rank": true' in html and '"fa_rank_cutoff": 300' in html
+        assert '"sleeper_rank"' in html
+
+    def test_without_a_rank_the_rostered_percentage_filter_stays(self):
+        html = self._render(_players(None))
+        assert '"fa_by_rank": false' in html
+
+    def test_an_all_missing_rank_does_not_switch_modes(self):
+        html = self._render(_players(None).assign(sleeper_rank=float("nan")))
+        assert '"fa_by_rank": false' in html
+
+
 class TestFantasyHtmlExporter:
     def test_writes_self_contained_file(self, exporter, tmp_path):
         exporter.export_rosters(_players("Alpha"))
@@ -160,7 +183,9 @@ class TestFantasyHtmlExporter:
         data = _data(exp.render())
         assert data["drops"][0]["earnings"] == -2.5
         assert data["trades"][0]["their_team"] == "Beta"
-        assert data["config"] == {"drop_safe_threshold": -1.0, "drop_depth_threshold": -9.0}
+        assert data["config"] == {
+            "drop_safe_threshold": -1.0, "drop_depth_threshold": -9.0, "fa_rank_cutoff": 300,
+        }
         assert data["adds"] == [] and data["pickups"] == []
 
     def test_deltas_embedded_as_winner_matrix(self, exporter):

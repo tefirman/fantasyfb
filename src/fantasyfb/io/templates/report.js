@@ -29,7 +29,7 @@
   var S = {
     team: D.me, tab: TABS[0][0], sKey: SFB ? "playoffs" : "earnings", sDir: -1, week: CW,
     mv: MOVES[0], aKey: SFB ? "playoffs" : "earnings", aDir: -1, addPos: "ALL", tf: "all",
-    faPos: "ALL", faAll: false, faKey: "WAR", faDir: -1, q: "", faMin: 0.05,
+    faPos: "ALL", faAll: false, faKey: "WAR", faDir: -1, q: "", faMin: 0.05, faRank: CFG.fa_rank_cutoff || 300,
     game: undefined  // selected Schedule game key; undefined = default to my matchup, null = collapsed
   };
 
@@ -520,11 +520,14 @@
   }
 
   /* ---------- Free agents ---------- */
-  var FA_SORT_LABELS = { points_avg: "projection", matchup_factor: "matchup", WAR: "WAR", bye_week: "bye week", pct_rostered: "% rostered" };
+  var FA_SORT_LABELS = { points_avg: "projection", matchup_factor: "matchup", WAR: "WAR", bye_week: "bye week", pct_rostered: "% rostered", sleeper_rank: "Sleeper rank" };
+  // Sleeper has no roster percentages; its popularity rank filters the list instead.
+  var FA_BY_RANK = !!D.fa_by_rank;
   function faResults() {
     var q = S.q.trim().toLowerCase();
     var all = (D.available || []).filter(function (p) {
-      return (p.pct_rostered || 0) >= S.faMin && (S.faPos === "ALL" || p.position === S.faPos) && (!q || String(p.name).toLowerCase().indexOf(q) >= 0 || String(p.current_team || "").toLowerCase() === q);
+      var relevant = FA_BY_RANK ? p.sleeper_rank != null && p.sleeper_rank <= S.faRank : (p.pct_rostered || 0) >= S.faMin;
+      return relevant && (S.faPos === "ALL" || p.position === S.faPos) && (!q || String(p.name).toLowerCase().indexOf(q) >= 0 || String(p.current_team || "").toLowerCase() === q);
     });
     /* missing values (e.g. no bye week) always sort last, whichever direction */
     var fav = function (p) { var v = p[S.faKey]; return v == null || isNaN(v) ? null : +v; };
@@ -539,11 +542,11 @@
         '<td style="text-align:right;white-space:nowrap">' + fx(p.points_avg, 1) + " " + sub("± " + fx(p.points_stdev, 1)) + "</td>" +
         '<td style="text-align:right;color:' + mfColor(p.matchup_factor) + '">' + fx(p.matchup_factor, 2) + "</td>" +
         '<td style="width:130px">' + bar(num(p.WAR) / maxFaWar, "var(--color-accent)", fx(p.WAR, 2), 40) + "</td>" +
-        '<td style="text-align:right">' + esc(p.bye_week == null ? "" : p.bye_week) + '</td><td style="text-align:right">' + pct(p.pct_rostered || 0) + "</td></tr>";
+        '<td style="text-align:right">' + esc(p.bye_week == null ? "" : p.bye_week) + '</td><td style="text-align:right">' + (FA_BY_RANK ? (p.sleeper_rank != null ? "#" + p.sleeper_rank : "") : pct(p.pct_rostered || 0)) + "</td></tr>";
     }).join("");
     var more = all.length > shown.length
       ? '<div class="no-print"><button class="btn btn-secondary" data-action="fa-more">Show all ' + all.length + "</button></div>" : "";
-    return { count: all.length, html: table(820, "<th>Player</th><th>Pos</th>" + sb("Proj", "points_avg", true) + sb("Matchup", "matchup_factor", true) + sb("WAR", "WAR") + sb("Bye", "bye_week", true) + sb("Rostered", "pct_rostered", true), rows) + more };
+    return { count: all.length, html: table(820, "<th>Player</th><th>Pos</th>" + sb("Proj", "points_avg", true) + sb("Matchup", "matchup_factor", true) + sb("WAR", "WAR") + sb("Bye", "bye_week", true) + (FA_BY_RANK ? sb("Sleeper rank", "sleeper_rank", true) : sb("Rostered", "pct_rostered", true)), rows) + more };
   }
   function tabFA() {
     return '<section style="display:flex;flex-direction:column;gap:var(--space-3)">' +
@@ -551,9 +554,13 @@
       '<div id="fa-count" style="font-size:13px;color:var(--color-neutral-700)"></div></div>' +
       '<div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center">' +
       '<input class="input" id="fa-q" style="width:220px" placeholder="Search players or NFL team" value="' + esc(S.q) + '">' +
-      '<label style="display:flex;align-items:center;gap:var(--space-2);font-size:13px;color:var(--color-neutral-700)">Rostered \u2265 ' +
-      '<input type="range" id="fa-min" min="0" max="100" step="1" value="' + Math.round(S.faMin * 100) + '" style="width:140px;accent-color:var(--color-accent)" aria-label="Minimum rostered percentage">' +
-      '<span id="fa-min-label" style="min-width:34px;font-variant-numeric:tabular-nums;color:var(--color-text)">' + Math.round(S.faMin * 100) + "%</span></label>" +
+      (FA_BY_RANK
+        ? '<label style="display:flex;align-items:center;gap:var(--space-2);font-size:13px;color:var(--color-neutral-700)" title="Sleeper has no roster percentages, so its popularity rank (1 = most searched) stands in for them">Sleeper rank \u2264 ' +
+          '<input type="range" id="fa-rank" min="50" max="1000" step="50" value="' + S.faRank + '" style="width:140px;accent-color:var(--color-accent)" aria-label="Maximum Sleeper popularity rank">' +
+          '<span id="fa-rank-label" style="min-width:34px;font-variant-numeric:tabular-nums;color:var(--color-text)">' + S.faRank + "</span></label>"
+        : '<label style="display:flex;align-items:center;gap:var(--space-2);font-size:13px;color:var(--color-neutral-700)">Rostered \u2265 ' +
+          '<input type="range" id="fa-min" min="0" max="100" step="1" value="' + Math.round(S.faMin * 100) + '" style="width:140px;accent-color:var(--color-accent)" aria-label="Minimum rostered percentage">' +
+          '<span id="fa-min-label" style="min-width:34px;font-variant-numeric:tabular-nums;color:var(--color-text)">' + Math.round(S.faMin * 100) + "%</span></label>") +
       seg("fapos", POS.map(function (p) { return [p, p === "ALL" ? "All" : p]; }), S.faPos, "fa-pos") + "</div></div>" +
       '<div id="fa-results"></div></section>';
   }
@@ -618,7 +625,7 @@
     }
     else if (a === "prev-week") { S.week = Math.max(weeks[0], S.week - 1); S.game = undefined; }
     else if (a === "next-week") { S.week = Math.min(weeks[weeks.length - 1], S.week + 1); S.game = undefined; }
-    else if (a === "sort-fa") { var f = toggleSort(el.dataset.key, S.faKey, S.faDir, "bye_week"); S.faKey = f.key; S.faDir = f.dir; paintFA(); return; }
+    else if (a === "sort-fa") { var f = toggleSort(el.dataset.key, S.faKey, S.faDir, el.dataset.key === "sleeper_rank" ? "sleeper_rank" : "bye_week"); S.faKey = f.key; S.faDir = f.dir; paintFA(); return; }
     else if (a === "print") { printAll(); return; }
     else if (a === "fa-more") { S.faAll = true; paintFA(); return; }
     else return;
@@ -646,6 +653,11 @@
   });
   document.addEventListener("input", function (e) {
     if (e.target.id === "fa-q") { S.q = e.target.value; S.faAll = false; paintFA(); }
+    else if (e.target.id === "fa-rank") {
+      S.faRank = +e.target.value; S.faAll = false;
+      $("fa-rank-label").textContent = e.target.value;
+      paintFA();
+    }
     else if (e.target.id === "fa-min") {
       S.faMin = +e.target.value / 100; S.faAll = false;
       $("fa-min-label").textContent = e.target.value + "%";
