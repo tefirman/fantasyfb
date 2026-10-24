@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import warnings
 from typing import Dict, List, Optional
@@ -136,6 +137,23 @@ _UNSUPPORTED_LABELS = {
     "bonus_sack_2p": "2+ sack games",
     "bonus_tkl_10p": "10+ tackle games",
 }
+
+
+# Scott Fish Bowl leagues ("#SFB16 - ...") share one season structure that
+# Sleeper's own settings don't describe: an 11-week regular season (Sleeper
+# schedules more weeks so teams can set lineups through the playoffs, but
+# only the first 11 count), then field-wide playoff rounds in weeks 12-17
+# for the half of all teams that finish with 13+ wins or, for the remainder,
+# the most points. See https://scottfishbowl.com/rules2026.php.
+SFB_NAME_PATTERN = re.compile(r"\bSFB\s?\d+\b", re.IGNORECASE)
+SFB_REGULAR_SEASON_WEEKS = 11
+SFB_FINAL_WEEK = 17
+SFB_PLAYOFF_WIN_THRESHOLD = 13
+
+
+def is_sfb_league(league_name: Optional[str]) -> bool:
+    """Whether a Sleeper league name marks it as part of the Scott Fish Bowl."""
+    return bool(league_name and SFB_NAME_PATTERN.search(league_name))
 
 
 class UnsupportedScoringWarning(UserWarning):
@@ -459,7 +477,8 @@ class SleeperClient(FantasyPlatformClient):
 
         Returns:
             Dict with 'settings' (playoff_start_week, num_playoff_teams,
-            end_week, median_win), 'scoring', and 'roster_spots' keys.
+            end_week, median_win, and for Scott Fish Bowl leagues sfb and
+            playoff_win_threshold), 'scoring', and 'roster_spots' keys.
         """
         league = fetch_league(self.league_id)
         config = get_league_config(self.league_id)
@@ -479,6 +498,16 @@ class SleeperClient(FantasyPlatformClient):
             # it as league_average_match, but it compares to the median.
             "median_win": bool(raw_settings.get("league_average_match")),
         }
+        if is_sfb_league(league.get("name")):
+            settings.update({
+                "sfb": True,
+                "playoff_start_week": SFB_REGULAR_SEASON_WEEKS + 1,
+                "end_week": SFB_FINAL_WEEK,
+                # The playoffs are field-wide, so there is no in-league bracket
+                # to simulate; the simulator scores "made the playoffs" as
+                # reaching this many wins instead.
+                "playoff_win_threshold": SFB_PLAYOFF_WIN_THRESHOLD,
+            })
         config["settings"] = settings
         return config
 

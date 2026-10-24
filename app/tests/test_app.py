@@ -297,6 +297,16 @@ def test_build_report_flags_median_game_leagues():
     assert '"median_win": false' in build_report(opts, league_factory=lambda o: StubLeague())
 
 
+def test_build_report_explains_scott_fish_bowl_odds():
+    class SfbLeague(StubLeague):
+        settings = {"sfb": True}
+
+    opts = RunOptions(league_id=LEAGUE_ID, team="Alpha", season=2026)
+    html = build_report(opts, league_factory=lambda o: SfbLeague())
+    assert '"sfb": true' in html and "Scott Fish Bowl league" in html
+    assert "Scott Fish Bowl league" not in build_report(opts, league_factory=lambda o: StubLeague())
+
+
 def test_adds_and_drops_are_refused_unless_enabled():
     off = TestClient(create_app(runner=lambda o, p: "<html></html>", lookup=fake_lookup, enable_moves=False))
     for flag in ("adds", "drops"):

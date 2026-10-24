@@ -218,6 +218,11 @@ class SeasonSimulator:
                 - median_win: Optional. When true, each regular-season week
                   also pays a win to every team scoring above that week's
                   league median (half a win for a tie at the median)
+                - playoff_win_threshold: Optional. For leagues whose playoffs
+                  are field-wide (Scott Fish Bowl), a team "makes the
+                  playoffs" by reaching this many wins. No bracket is
+                  simulated, and ``earnings`` becomes that probability so
+                  the move analysis still has an objective to rank by.
             roster_spots: Roster-spots DataFrame (position/count columns) or
                 {slot: count} dict.  Required when ``simulate_season`` is
                 called with ``best_ball=True``.
@@ -257,6 +262,9 @@ class SeasonSimulator:
         Returns:
             Tuple of (schedule_results, standings_results) DataFrames
         """
+        if self.settings.get('playoff_win_threshold'):
+            include_playoffs = False
+
         if best_ball:
             if self.roster_spots is None:
                 raise ValueError(
@@ -494,8 +502,12 @@ class SeasonSimulator:
             'playoffs'
         ] = 1
 
+        threshold = self.settings.get('playoff_win_threshold')
+        if threshold:
+            standings['playoffs'] = (standings['wins'] >= threshold).astype(int)
+
         standings['playoff_bye'] = 0
-        if self.settings['num_playoff_teams'] == 6:
+        if self.settings['num_playoff_teams'] == 6 and not threshold:
             standings.loc[
                 standings.index % self.settings.get('num_teams', 12) < 2,
                 'playoff_bye'
@@ -687,6 +699,8 @@ class SeasonSimulator:
             standings['runner_up'] = 0.0
             standings['third'] = 0.0
             standings['earnings'] = 0.0
+            if self.settings.get('playoff_win_threshold'):
+                standings['earnings'] = standings['playoffs']
 
         standings = standings.sort_values(
             ['earnings', 'wins_avg', 'points_avg'],

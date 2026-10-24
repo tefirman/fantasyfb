@@ -143,6 +143,7 @@ def build_report(
         platform=opts.platform.capitalize(),
         notices=notices,
         median_win=bool(league.settings.get("median_win")),
+        sfb=bool(league.settings.get("sfb")),
     )
 
     players = league.players

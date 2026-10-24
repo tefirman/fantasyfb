@@ -477,6 +477,12 @@ class League:
             self.current_week,
             self.my_team_key
         )
+        if self.settings.get("sfb"):
+            # The platform schedules more weeks than count (Sleeper keeps
+            # going so lineups can be set through the playoffs).
+            self.schedule = self.schedule[
+                self.schedule["week"] < self.settings["playoff_start_week"]
+            ].reset_index(drop=True)
 
     def starters(self, week: int):
         """
@@ -715,6 +721,7 @@ class League:
             'uses_playoff_reseeding': self.settings.get('uses_playoff_reseeding', False),
             'num_teams': len(self.teams),
             'median_win': self.settings.get('median_win', False),
+            'playoff_win_threshold': self.settings.get('playoff_win_threshold'),
         }
         
         # Use the new SeasonSimulator for regular season AND playoffs
@@ -864,6 +871,7 @@ def main():
             day=datetime.datetime.now().strftime("%A"),
             bestball=bool(options.bestball),
             median_win=bool(league.settings.get("median_win")),
+            sfb=bool(league.settings.get("sfb")),
             drop_safe_threshold=options.drop_safe_threshold,
             drop_depth_threshold=options.drop_depth_threshold,
         )
