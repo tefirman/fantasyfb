@@ -7,6 +7,10 @@
   var sched = D.schedule || [];
   var stand = D.standings || [];
   var HAS_SCHED = sched.length > 0;
+  // Scott Fish Bowl: playoffs are field-wide, so there is no bracket, bye, title
+  // or payout. "earnings" in the data is then the chance of reaching 13+ wins.
+  var SFB = !!D.sfb;
+  var OBJECTIVE = SFB ? "chance of 13+ wins" : "expected earnings";
   var ANALYSES = ["adds", "pickups", "drops", "trades"];
   var POS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"];
   var ORD = { QB: 0, RB: 1, WR: 2, TE: 3, K: 4, DEF: 5 };
@@ -23,8 +27,8 @@
   var MOVES = ANALYSES.filter(function (k) { return (D[k] || []).length; });
 
   var S = {
-    team: D.me, tab: TABS[0][0], sKey: "earnings", sDir: -1, week: CW,
-    mv: MOVES[0], aKey: "earnings", aDir: -1, addPos: "ALL", tf: "all",
+    team: D.me, tab: TABS[0][0], sKey: SFB ? "playoffs" : "earnings", sDir: -1, week: CW,
+    mv: MOVES[0], aKey: SFB ? "playoffs" : "earnings", aDir: -1, addPos: "ALL", tf: "all",
     faPos: "ALL", faAll: false, faKey: "WAR", faDir: -1, q: "", faMin: 0.05,
     game: undefined  // selected Schedule game key; undefined = default to my matchup, null = collapsed
   };
@@ -42,7 +46,7 @@
   function sg(v, f) { return (v > 0 ? "+" : v < 0 ? "−" : "") + f(Math.abs(v)); }
   function dc(v) { return v > 0 ? "var(--color-accent-700)" : v < 0 ? "var(--color-neutral-600)" : "inherit"; }
   function pp(v) { return sg(num(v), function (x) { return (x * 100).toFixed(1) + " pts"; }); }
-  function money(v) { return sg(num(v), function (x) { return "$" + x.toFixed(2); }); }
+  function money(v) { return sg(num(v), function (x) { return SFB ? (x * 100).toFixed(1) + " pts" : "$" + x.toFixed(2); }); }
   function wins(v) { return sg(num(v), function (x) { return x.toFixed(2); }); }
   function pos(p) { return '<span class="tag tag-neutral">' + esc(p) + "</span>"; }
   function sub(t) { return '<span style="font-size:12px;color:var(--color-neutral-700)">' + esc(t) + "</span>"; }
@@ -191,7 +195,11 @@
   function outlookPlate() {
     var st = find(stand, "team", S.team) || {};
     var rank = stand.slice().sort(function (a, b) { return b.earnings - a.earnings; }).map(function (s) { return s.team; }).indexOf(S.team) + 1;
-    var cells = [
+    var cells = SFB ? [
+      ["Reach 13+ wins", pct(st.playoffs), "automatic playoff spot"],
+      ["Projected wins", fx(st.wins_avg, 1), "± " + fx(st.wins_stdev, 1) + " · " + fx(st.per_game_avg, 1) + " pts/gm"],
+      ["League rank", "#" + rank, "by chance of 13+ wins"]
+    ] : [
       ["Make playoffs", pct(st.playoffs), "of simulated seasons"],
       ["First-round bye", pct(st.playoff_bye), "top-2 seed"],
       ["Win title", pct(st.winner), pct(st.runner_up) + " runner-up · " + pct(st.third) + " third"],
@@ -283,12 +291,14 @@
         (HAS_SCHED ? "<td>" + recOf(s.team) + "</td>" : "") +
         '<td style="text-align:right;white-space:nowrap">' + fx(s.wins_avg, 1) + " " + sub("± " + fx(s.wins_stdev, 1)) + "</td>" +
         '<td style="text-align:right">' + fx(s.per_game_avg, 1) + "</td>" +
-        prob(s.playoffs, "var(--color-accent)") + prob(s.playoff_bye, "var(--color-accent)") + prob(s.winner, "var(--color-accent-700)") +
-        '<td style="text-align:right;font-weight:500">$' + fx(s.earnings, 0) + "</td></tr>";
+        prob(s.playoffs, "var(--color-accent)") +
+        (SFB ? "" : prob(s.playoff_bye, "var(--color-accent)") + prob(s.winner, "var(--color-accent-700)") +
+          '<td style="text-align:right;font-weight:500">$' + fx(s.earnings, 0) + "</td>") + "</tr>";
     }).join("");
     var sb = function (l, k, r) { return sortBtn(l, k, S.sKey, S.sDir, "sort-stand", r); };
     var head = '<th style="width:32px">#</th>' + sb("Team", "team") + (HAS_SCHED ? sb("Record", "record") : "") + sb("Proj. wins", "wins_avg", true) +
-      sb("Pts / gm", "per_game_avg", true) + sb("Playoffs", "playoffs") + sb("First-round bye", "playoff_bye") + sb("Title", "winner") + sb("Exp. $", "earnings", true);
+      sb("Pts / gm", "per_game_avg", true) + (SFB ? sb("13+ wins", "playoffs") :
+        sb("Playoffs", "playoffs") + sb("First-round bye", "playoff_bye") + sb("Title", "winner") + sb("Exp. $", "earnings", true));
     return '<section style="display:flex;flex-direction:column;gap:var(--space-3)">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap"><h3 style="margin:0">Simulated final standings</h3>' +
       '<span style="font-size:13px;color:var(--color-neutral-700)">Click a column to sort · click a team to view it</span></div>' +
@@ -390,7 +400,7 @@
         '<div style="display:flex;justify-content:space-between;align-items:baseline"><span class="card-kicker" style="color:var(--color-accent-700)">' +
         (pick ? "Root for " + esc(pick) : "No preference") + "</span>" + (own ? '<span class="tag tag-accent">Your game</span>' : "") + "</div>" +
         '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px var(--space-3);align-items:baseline">' + row(g.team_1, a) + row(g.team_2, b) + "</div>" +
-        sub("Change in " + S.team + " expected earnings if that team wins") + "</div>";
+        sub("Change in " + S.team + " " + OBJECTIVE + " if that team wins") + "</div>";
     };
     return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:var(--space-6)">' + mine.concat(rest).map(card).join("") + "</div>";
   }
@@ -412,11 +422,15 @@
   function tabRoot() {
     return '<section style="display:flex;flex-direction:column;gap:var(--space-6)">' +
       '<h3 style="margin:0">Rooting guide for ' + esc(S.team) + " · Week " + CW + "</h3>" + rootingCards() +
-      '<h3 style="margin:0">League-wide matrix</h3>' + sub("Each row is a winner; each column is the change in that team's expected earnings.") + deltaMatrix() + "</section>";
+      '<h3 style="margin:0">League-wide matrix</h3>' + sub("Each row is a winner; each column is the change in that team's " + OBJECTIVE + ".") + deltaMatrix() + "</section>";
   }
 
   /* ---------- Moves ---------- */
-  var DELTA_COLS = [["wins_avg", "Δ Wins", wins], ["playoffs", "Δ Playoffs", pp], ["playoff_bye", "Δ Bye", pp], ["winner", "Δ Title", pp], ["earnings", "Δ Exp. $", money]];
+  var ALL_DELTA_COLS = [["wins_avg", "Δ Wins", wins], ["playoffs", "Δ Playoffs", pp], ["playoff_bye", "Δ Bye", pp], ["winner", "Δ Title", pp], ["earnings", "Δ Exp. $", money]];
+  var DELTA_COLS = SFB ? [ALL_DELTA_COLS[0], ["playoffs", "Δ 13+ wins", pp]] : ALL_DELTA_COLS;
+  var PICKUP_COLS = SFB ? DELTA_COLS : [ALL_DELTA_COLS[0], ALL_DELTA_COLS[1], ALL_DELTA_COLS[3], ALL_DELTA_COLS[4]];
+  var DROP_COLS = SFB ? [DELTA_COLS[1]] : [ALL_DELTA_COLS[1], ALL_DELTA_COLS[3], ALL_DELTA_COLS[4]];
+  var EARN_LABEL = SFB ? "Δ 13+ wins" : "Δ Exp. $";
   function dcell(row, col, fmt, bold) {
     var v = num(row[col]);
     return '<td style="text-align:right;' + (bold ? "font-weight:500;" : "") + "color:" + dc(v) + '">' + fmt(v) + "</td>";
@@ -448,22 +462,23 @@
         '<span style="color:var(--color-neutral-700);text-decoration:line-through;text-decoration-color:var(--color-neutral-400)">' + esc(p.player_to_drop) + "</span></div></td>" +
         '<td style="width:28px;color:var(--color-neutral-500)">' + arrow + "</td>" +
         '<td><div style="display:flex;align-items:center;gap:var(--space-2)">' + posTag(p.player_to_add) + '<span style="font-weight:500">' + esc(p.player_to_add) + "</span>" + sub(add.current_team) + "</div></td>" +
-        [DELTA_COLS[0], DELTA_COLS[1], DELTA_COLS[3], DELTA_COLS[4]].map(function (c) { return dcell(p, c[0], c[2], c[0] === "earnings"); }).join("") + "</tr>";
+        PICKUP_COLS.map(function (c) { return dcell(p, c[0], c[2], c[0] === "earnings"); }).join("") + "</tr>";
     }).join("");
-    return table(820, "<th>Drop</th><th></th><th>Add</th>" + TH_R("Δ Wins") + TH_R("Δ Playoffs") + TH_R("Δ Title") + TH_R("Δ Exp. $"), rows);
+    return table(820, "<th>Drop</th><th></th><th>Add</th>" + PICKUP_COLS.map(function (c) { return TH_R(c[1]); }).join(""), rows);
   }
 
   function dropsView() {
-    var safe = CFG.drop_safe_threshold, depth = CFG.drop_depth_threshold;
+    // Thresholds are in expected dollars; for SFB the objective is a probability, so use points of odds.
+    var safe = SFB ? -1 : CFG.drop_safe_threshold, depth = SFB ? -3 : CFG.drop_depth_threshold;
     var rows = D.drops.slice().sort(function (a, b) { return num(b.earnings) - num(a.earnings); }).map(function (p) {
-      var e = num(p.earnings), r = byName[p.player_to_drop] || {};
+      var e = num(p.earnings) * (SFB ? 100 : 1), r = byName[p.player_to_drop] || {};
       var verdict = e > safe ? ["Safe to cut", "tag tag-accent"] : e > depth ? ["Depth", "tag tag-neutral"] : ["Keep", "tag tag-neutral"];
       return "<tr><td><div style=\"display:flex;align-items:center;gap:var(--space-2)\">" + posTag(p.player_to_drop) + '<span style="font-weight:500">' + esc(p.player_to_drop) + "</span>" + sub(r.current_team) + "</div></td>" +
         '<td style="color:var(--color-neutral-700)">' + (r.starter ? "Starter" : "Bench") + "</td>" +
-        [DELTA_COLS[1], DELTA_COLS[3], DELTA_COLS[4]].map(function (c) { return dcell(p, c[0], c[2], c[0] === "earnings"); }).join("") +
+        DROP_COLS.map(function (c) { return dcell(p, c[0], c[2], c[0] === "earnings"); }).join("") +
         '<td><span class="' + verdict[1] + '">' + verdict[0] + "</span></td></tr>";
     }).join("");
-    return table(760, "<th>Player</th><th>Role</th>" + TH_R("Δ Playoffs") + TH_R("Δ Title") + TH_R("Δ Exp. $") + "<th>Verdict</th>", rows);
+    return table(760, "<th>Player</th><th>Role</th>" + DROP_COLS.map(function (c) { return TH_R(c[1]); }).join("") + "<th>Verdict</th>", rows);
   }
 
   function tradesView() {
@@ -489,7 +504,7 @@
     }).join("");
     var key = function (c, t) { return '<span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:8px;background:' + c + '"></span>' + t + "</span>"; };
     return '<div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-4);flex-wrap:wrap">' +
-      '<div style="display:flex;gap:var(--space-4);font-size:12px;color:var(--color-neutral-700)">' + key("var(--color-accent)", "Your Δ Exp. $") + key("var(--color-accent-700)", "Their Δ Exp. $") + "<span>Center line = no change</span></div>" +
+      '<div style="display:flex;gap:var(--space-4);font-size:12px;color:var(--color-neutral-700)">' + key("var(--color-accent)", "Your " + EARN_LABEL) + key("var(--color-accent-700)", "Their " + EARN_LABEL) + "<span>Center line = no change</span></div>" +
       seg("tf", [["all", "All"], ["mine", "Favors you"], ["win2", "Win-win"]], S.tf, "trade-filter") + "</div>" +
       table(900, "<th>You give</th><th>You get</th><th>Partner</th><th style=\"width:200px\">Impact</th>" + TH_R("You") + TH_R("Them") + "<th>Verdict</th>", rows);
   }
