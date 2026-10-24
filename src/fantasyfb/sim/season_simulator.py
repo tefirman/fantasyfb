@@ -16,7 +16,7 @@ standalone functions.
 
 import pandas as pd
 import numpy as np
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from typing import Callable, Dict, FrozenSet, List, Optional, Tuple
 
 # Flex slot eligibility — mirrors drafts/tools.py FLEX_ELIGIBILITY but kept
 # here to avoid a sim → drafts import dependency.
@@ -197,6 +197,43 @@ def compute_best_ball_team_projections(
     return pd.DataFrame(rows)
 
 
+NormalSource = Callable[[Tuple[int, ...]], np.ndarray]
+
+
+def _global_normals(shape: Tuple[int, ...]) -> np.ndarray:
+    """Standard-normal draws from numpy's global random state."""
+    return np.random.normal(loc=0, scale=1, size=shape)
+
+
+class CommonRandomNumbers:
+    """Standard-normal draws that repeat from one simulation run to the next.
+
+    Pass an instance as ``normals`` to ``SeasonSimulator.simulate_season``.
+    The first run draws fresh numbers and remembers them; call ``rewind``
+    before each later run to replay the same draws in the same order. Every
+    run then sees the same luck, so differences between two rosters reflect
+    the rosters rather than Monte Carlo noise. A draw whose shape no longer
+    matches the remembered one is redrawn.
+    """
+
+    def __init__(self):
+        self._draws: List[np.ndarray] = []
+        self._next = 0
+
+    def rewind(self) -> None:
+        self._next = 0
+
+    def __call__(self, shape: Tuple[int, ...]) -> np.ndarray:
+        if self._next < len(self._draws) and self._draws[self._next].shape == tuple(shape):
+            draw = self._draws[self._next]
+        else:
+            draw = _global_normals(shape)
+            del self._draws[self._next:]
+            self._draws.append(draw)
+        self._next += 1
+        return draw
+
+
 class SeasonSimulator:
     """
     Simulates fantasy football seasons using Monte Carlo methods.
@@ -241,7 +278,8 @@ class SeasonSimulator:
                        best_ball: bool = False,
                        include_playoffs: bool = True,
                        payouts: List[float] = [800, 300, 100],
-                       fixed_winner: Optional[List] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                       fixed_winner: Optional[List] = None,
+                       normals: Optional[NormalSource] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Simulate a complete fantasy season with playoffs.
 
@@ -258,6 +296,9 @@ class SeasonSimulator:
             include_playoffs: Whether to simulate playoffs
             payouts: Prize amounts for [1st, 2nd, 3rd, ...]
             fixed_winner: Optional [week, team_name] to force a specific outcome
+            normals: Optional source of standard-normal draws, called with an
+                array shape. Defaults to ``np.random.normal``. Pass a
+                ``CommonRandomNumbers`` to reuse the same draws across runs.
 
         Returns:
             Tuple of (schedule_results, standings_results) DataFrames
@@ -285,17 +326,24 @@ class SeasonSimulator:
         if fixed_winner:
             schedule_with_projections = self._apply_fixed_winner(schedule_with_projections, fixed_winner)
 
-        schedule_sims = self._simulate_all_matchups(schedule_with_projections, num_sims)
+        normals = normals or _global_normals
+        sim_1, sim_2 = self._simulate_all_matchups(
+            schedule_with_projections, num_sims, normals
+        )
 
-        standings_sims = self._calculate_regular_season_standings(schedule_sims)
+        standings_sims, order, teams = self._calculate_regular_season_standings(
+            schedule_with_projections, sim_1, sim_2
+        )
 
         final_results = None
         if include_playoffs:
             final_results = self._simulate_playoffs(
-                standings_sims, schedule_with_projections, locked_projections, payouts
+                order, teams, locked_projections, normals
             )
 
-        schedule_results = self._aggregate_schedule_results(schedule_sims)
+        schedule_results = self._aggregate_schedule_results(
+            schedule_with_projections, sim_1, sim_2
+        )
         standings_results = self._aggregate_standings_results(standings_sims, final_results, payouts)
 
         return schedule_results, standings_results
@@ -331,11 +379,21 @@ class SeasonSimulator:
         locked.loc[completed, 'points_stdev'] = 0.0
         return locked.drop(columns=['real_score'])
 
-    def _simulate_playoffs(self, standings_df: pd.DataFrame,
-                          schedule_df: pd.DataFrame,
+    def _simulate_playoffs(self, order: np.ndarray, teams: np.ndarray,
                           projections_df: pd.DataFrame,
-                          payouts: List[float]) -> Dict[str, pd.DataFrame]:
-        """Simulate playoff brackets and determine final rankings."""
+                          normals: NormalSource) -> Optional[Dict[str, pd.Series]]:
+        """Simulate playoff brackets for every simulation at once.
+
+        Args:
+            order: ``(num_sims, num_teams)`` team indices, best seed first.
+            teams: Team names, indexed by the values in ``order``.
+            projections_df: Locked team-week projections.
+            normals: Source of standard-normal draws.
+
+        Returns:
+            ``{'winners', 'runners_up', 'third_place'}`` Series of title
+            probabilities indexed by team, or None for unsupported brackets.
+        """
         num_playoff_teams = self.settings['num_playoff_teams']
         if num_playoff_teams not in {4, 6}:
             # Only 4- and 6-team brackets are supported. For best-ball leagues
@@ -343,47 +401,95 @@ class SeasonSimulator:
             # simulate_season with include_playoffs=False instead.
             return None
 
-        playoff_teams = standings_df[standings_df['playoffs'] == 1].copy()
-        playoff_teams['seed'] = playoff_teams.index % num_playoff_teams
+        num_sims = order.shape[0]
+        rows = np.arange(num_sims)
+        start = self.settings['playoff_start_week']
+
+        def seeded(seed):
+            return order[:, seed]
+
+        def params(week):
+            return self._team_week_params(projections_df, week, teams)
 
         if num_playoff_teams == 6:
-            wild_card_week = self.settings['playoff_start_week']
-            semifinalists = self._simulate_6_team_wildcard(
-                playoff_teams, projections_df, wild_card_week
+            # Seeds 0 and 1 have byes; 2v5 and 3v4 play the wild card round.
+            (w25, _), (w34, _) = self._play_matchups(
+                [(seeded(2), seeded(5)), (seeded(3), seeded(4))],
+                *params(start), normals,
             )
-
-            semifinal_week = self.settings['playoff_start_week'] + 1
-            finalists, semifinal_losers = self._simulate_6_team_semifinals(
-                semifinalists, projections_df, semifinal_week
-            )
-
-            championship_week = self.settings['playoff_start_week'] + 2
-            winners, runners_up = self._simulate_championship(finalists, projections_df, championship_week)
-
-            third_place_winners = self._simulate_third_place_game(
-                semifinal_losers, projections_df, championship_week
-            )
-
+            semifinalists = np.column_stack([seeded(0), seeded(1), w25, w34])
+            if self.settings.get('uses_playoff_reseeding', False):
+                rank = np.argsort(order, axis=1)
+                seeds = rank[rows[:, None], semifinalists]
+                semifinalists = np.take_along_axis(
+                    semifinalists, np.argsort(seeds, axis=1), axis=1
+                )
+                top, second, third, bottom = semifinalists.T
+                matchups = [(top, bottom), (second, third)]
+            else:
+                # Fixed bracket: the 1 seed meets the 3v4 winner.
+                matchups = [(semifinalists[:, 0], semifinalists[:, 3]),
+                            (semifinalists[:, 1], semifinalists[:, 2])]
+            semifinal_week = start + 1
+            championship_week = start + 2
         else:
-            semifinal_week = self.settings['playoff_start_week']
-            finalists, semifinal_losers = self._simulate_4_team_semifinals(
-                playoff_teams, projections_df, semifinal_week
-            )
+            matchups = [(seeded(0), seeded(3)), (seeded(1), seeded(2))]
+            semifinal_week = start
+            championship_week = start + 1
 
-            championship_week = self.settings['playoff_start_week'] + 1
-            winners, runners_up = self._simulate_championship(finalists, projections_df, championship_week)
+        (w1, l1), (w2, l2) = self._play_matchups(
+            matchups, *params(semifinal_week), normals
+        )
+        mu, sd = params(championship_week)
+        [(winners, runners_up)] = self._play_matchups([(w1, w2)], mu, sd, normals)
+        [(third_place, _)] = self._play_matchups([(l1, l2)], mu, sd, normals)
 
-            third_place_winners = self._simulate_third_place_game(
-                semifinal_losers, projections_df, championship_week
-            )
-
-        total_sims = len(standings_df['num_sim'].unique())
+        def share(team_idx):
+            counts = np.bincount(team_idx, minlength=len(teams))
+            return pd.Series(counts / num_sims, index=teams)
 
         return {
-            'winners': winners.groupby('team').size() / total_sims,
-            'runners_up': runners_up.groupby('team').size() / total_sims,
-            'third_place': third_place_winners.groupby('team').size() / total_sims,
+            'winners': share(winners),
+            'runners_up': share(runners_up),
+            'third_place': share(third_place),
         }
+
+    @staticmethod
+    def _team_week_params(projections_df: pd.DataFrame, week: int,
+                          teams: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Mean and stdev of each team's score in ``week``.
+
+        A team with no projection that week falls back to 100 +/- 10.
+        """
+        week_df = (
+            projections_df[projections_df['week'] == week]
+            .drop_duplicates('fantasy_team')
+            .set_index('fantasy_team')
+            .reindex(teams)
+        )
+        mu = week_df['points_avg'].fillna(100.0).to_numpy(dtype=float)
+        sd = week_df['points_stdev'].fillna(10.0).to_numpy(dtype=float)
+        return mu, sd
+
+    @staticmethod
+    def _play_matchups(matchups: List[Tuple[np.ndarray, np.ndarray]],
+                      mu: np.ndarray, sd: np.ndarray,
+                      normals: NormalSource) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """Play one game per ``(team_a, team_b)`` pair in every simulation.
+
+        Each pair is two ``(num_sims,)`` arrays of team indices. Returns a
+        ``(winner, loser)`` pair of arrays per matchup; a tie goes to team_a.
+        """
+        num_sims = len(matchups[0][0])
+        z = normals((num_sims, 2 * len(matchups)))
+        results = []
+        for j, (team_a, team_b) in enumerate(matchups):
+            score_a = z[:, 2 * j] * sd[team_a] + mu[team_a]
+            score_b = z[:, 2 * j + 1] * sd[team_b] + mu[team_b]
+            a_wins = score_a >= score_b
+            results.append((np.where(a_wins, team_a, team_b),
+                            np.where(a_wins, team_b, team_a)))
+        return results
 
     def _merge_schedule_projections(self, schedule_df: pd.DataFrame,
                                   projections_df: pd.DataFrame) -> pd.DataFrame:
@@ -444,63 +550,93 @@ class SeasonSimulator:
 
         return schedule
 
-    def _simulate_all_matchups(self, schedule_df: pd.DataFrame,
-                              num_sims: int) -> pd.DataFrame:
-        """Run Monte Carlo simulation for all matchups."""
-        schedule_sims = pd.concat([schedule_df] * num_sims, ignore_index=True)
-        schedule_sims['num_sim'] = schedule_sims.index // len(schedule_df)
+    def _simulate_all_matchups(self, schedule_df: pd.DataFrame, num_sims: int,
+                              normals: NormalSource = _global_normals
+                              ) -> Tuple[np.ndarray, np.ndarray]:
+        """Draw both teams' scores for every game in every simulation.
 
-        schedule_sims['sim_1'] = (
-            np.random.normal(loc=0, scale=1, size=len(schedule_sims)) *
-            schedule_sims['points_stdev_1'] + schedule_sims['points_avg_1']
-        ).astype(float)
-
-        schedule_sims['sim_2'] = (
-            np.random.normal(loc=0, scale=1, size=len(schedule_sims)) *
-            schedule_sims['points_stdev_2'] + schedule_sims['points_avg_2']
-        ).astype(float)
-
-        schedule_sims['win_1'] = (schedule_sims['sim_1'] > schedule_sims['sim_2']).astype(int)
-        schedule_sims['win_2'] = 1 - schedule_sims['win_1']
-
-        return schedule_sims
-
-    def _calculate_regular_season_standings(self, schedule_sims: pd.DataFrame) -> pd.DataFrame:
-        """Calculate regular season win/loss records from simulated games."""
-        team1_records = schedule_sims[['num_sim', 'week', 'team_1', 'sim_1', 'win_1']].rename(
-            columns={'team_1': 'team', 'sim_1': 'points', 'win_1': 'wins'}
+        Returns two ``(num_sims, num_games)`` arrays in schedule row order.
+        """
+        shape = (num_sims, len(schedule_df))
+        sim_1 = (
+            normals(shape) * schedule_df['points_stdev_1'].to_numpy(dtype=float)
+            + schedule_df['points_avg_1'].to_numpy(dtype=float)
         )
-        team2_records = schedule_sims[['num_sim', 'week', 'team_2', 'sim_2', 'win_2']].rename(
-            columns={'team_2': 'team', 'sim_2': 'points', 'win_2': 'wins'}
+        sim_2 = (
+            normals(shape) * schedule_df['points_stdev_2'].to_numpy(dtype=float)
+            + schedule_df['points_avg_2'].to_numpy(dtype=float)
         )
+        return sim_1, sim_2
 
-        standings = pd.concat([team1_records, team2_records], ignore_index=True)
+    def _calculate_regular_season_standings(
+        self, schedule_df: pd.DataFrame, sim_1: np.ndarray, sim_2: np.ndarray,
+    ) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+        """Win/loss records and rankings from simulated regular-season games.
 
-        standings = standings[standings['week'] < self.settings['playoff_start_week']]
+        Args:
+            schedule_df: Schedule with ``week``, ``team_1`` and ``team_2``.
+            sim_1, sim_2: ``(num_sims, num_games)`` scores, row-aligned with
+                ``schedule_df``.
 
+        Returns:
+            ``(standings, order, teams)``: ``standings`` has one row per
+            simulation and team, best finish first within each simulation;
+            ``order`` is the ``(num_sims, num_teams)`` team indices in that
+            same ranking; ``teams`` maps those indices to names.
+        """
+        regular = (schedule_df['week'] < self.settings['playoff_start_week']).to_numpy()
+        sim_1, sim_2 = sim_1[:, regular], sim_2[:, regular]
+        weeks = schedule_df['week'].to_numpy()[regular]
+        team_1 = schedule_df['team_1'].to_numpy()[regular]
+        team_2 = schedule_df['team_2'].to_numpy()[regular]
+
+        teams = np.unique(np.concatenate([team_1, team_2]))
+        idx_1 = np.searchsorted(teams, team_1)
+        idx_2 = np.searchsorted(teams, team_2)
+        num_sims, num_games = sim_1.shape
+
+        # (num_games, num_teams) 0/1 maps from games to the teams in them.
+        to_team_1 = np.zeros((num_games, len(teams)))
+        to_team_1[np.arange(num_games), idx_1] = 1.0
+        to_team_2 = np.zeros((num_games, len(teams)))
+        to_team_2[np.arange(num_games), idx_2] = 1.0
+
+        win_1 = (sim_1 > sim_2).astype(float)
+        win_2 = 1.0 - win_1
         if self.settings.get('median_win'):
             # Rank every team against the same week's scores in the same
             # simulation. Completed weeks carry their real scores in every
             # simulation, so they pay out the real median result.
-            median = standings.groupby(['num_sim', 'week'])['points'].transform('median')
-            standings['wins'] = (
-                standings['wins']
-                + (standings['points'] > median)
-                + 0.5 * (standings['points'] == median)
-            )
+            for week in np.unique(weeks):
+                games = np.flatnonzero(weeks == week)
+                median = np.median(
+                    np.concatenate([sim_1[:, games], sim_2[:, games]], axis=1),
+                    axis=1, keepdims=True,
+                )
+                for scores, wins in ((sim_1, win_1), (sim_2, win_2)):
+                    block = scores[:, games]
+                    wins[:, games] += (block > median) + 0.5 * (block == median)
 
-        standings = (
-            standings.groupby(['num_sim', 'team'])
-            .agg({'wins': 'sum', 'points': 'sum'})
-            .sort_values(['num_sim', 'wins', 'points'], ascending=[True, False, False])
-            .reset_index()
-        )
+        wins = win_1 @ to_team_1 + win_2 @ to_team_2
+        points = sim_1 @ to_team_1 + sim_2 @ to_team_2
 
-        standings['playoffs'] = 0
-        standings.loc[
-            standings.index % self.settings.get('num_teams', 12) < self.settings['num_playoff_teams'],
-            'playoffs'
-        ] = 1
+        # Rank by wins, then points (both descending). Stable sorts leave
+        # exact ties in team-name order.
+        by_points = np.argsort(-points, axis=1, kind='stable')
+        wins_in_points_order = np.take_along_axis(wins, by_points, axis=1)
+        by_wins = np.argsort(-wins_in_points_order, axis=1, kind='stable')
+        order = np.take_along_axis(by_points, by_wins, axis=1)
+
+        num_teams = len(teams)
+        standings = pd.DataFrame({
+            'num_sim': np.repeat(np.arange(num_sims), num_teams),
+            'team': teams[order].ravel(),
+            'wins': np.take_along_axis(wins, order, axis=1).ravel(),
+            'points': np.take_along_axis(points, order, axis=1).ravel(),
+        })
+
+        rank = np.tile(np.arange(num_teams), num_sims)
+        standings['playoffs'] = (rank < self.settings['num_playoff_teams']).astype(int)
 
         threshold = self.settings.get('playoff_win_threshold')
         if threshold:
@@ -508,165 +644,26 @@ class SeasonSimulator:
 
         standings['playoff_bye'] = 0
         if self.settings['num_playoff_teams'] == 6 and not threshold:
-            standings.loc[
-                standings.index % self.settings.get('num_teams', 12) < 2,
-                'playoff_bye'
-            ] = 1
+            standings['playoff_bye'] = (rank < 2).astype(int)
 
-        return standings
+        return standings, order, teams
 
-    def _simulate_6_team_wildcard(self, playoff_teams: pd.DataFrame,
-                                 projections_df: pd.DataFrame, week: int) -> pd.DataFrame:
-        """Simulate 6-team playoff wild card round (0-based seeds 2v5, 3v4, 0&1 get byes)."""
-        winners = []
-
-        for sim_num in playoff_teams['num_sim'].unique():
-            sim_teams = playoff_teams[playoff_teams['num_sim'] == sim_num].copy()
-            sim_teams = sim_teams.sort_values('seed').reset_index(drop=True)
-
-            week_projections = projections_df[projections_df['week'] == week]
-
-            if len(sim_teams) >= 2:
-                byes = sim_teams[sim_teams['seed'].isin([0, 1])]
-                winners.extend(byes.to_dict('records'))
-
-            if len(sim_teams) >= 6:
-                matchup1 = sim_teams[sim_teams['seed'].isin([2, 5])]
-                matchup2 = sim_teams[sim_teams['seed'].isin([3, 4])]
-
-                winner1 = self._simulate_matchup_with_projections(matchup1, week_projections)
-                winner2 = self._simulate_matchup_with_projections(matchup2, week_projections)
-
-                winners.extend([winner1, winner2])
-
-        return pd.DataFrame(winners)
-
-    def _simulate_6_team_semifinals(self, teams_df: pd.DataFrame,
-                                   projections_df: pd.DataFrame, week: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """Simulate 6-team playoff semifinals."""
-        winners = []
-        losers = []
-
-        for sim_num in teams_df['num_sim'].unique():
-            sim_teams = teams_df[teams_df['num_sim'] == sim_num].copy()
-
-            if self.settings.get('uses_playoff_reseeding', False):
-                sim_teams = sim_teams.sort_values('seed').reset_index(drop=True)
-
-            week_projections = projections_df[projections_df['week'] == week]
-
-            if len(sim_teams) >= 4:
-                sim_teams = sim_teams.reset_index(drop=True)
-                matchup1 = sim_teams.iloc[[0, 3]]
-                matchup2 = sim_teams.iloc[[1, 2]]
-
-                winner1 = self._simulate_matchup_with_projections(matchup1, week_projections)
-                winner2 = self._simulate_matchup_with_projections(matchup2, week_projections)
-
-                loser1 = matchup1[~matchup1.index.isin([matchup1[matchup1['team'] == winner1['team']].index[0]])].iloc[0].to_dict()
-                loser2 = matchup2[~matchup2.index.isin([matchup2[matchup2['team'] == winner2['team']].index[0]])].iloc[0].to_dict()
-
-                winners.extend([winner1, winner2])
-                losers.extend([loser1, loser2])
-
-        return pd.DataFrame(winners), pd.DataFrame(losers)
-
-    def _simulate_4_team_semifinals(self, playoff_teams: pd.DataFrame,
-                                   projections_df: pd.DataFrame, week: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """Simulate 4-team playoff semifinals."""
-        winners = []
-        losers = []
-
-        for sim_num in playoff_teams['num_sim'].unique():
-            sim_teams = playoff_teams[playoff_teams['num_sim'] == sim_num].copy()
-            sim_teams = sim_teams.sort_values('seed').reset_index(drop=True)
-
-            week_projections = projections_df[projections_df['week'] == week]
-
-            if len(sim_teams) >= 4:
-                matchup1 = sim_teams.iloc[[0, 3]]
-                matchup2 = sim_teams.iloc[[1, 2]]
-
-                winner1 = self._simulate_matchup_with_projections(matchup1, week_projections)
-                winner2 = self._simulate_matchup_with_projections(matchup2, week_projections)
-
-                loser1 = matchup1[~matchup1.index.isin([matchup1[matchup1['team'] == winner1['team']].index[0]])].iloc[0].to_dict()
-                loser2 = matchup2[~matchup2.index.isin([matchup2[matchup2['team'] == winner2['team']].index[0]])].iloc[0].to_dict()
-
-                winners.extend([winner1, winner2])
-                losers.extend([loser1, loser2])
-
-        return pd.DataFrame(winners), pd.DataFrame(losers)
-
-    def _simulate_championship(self, finalists: pd.DataFrame,
-                              projections_df: pd.DataFrame, week: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """Simulate championship round, returning (winners, runners_up) per sim."""
-        winners = []
-        runners_up = []
-
-        for sim_num in finalists['num_sim'].unique():
-            sim_teams = finalists[finalists['num_sim'] == sim_num]
-
-            if len(sim_teams) >= 2:
-                week_projections = projections_df[projections_df['week'] == week]
-                winner = self._simulate_matchup_with_projections(sim_teams, week_projections)
-                runner_up = sim_teams[sim_teams['team'] != winner['team']].iloc[0].to_dict()
-                winners.append(winner)
-                runners_up.append(runner_up)
-
-        return pd.DataFrame(winners), pd.DataFrame(runners_up)
-
-    def _simulate_third_place_game(self, semifinal_losers: pd.DataFrame,
-                                   projections_df: pd.DataFrame, week: int) -> pd.DataFrame:
-        """Simulate third place game between semifinal losers."""
-        third_place_winners = []
-
-        for sim_num in semifinal_losers['num_sim'].unique():
-            sim_teams = semifinal_losers[semifinal_losers['num_sim'] == sim_num]
-
-            if len(sim_teams) >= 2:
-                week_projections = projections_df[projections_df['week'] == week]
-                winner = self._simulate_matchup_with_projections(sim_teams, week_projections)
-                third_place_winners.append(winner)
-
-        return pd.DataFrame(third_place_winners)
-
-    def _simulate_matchup_with_projections(self, teams_df: pd.DataFrame,
-                                         week_projections: pd.DataFrame) -> Dict:
-        """Simulate a matchup between teams using week projections."""
-        teams = teams_df.copy()
-
-        projection_cols = ['points_avg', 'points_stdev', 'fantasy_team']
-        for col in projection_cols:
-            if col in teams.columns:
-                teams = teams.drop(columns=[col])
-
-        teams = pd.merge(teams, week_projections,
-                        left_on='team', right_on='fantasy_team', how='left')
-
-        teams['points_avg'] = teams['points_avg'].fillna(100.0)
-        teams['points_stdev'] = teams['points_stdev'].fillna(10.0)
-
-        teams['sim_score'] = (
-            np.random.normal(0, 1, len(teams)) * teams['points_stdev'] + teams['points_avg']
-        )
-
-        winner_idx = teams['sim_score'].idxmax()
-        return teams.loc[winner_idx].to_dict()
-
-    def _aggregate_schedule_results(self, schedule_sims: pd.DataFrame) -> pd.DataFrame:
-        """Aggregate simulated schedule results."""
-        return schedule_sims.groupby(['week', 'team_1', 'team_2']).agg({
-            'points_avg_1': 'mean',
-            'points_stdev_1': 'mean',
-            'points_avg_2': 'mean',
-            'points_stdev_2': 'mean',
-            'sim_1': 'mean',
-            'sim_2': 'mean',
-            'win_1': 'mean',
-            'win_2': 'mean'
-        }).round(3).reset_index()
-
+    def _aggregate_schedule_results(self, schedule_df: pd.DataFrame,
+                                    sim_1: np.ndarray,
+                                    sim_2: np.ndarray) -> pd.DataFrame:
+        """Average each game's projections, scores and outcomes over the simulations."""
+        results = schedule_df[[
+            'week', 'team_1', 'team_2',
+            'points_avg_1', 'points_stdev_1', 'points_avg_2', 'points_stdev_2',
+        ]].copy()
+        team_1_won = sim_1 > sim_2
+        results['sim_1'] = sim_1.mean(axis=0)
+        results['sim_2'] = sim_2.mean(axis=0)
+        results['win_1'] = team_1_won.mean(axis=0)
+        results['win_2'] = (~team_1_won).mean(axis=0)
+        # The same pairing can appear twice in a week; the mean of per-row
+        # means equals the pooled mean since every row has num_sims draws.
+        return results.groupby(['week', 'team_1', 'team_2']).mean().round(3).reset_index()
     def _aggregate_standings_results(self, standings_sims: pd.DataFrame,
                                    playoff_results: Optional[Dict],
                                    payouts: List[float]) -> pd.DataFrame:

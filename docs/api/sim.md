@@ -7,6 +7,10 @@ compare projection engines.
 
 ::: fantasyfb.sim.season_simulator.SeasonSimulator
 
+::: fantasyfb.sim.season_simulator.CommonRandomNumbers
+
+::: fantasyfb.analysis.sim_session.SeasonSimSession
+
 ## ScheduleManager
 
 ::: fantasyfb.sim.schedule_manager.ScheduleManager

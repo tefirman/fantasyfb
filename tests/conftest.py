@@ -56,3 +56,29 @@ def depth_charts(provider: NflreadpyProvider) -> pd.DataFrame:
 @pytest.fixture(scope="session")
 def team_aliases(provider: NflreadpyProvider) -> pd.DataFrame:
     return provider.team_aliases()
+
+
+@pytest.fixture(scope="module")
+def replay_league(request):
+    """A real ``League`` built offline from a recorded snapshot, with the
+    clock frozen as it was at record time for as long as the module runs.
+
+    Parametrize indirectly with a snapshot name prefix (``"generic"`` or
+    ``"yahoo"``); defaults to the first snapshot.
+    """
+    import snapshot_io
+
+    dirs = snapshot_io.snapshot_dirs()
+    prefix = getattr(request, "param", "")
+    matching = [d for d in dirs if d.name.startswith(prefix)]
+    if not matching:
+        pytest.skip("no recorded snapshots")
+    snapshot_dir = matching[0]
+    meta = snapshot_io.load_meta(snapshot_dir)
+    store = snapshot_io.SnapshotStore.load(snapshot_dir)
+    with snapshot_io.frozen_environment(snapshot_dir, meta["as_of"], offline=True):
+        yield snapshot_io.build_league(
+            meta,
+            snapshot_io.ReplayProxy(store, "provider"),
+            snapshot_io.ReplayProxy(store, "client"),
+        )

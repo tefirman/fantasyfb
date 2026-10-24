@@ -34,10 +34,20 @@ def _sims(weeks: list[list[float]], num_sim: int = 0) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def regular_season_standings(sim: SeasonSimulator, sims: pd.DataFrame) -> pd.DataFrame:
+    """Run the simulator's standings step on scores baked into a ``_sims`` frame."""
+    first = sims[sims["num_sim"] == sims["num_sim"].min()]
+    schedule = first[["week", "team_1", "team_2"]].reset_index(drop=True)
+    num_sims = sims["num_sim"].nunique()
+    sim_1 = sims["sim_1"].to_numpy(dtype=float).reshape(num_sims, len(schedule))
+    sim_2 = sims["sim_2"].to_numpy(dtype=float).reshape(num_sims, len(schedule))
+    return sim._calculate_regular_season_standings(schedule, sim_1, sim_2)[0]
+
+
 def _wins(sims: pd.DataFrame, **settings) -> dict:
     base = {"playoff_start_week": 99, "num_playoff_teams": 2, "num_teams": 4}
     sim = SeasonSimulator({**base, **settings})
-    standings = sim._calculate_regular_season_standings(sims)
+    standings = regular_season_standings(sim, sims)
     return standings.set_index("team")["wins"].to_dict()
 
 
@@ -77,7 +87,7 @@ class TestSimulatedStandings:
         ], ignore_index=True)
         sim = SeasonSimulator({"playoff_start_week": 99, "num_playoff_teams": 2,
                                "num_teams": 4, "median_win": True})
-        st = sim._calculate_regular_season_standings(sims)
+        st = regular_season_standings(sim, sims)
         by = st.set_index(["num_sim", "team"])["wins"]
         assert by[(0, "A")] == 2 and by[(1, "A")] == 0
 

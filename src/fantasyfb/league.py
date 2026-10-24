@@ -29,6 +29,7 @@ from .analysis.war_calculator import WARCalculator
 from .data.player_data_manager import PlayerDataManager
 from .scoring.lineup_optimizer import LineupOptimizer
 from .analysis.move_analyzer import MoveAnalyzer
+from .analysis.sim_session import SeasonSimSession
 from .cli import initialize_inputs
 from .data.nfl_provider import NFLDataProvider
 from .data.nflreadpy_provider import LIVE_WEEK_CACHE_SECONDS, NflreadpyProvider
@@ -484,13 +485,16 @@ class League:
                 self.schedule["week"] < self.settings["playoff_start_week"]
             ].reset_index(drop=True)
 
-    def starters(self, week: int):
+    def starters(self, week: int, teams: list = None):
         """
         Identifies which players should be started on each fantasy team
         based on fantasy point projections and available roster spots.
 
         Args:
             week: week for which to identify starters.
+            teams: names of the fantasy teams to set lineups for, defaults to
+                every team. Lineups are chosen team by team, so the others
+                are simply left unset (``starter`` False) rather than changed.
         """
         self.players = self.lineup_optimizer.set_optimal_lineup(
             self.players,
@@ -500,6 +504,7 @@ class League:
             self.latest_season,
             self.nfl_schedule,
             self.matchup_model,
+            teams=teams,
         )
 
     def _completed_nfl_teams(self, week: int) -> list:
@@ -689,14 +694,49 @@ class League:
             standings (pd.DataFrame): simulated results for the final season standings and playoff projections
         """
         self.client.refresh_oauth()
+        projections = self._season_projections()
+        return self._simulate_season(
+            projections, postseason, payouts, fixed_winner
+        )
 
+    def season_sim_session(self, postseason: bool = True, payouts: list = [800, 300, 100]):
+        """
+        Starts a session for simulating the season under many roster scenarios.
+
+        The current rosters are the baseline. Change ``players.fantasy_team``,
+        then ask the session for ``standings(changed_teams)``: only those
+        teams are re-projected and every run shares the same random draws,
+        which is much faster and less noisy than repeated ``season_sims``.
+
+        Args:
+            postseason (bool, optional): whether to simulate the postseason, defaults to True.
+            payouts (list, optional): list of prize amounts for first, second, and third, defaults to [800, 300, 100].
+
+        Returns:
+            SeasonSimSession
+        """
+        return SeasonSimSession(self, postseason, payouts)
+
+    def _season_projections(self, teams: list = None) -> pd.DataFrame:
+        """Weekly mean and variance of each team's starting lineup.
+
+        Args:
+            teams: names of the fantasy teams to project, defaults to all of
+                them. A team's lineup depends only on its own roster, so
+                projecting a subset gives the same rows for those teams as
+                projecting everyone.
+
+        Returns:
+            DataFrame with ``fantasy_team``, ``week``, ``points_avg``,
+            ``points_var`` and ``points_stdev``, ordered by week then team.
+        """
         # Calculate team projections for each week. points_var is derived
         # per-week on a copy (via _apply_live_week_actuals) rather than on
         # self.players, since a live-week lock zeroes points_stdev for some
         # starters and that must not leak into later weeks of this loop.
         projections_list = []
         for week in range(17):
-            self.starters(week + 1)
+            self.starters(week + 1, teams=teams)
             week_players = self._apply_live_week_actuals(self.players, week + 1)
             week_players["points_var"] = week_players.points_stdev**2
             week_projections = (
@@ -705,6 +745,10 @@ class League:
                 .sum()
                 .reset_index()
             )
+            if teams is not None:
+                week_projections = week_projections[
+                    week_projections.fantasy_team.isin(teams)
+                ]
             if not week_projections.empty:
                 week_projections["week"] = week + 1
                 projections_list.append(week_projections)
@@ -713,7 +757,22 @@ class League:
         else:
             projections = pd.DataFrame(columns=["fantasy_team", "week", "points_avg", "points_var"])
         projections["points_stdev"] = projections["points_var"] ** 0.5
-        
+        return projections
+
+    def _simulate_season(
+        self,
+        projections: pd.DataFrame,
+        postseason: bool,
+        payouts: list,
+        fixed_winner: list = None,
+        normals=None,
+    ):
+        """Runs the season simulation for already-computed team projections.
+
+        See ``season_sims`` for the arguments and return values; ``normals``
+        is an optional source of standard-normal draws (see
+        ``SeasonSimulator.simulate_season``).
+        """
         # Prepare league settings for simulator
         league_settings = {
             'playoff_start_week': self.settings['playoff_start_week'],
@@ -733,7 +792,8 @@ class League:
             num_sims=self.num_sims,
             include_playoffs=postseason,  # Re-enable playoff simulation
             payouts=payouts,
-            fixed_winner=fixed_winner
+            fixed_winner=fixed_winner,
+            normals=normals,
         )
         
         # Add back the 'me' column from original schedule

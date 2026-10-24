@@ -46,6 +46,18 @@ class _FakeLeague:
         })
         return None, standings
 
+    def season_sim_session(self, postseason=True, payouts=(800, 300, 100)):
+        league = self
+
+        class _Session:
+            def standings(self, changed_teams=None):
+                return league.season_sims(postseason, payouts)[1]
+
+            def restore(self):
+                pass
+
+        return _Session()
+
 
 def _players() -> pd.DataFrame:
     return pd.DataFrame({

@@ -18,7 +18,7 @@ from fantasyfb import League
 from fantasyfb.data import sleeper_client
 from fantasyfb.io.html_exporter import FantasyHtmlExporter
 from fantasyfb.sim.season_simulator import SeasonSimulator
-from test_median_win import _sims
+from test_median_win import _sims, regular_season_standings
 
 
 class TestDetection:
@@ -73,7 +73,7 @@ def _standings(threshold=None, median=True, **extra):
     if threshold:
         settings["playoff_win_threshold"] = threshold
     sim = SeasonSimulator(settings)
-    st = sim._calculate_regular_season_standings(_sims(WEEKS))
+    st = regular_season_standings(sim, _sims(WEEKS))
     return sim, st
 
 
