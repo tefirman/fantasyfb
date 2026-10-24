@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from fantasyfb_web import sleeper  # noqa: E402
 from fantasyfb_web.main import create_app  # noqa: E402
-from fantasyfb_web.pipeline import RunOptions, build_report, top_free_agents  # noqa: E402
+from fantasyfb_web.pipeline import RunOptions, build_report, free_agent_pool, top_free_agents  # noqa: E402
 
 LEAGUE_ID = "1367870433398915072"
 SUMMARY = {
@@ -197,6 +197,40 @@ def _players():
 def test_top_free_agents_ranks_by_war_and_skips_placeholders():
     names = top_free_agents(_players(), per_position=1)
     assert sorted(names) == ["QB Free", "WR Free 2"]
+
+
+def _sleeper_players():
+    """Free agents as a Sleeper league sees them: ranked players on an NFL team,
+    plus a retired name that still has search volume and no team."""
+    return pd.DataFrame({
+        "name": ["Mine", "Hot FA", "Warm FA", "Cold FA", "Retired Legend", "Unranked Team-less"],
+        "position": ["WR"] * 6,
+        "current_team": ["MIA", "DAL", "SF", "NYJ", None, None],
+        "fantasy_team": ["Alpha", None, None, None, None, None],
+        "WAR": [3.0, 1.5, 1.0, 0.8, 2.5, 2.0],
+        "until": [None] * 6,
+        "points_avg": [15.0, 12.0, 10.0, 9.0, 11.65, 11.65],
+        "sleeper_rank": [10.0, 40.0, 250.0, 700.0, 74.0, None],
+    })
+
+
+def test_sleeper_pool_requires_an_nfl_team():
+    assert free_agent_pool(_sleeper_players()).name.tolist() == ["Hot FA", "Warm FA", "Cold FA"]
+
+
+def test_other_platforms_keep_team_less_free_agents():
+    # no sleeper_rank column: Yahoo and generic pools are filtered as before
+    names = free_agent_pool(_players().assign(fantasy_team=None)).name.tolist()
+    assert "Average_WR" in names and len(names) == 6  # only the injured-out WR Hurt is dropped
+
+
+def test_top_free_agents_applies_the_rank_cutoff_and_ignores_retired_names():
+    assert top_free_agents(_sleeper_players(), per_position=5) == ["Hot FA", "Warm FA"]
+    assert top_free_agents(_sleeper_players(), per_position=5, max_rank=1000) == [
+        "Hot FA", "Warm FA", "Cold FA",
+    ]
+    # the retired name outranks everyone on WAR but never makes the pool
+    assert "Retired Legend" not in top_free_agents(_sleeper_players(), per_position=5, max_rank=1000)
 
 
 class StubLeague:

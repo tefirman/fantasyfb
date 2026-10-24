@@ -142,3 +142,32 @@ class TestGetRatesDeduplication:
         row = league.players[league.players["player_id_sr"] == pid].iloc[0]
         assert row["current_team"] == "NEW"
         assert row["string"] == 1.0
+
+
+class TestGetRatesCarriesSleeperRank:
+    """Sleeper's popularity rank has to survive the players rebuild, for real
+    players and for rookies who get the position-average projection."""
+
+    def test_rank_survives_for_real_players_and_rookies(
+        self, league: League, stats: pd.DataFrame
+    ) -> None:
+        pid = _pick_real_player(stats, "WR")
+        league.players = pd.DataFrame([
+            _build_players_row(pid, "WR", sleeper_rank=26.0),
+            _build_players_row("rookie_no_history", "WR", sleeper_rank=150.0),
+        ])
+
+        league.get_rates(reload=False)
+
+        ranks = league.players.set_index("player_id_sr")["sleeper_rank"]
+        assert ranks[pid] == 26.0
+        assert ranks["rookie_no_history"] == 150.0
+
+    def test_no_rank_column_is_added_when_the_platform_has_none(
+        self, league: League, stats: pd.DataFrame
+    ) -> None:
+        league.players = pd.DataFrame([_build_players_row(_pick_real_player(stats, "WR"), "WR")])
+
+        league.get_rates(reload=False)
+
+        assert "sleeper_rank" not in league.players.columns

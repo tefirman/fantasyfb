@@ -14,7 +14,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Callable, Tuple
 
-from fantasyfb.data.sleeper_client import UnsupportedScoringWarning
+from fantasyfb.data.sleeper_client import FREE_AGENT_RANK_CUTOFF, UnsupportedScoringWarning
 from fantasyfb.io.html_exporter import FantasyHtmlExporter
 
 # How many free agents per position the "adds" analysis re-simulates. Each one
@@ -62,20 +62,42 @@ def _default_league_factory(opts: RunOptions, auth=None):
     )
 
 
-def top_free_agents(players, per_position: int = ADDS_PER_POSITION) -> list:
+def free_agent_pool(players):
+    """
+    Unrostered players who could be added, with injured-for-the-season players left out.
+
+    Sleeper's player map also lists retired players (Brady, Brees, Gronkowski) who
+    still have search volume. They have no NFL team, so they can't score, but they
+    get a position-average projection and would crowd the list, so a Sleeper pool
+    (recognised by its ``sleeper_rank`` column) keeps only players on an NFL team.
+    """
+    pool = players.loc[
+        players.fantasy_team.isnull() & (players.until.isnull() | (players.until < 17))
+    ]
+    if "sleeper_rank" in pool.columns:
+        pool = pool.loc[pool.current_team.notnull()]
+    return pool
+
+
+def top_free_agents(
+    players, per_position: int = ADDS_PER_POSITION, max_rank: int = FREE_AGENT_RANK_CUTOFF,
+) -> list:
     """
     Names of the best available free agents by WAR, ``per_position`` per position.
 
     Sleeper exposes no roster percentages, so ``possible_adds``'s usual
     ``min_rostership`` filter can't narrow the pool. Without this its
     per-position ``head()`` takes whichever free agents happen to come first
-    in ``players``, not the best ones.
+    in ``players``, not the best ones. When the players carry Sleeper's
+    popularity rank (``sleeper_rank``), only players ranked ``max_rank`` or
+    better are considered: the rest include retired players who get the
+    position-average projection and would otherwise top the WAR ranking.
     """
-    available = players.loc[
-        players.fantasy_team.isnull()
-        & (players.until.isnull() | (players.until < 17))
-        & ~players.name.str.contains("Average_", na=False)
+    available = free_agent_pool(players).loc[
+        lambda df: ~df.name.str.contains("Average_", na=False)
     ]
+    if "sleeper_rank" in available.columns:
+        available = available.loc[available.sleeper_rank <= max_rank]
     return (
         available.sort_values("WAR", ascending=False)
         .groupby("position")
@@ -129,9 +151,7 @@ def build_report(
         .sort_values(by=["fantasy_team", "WAR"], ascending=[True, False])
     )
     exporter.export_rosters(rosters)
-    available = players.loc[
-        players.fantasy_team.isnull() & (players.until.isnull() | (players.until < 17))
-    ].sort_values(by="WAR", ascending=False)
+    available = free_agent_pool(players).sort_values(by="WAR", ascending=False)
     exporter.export_available(available.drop(columns=["fantasy_team"]))
 
     progress("Simulating the season")

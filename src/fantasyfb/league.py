@@ -366,6 +366,10 @@ class League:
             self.nfl_schedule,
         )
 
+        # Metadata a platform may supply beyond the common set (Sleeper's
+        # popularity rank), carried through the rebuilds below when present.
+        extra_cols = [c for c in ("sleeper_rank",) if c in self.players.columns]
+
         # Separate average players and real players
         league_avg = projections[projections['player_id_sr'].str.startswith('avg_')].copy()
         league_avg['string'] = 2.0
@@ -376,7 +380,7 @@ class League:
             self.players[[
                 "player_id_sr", "player_id", "status", "fantasy_team", "current_team",
                 "position", "string", "until", "bye_week", "pct_rostered", "selected_position"
-            ]].drop_duplicates(subset=["player_id_sr", "position"], keep="last"),
+            ] + extra_cols].drop_duplicates(subset=["player_id_sr", "position"], keep="last"),
             how="right",
             on=["player_id_sr", "position"],
         )
@@ -386,7 +390,8 @@ class League:
             left=by_player.loc[
                 by_player.num_games.isnull(),
                 ["player_id_sr", "player_id", "status", "fantasy_team", "current_team",
-                "position", "string", "until", "bye_week", "pct_rostered", "selected_position"],
+                "position", "string", "until", "bye_week", "pct_rostered", "selected_position"]
+                + extra_cols,
             ],
             right=league_avg[["position", "points_rate", "points_stdev",
                               "volume_rate", "efficiency_rate", "num_games"]],
@@ -401,7 +406,7 @@ class League:
             "position", "points_rate", "points_stdev", "num_games",
             "volume_rate", "efficiency_rate",
             "string", "until", "bye_week", "pct_rostered", "selected_position",
-        ]
+        ] + extra_cols
         by_player = pd.concat([
             by_player[keep_cols],
             rookies[keep_cols],
