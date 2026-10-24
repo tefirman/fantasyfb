@@ -16,6 +16,8 @@ import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
+from ..data.sleeper_client import FREE_AGENT_RANK_CUTOFF
+
 _TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
 # Columns that arrive as float (because of NaNs) but are whole numbers.
@@ -29,7 +31,7 @@ _ROSTER_COLS = [
 _AVAILABLE_COLS = [
     "name", "position", "current_team", "points_avg", "points_stdev",
     "WAR", "num_games", "matchup_factor", "status", "bye_week", "until",
-    "pct_rostered",
+    "pct_rostered", "sleeper_rank",
 ]
 _SCHEDULE_COLS = [
     "week", "team_1", "team_2", "win_1", "win_2", "points_avg_1",
@@ -106,6 +108,7 @@ class FantasyHtmlExporter:
         self.bestball = bestball
         self.notices = list(notices or [])
         self.median_win = median_win
+        self.fa_by_rank = False
         self.sfb = sfb
         if sfb:
             self.notices.append(
@@ -119,6 +122,7 @@ class FantasyHtmlExporter:
         self.config = {
             "drop_safe_threshold": drop_safe_threshold,
             "drop_depth_threshold": drop_depth_threshold,
+            "fa_rank_cutoff": FREE_AGENT_RANK_CUTOFF,
         }
         self.data = {
             "rosters": [], "available": [], "schedule": [], "standings": [],
@@ -132,6 +136,9 @@ class FantasyHtmlExporter:
     def export_available(self, available_df: pd.DataFrame):
         """Collect available (free agent) players."""
         self.data["available"] = _records(available_df, _AVAILABLE_COLS)
+        # Sleeper has no roster percentages; its popularity rank filters the
+        # tab instead, when the players carry one.
+        self.fa_by_rank = any(p.get("sleeper_rank") is not None for p in self.data["available"])
 
     def export_schedule(self, schedule_df: pd.DataFrame):
         """Collect the simulated league schedule."""
@@ -176,6 +183,7 @@ class FantasyHtmlExporter:
             "me": me,
             "bestball": self.bestball,
             "median_win": self.median_win,
+            "fa_by_rank": self.fa_by_rank,
             "sfb": self.sfb,
             "config": self.config,
         }

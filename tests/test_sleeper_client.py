@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import warnings
+import pytest
 from unittest.mock import Mock, patch
 
 from fantasyfb.data import sleeper_client
@@ -411,6 +412,31 @@ class TestSleeperClientGetFantasyTeams:
         client = sleeper_client.SleeperClient("123")
         teams = client.get_fantasy_teams()
         assert teams == [{"team_key": "9", "name": "Unknown", "manager": "Unknown"}]
+
+
+class TestSleeperRank:
+    @pytest.mark.parametrize("raw, expected", [
+        (8, 8.0), ("92", 92.0), (300.0, 300.0),
+        (9999999, None), (9_000_000, None), (0, None), (-1, None),
+        (None, None), ("", None), ("n/a", None),
+    ])
+    def test_rank_is_number_or_missing(self, raw, expected):
+        rank = sleeper_client._sleeper_rank(raw)
+        if expected is None:
+            assert rank != rank  # NaN
+        else:
+            assert rank == expected
+
+    @patch("fantasyfb.data.sleeper_client.fetch_all_players")
+    def test_players_carry_the_rank_with_unranked_as_missing(self, mock_fetch):
+        mock_fetch.return_value = {
+            "1": {"position": "QB", "full_name": "Ranked", "search_rank": 26},
+            "2": {"position": "QB", "full_name": "Placeholder", "search_rank": 9999999},
+            "3": {"position": "QB", "full_name": "Absent"},
+        }
+        players = sleeper_client.SleeperClient("123").get_all_players().set_index("name")
+        assert players.loc["Ranked", "sleeper_rank"] == 26
+        assert players["sleeper_rank"].isna()[["Placeholder", "Absent"]].all()
 
 
 class TestSleeperClientGetAllPlayers:

@@ -122,6 +122,15 @@ UNSUPPORTED_SCORING_KEYS = (
     "bonus_sack_2p", "bonus_tkl_10p",
 )
 
+# Sleeper has no ownership percentage, but its player map carries a
+# popularity ranking (search_rank, 1 = most searched) with a huge placeholder
+# for players nobody follows (retired players, long-gone practice squad
+# names). Used as a relevance stand-in for filtering free agents: roughly the
+# top 300 are the players worth looking at in a 12-team league.
+SEARCH_RANK_UNRANKED = 9_000_000
+FREE_AGENT_RANK_CUTOFF = 300
+
+
 # Plain-language names for the warning, which is shown to end users in the
 # web app's report as well as logged.
 _UNSUPPORTED_LABELS = {
@@ -368,6 +377,15 @@ def fetch_nfl_state() -> Dict:
     return resp.json()
 
 
+def _sleeper_rank(search_rank) -> float:
+    """Sleeper's search_rank, or NaN for unranked players (placeholder or missing)."""
+    try:
+        rank = float(search_rank)
+    except (TypeError, ValueError):
+        return float("nan")
+    return rank if 0 < rank < SEARCH_RANK_UNRANKED else float("nan")
+
+
 def fetch_all_players(
     cache_path: str = DEFAULT_PLAYERS_CACHE_PATH,
     max_age_seconds: int = PLAYERS_CACHE_TTL_SECONDS,
@@ -560,7 +578,8 @@ class SleeperClient(FantasyPlatformClient):
         Returns:
             DataFrame with columns: player_id, name, position,
             editorial_team_abbr, status, eligible_positions, player_id_sr,
-            yahoo_id. player_id_sr is populated from Sleeper's gsis_id
+            yahoo_id, sleeper_rank (Sleeper's popularity rank, 1 = most searched,
+            NaN when unranked). player_id_sr is populated from Sleeper's gsis_id
             when present, which is the same ID nflreadpy's rosters/stats/
             depth-charts feeds use -- so it can be joined directly against
             NflreadpyProvider output without a name-matching fallback.
@@ -586,11 +605,13 @@ class SleeperClient(FantasyPlatformClient):
                 "eligible_positions": info.get("fantasy_positions") or [position],
                 "player_id_sr": info.get("gsis_id"),
                 "yahoo_id": info.get("yahoo_id"),
+                "sleeper_rank": _sleeper_rank(info.get("search_rank")),
             })
 
         return pd.DataFrame(records, columns=[
             "player_id", "name", "position", "editorial_team_abbr",
             "status", "eligible_positions", "player_id_sr", "yahoo_id",
+            "sleeper_rank",
         ])
 
     def get_team_rosters(self, teams: List[Dict], week: int) -> pd.DataFrame:
