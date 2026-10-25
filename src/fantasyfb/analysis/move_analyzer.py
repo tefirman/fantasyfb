@@ -8,6 +8,8 @@ pickups, adds, drops, and trades on team performance.
 import datetime
 import pandas as pd
 
+from .sim_session import BestBallSession
+
 
 class MoveAnalyzer:
     """
@@ -22,6 +24,12 @@ class MoveAnalyzer:
             league: League instance with all the data and simulation methods
         """
         self.league = league
+
+    def _sim_session(self, postseason: bool, payouts: list, bestball: bool):
+        """Season-simulation session for scoring roster changes (see SeasonSimSession)."""
+        if bestball:
+            return BestBallSession(self.league, payouts)
+        return self.league.season_sim_session(postseason, payouts)
     
     def possible_pickups(
         self,
@@ -57,10 +65,8 @@ class MoveAnalyzer:
         """
         as_of = self.league.season * 100 + self.league.week
         self.league.client.refresh_oauth()
-        if bestball:
-            orig_standings = self.league.bestball_sims(payouts)
-        else:
-            orig_standings = self.league.season_sims(postseason, payouts)[1]
+        sims = self._sim_session(postseason, payouts, bestball)
+        orig_standings = sims.standings()
         base_cols = [
             "player_to_drop",
             "player_to_add",
@@ -125,10 +131,7 @@ class MoveAnalyzer:
                 self.league.players.loc[
                     self.league.players.name == free_agent, "fantasy_team"
                 ] = team_name
-                if bestball:
-                    new_standings = self.league.bestball_sims(payouts)
-                else:
-                    new_standings = self.league.season_sims(postseason, payouts)[1]
+                new_standings = sims.standings([team_name])
                 row = new_standings.loc[new_standings.team == team_name].copy()
                 row["player_to_drop"] = my_player
                 row["player_to_add"] = free_agent
@@ -178,6 +181,7 @@ class MoveAnalyzer:
             added_value = added_value.sort_values(
                 by="winner" if postseason else "playoffs", ascending=False
             )
+        sims.restore()
         return added_value
 
     def possible_adds(
@@ -214,10 +218,8 @@ class MoveAnalyzer:
         """
         as_of = self.league.season * 100 + self.league.week
         self.league.client.refresh_oauth()
-        if bestball:
-            orig_standings = self.league.bestball_sims(payouts)
-        else:
-            orig_standings = self.league.season_sims(postseason, payouts)[1]
+        sims = self._sim_session(postseason, payouts, bestball)
+        orig_standings = sims.standings()
         base_cols = [
             "player_to_add",
             "wins_avg",
@@ -256,10 +258,7 @@ class MoveAnalyzer:
             self.league.players.loc[
                 self.league.players.name == free_agent, "fantasy_team"
             ] = team_name
-            if bestball:
-                new_standings = self.league.bestball_sims(payouts)
-            else:
-                new_standings = self.league.season_sims(postseason, payouts)[1]
+            new_standings = sims.standings([team_name])
             row = new_standings.loc[new_standings.team == team_name].copy()
             row["player_to_add"] = free_agent
             row["position"] = possible.loc[
@@ -302,6 +301,7 @@ class MoveAnalyzer:
                     .sort_values(by="earnings", ascending=False)
                     .to_string(index=False)
                 )
+        sims.restore()
         return added_value
     
     def possible_drops(
@@ -331,10 +331,8 @@ class MoveAnalyzer:
             pd.DataFrame: dataframe containing the impact and value of every possible drop analyzed.
         """
         self.league.client.refresh_oauth()
-        if bestball:
-            orig_standings = self.league.bestball_sims(payouts)
-        else:
-            orig_standings = self.league.season_sims(postseason, payouts)[1]
+        sims = self._sim_session(postseason, payouts, bestball)
+        orig_standings = sims.standings()
         base_cols = [
             "player_to_drop",
             "wins_avg",
@@ -365,10 +363,7 @@ class MoveAnalyzer:
             players_to_drop = players_to_drop.loc[~players_to_drop.name.isin(exclude)]
         for my_player in players_to_drop.name:
             self.league.players.loc[self.league.players.name == my_player, "fantasy_team"] = None
-            if bestball:
-                new_standings = self.league.bestball_sims(payouts)
-            else:
-                new_standings = self.league.season_sims(postseason, payouts)[1]
+            new_standings = sims.standings([team_name])
             row = new_standings.loc[new_standings.team == team_name].copy()
             row["player_to_drop"] = my_player
             rows.append(row)
@@ -405,6 +400,7 @@ class MoveAnalyzer:
                     .sort_values(by="earnings", ascending=False)
                     .to_string(index=False)
                 )
+        sims.restore()
         return reduced_value
     
     def possible_trades(
@@ -460,10 +456,8 @@ class MoveAnalyzer:
             their_players = their_players.loc[their_players.name.isin(focus_on)]
         if their_players.name.isin(exclude).sum() > 0:
             their_players = their_players.loc[~their_players.name.isin(exclude)]
-        if bestball:
-            orig_standings = self.league.bestball_sims(payouts)
-        else:
-            orig_standings = self.league.season_sims(postseason, payouts)[1]
+        sims = self._sim_session(postseason, payouts, bestball)
+        orig_standings = sims.standings()
 
         # Make sure there are two teams and narrow down to that team!!!
         given_check = (
@@ -523,10 +517,7 @@ class MoveAnalyzer:
                 self.league.players.loc[
                     self.league.players.name == their_player, "fantasy_team"
                 ] = team_name
-                if bestball:
-                    new_standings = self.league.bestball_sims(payouts)
-                else:
-                    new_standings = self.league.season_sims(postseason, payouts)[1]
+                new_standings = sims.standings([team_name, their_team])
                 self.league.players.loc[
                     self.league.players.name == my_player, "fantasy_team"
                 ] = team_name
@@ -643,4 +634,5 @@ class MoveAnalyzer:
         added_value = added_value.sort_values(
             by="my_winner" if postseason else "playoffs", ascending=False
         )
+        sims.restore()
         return added_value

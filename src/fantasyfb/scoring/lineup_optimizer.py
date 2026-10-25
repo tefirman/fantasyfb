@@ -32,7 +32,7 @@ class LineupOptimizer:
         self.client = client
 
     def set_optimal_lineup(self, players, week, season, current_week, latest_season,
-                        nfl_schedule, matchup_model):
+                        nfl_schedule, matchup_model, teams=None):
         """
         Identifies which players should be started on each fantasy team
         based on fantasy point projections and available roster spots.
@@ -47,6 +47,10 @@ class LineupOptimizer:
             matchup_model: MatchupModel that produces the per-week
                 multiplicative factor on points_rate. Replaces V1's
                 basal/opp_elo/string_weight formula.
+            teams: Optional names of the fantasy teams to set lineups for.
+                Lineups are chosen team by team, so the rest are not
+                guaranteed to be optimized (usually left with ``starter``
+                False). Defaults to every team.
 
         Returns:
             DataFrame with players marked as starters and injury/game factors added
@@ -62,8 +66,13 @@ class LineupOptimizer:
                 players[col] = players[col].fillna(1.0)
         players["points_avg"] = players["points_rate"] * players["matchup_factor"]
         
-        # Sort by projected points
-        players = players.sort_values(by="points_avg", ascending=False)
+        # Sort by projected points. Players tied on points (typically several
+        # at exactly 0.0 on bye or when out) are ordered by player id so which
+        # one fills a lineup slot doesn't depend on the row order or the
+        # platform's sort implementation.
+        players = players.sort_values(
+            by=["points_avg", "player_id_sr"], ascending=[False, True], kind="stable"
+        )
         
         # Initialize starter and injury flags
         players["starter"] = False
@@ -72,14 +81,14 @@ class LineupOptimizer:
         # Handle current week with completed games
         if (week == as_of % 100 and as_of // 100 == latest_season and 
             datetime.datetime.now().month > 8):
-            players = self._handle_live_week_lineup(players, week, nfl_schedule, as_of)
+            players = self._handle_live_week_lineup(players, week, nfl_schedule, as_of, teams)
         # Handle future weeks
         elif week >= as_of % 100:
             players = self._set_future_week_lineup(players, week)
         
         return players
 
-    def _handle_live_week_lineup(self, players, week, nfl_schedule, as_of):
+    def _handle_live_week_lineup(self, players, week, nfl_schedule, as_of, teams=None):
         """Handle lineup setting for the current week with some completed games."""
         # Determine completed games
         cutoff = datetime.datetime.now()
@@ -95,6 +104,8 @@ class LineupOptimizer:
         
         # Set starters for each team
         for team in self.teams:
+            if teams is not None and team["name"] not in teams:
+                continue
             # Get already started players. IR/NA slots are excluded along
             # with BN: a player parked on IR whose NFL team has played is
             # not an active starter and must not be locked in (which would

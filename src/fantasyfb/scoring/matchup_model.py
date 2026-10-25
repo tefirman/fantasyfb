@@ -132,6 +132,8 @@ class MatchupModel:
         self._allowed_per_pos_mean: Dict[str, float] = {}
         self._allowed_per_pos_std: Dict[str, float] = {}
         self._allowed_table: Optional[pd.DataFrame] = None
+        self._allowed_lookup_cache: Dict[tuple, float] = {}
+        self._allowed_lookup_for: Optional[pd.DataFrame] = None
 
     # ------------------------------------------------------------------
     # Construction
@@ -279,19 +281,31 @@ class MatchupModel:
         )
 
         # Players whose teams aren't on the slate this week (bye, missing
-        # schedule entry) get a neutral 1.0 factor instead of NaN.
-        out["matchup_factor"] = [
-            self.factor(
-                position=row["position"],
-                team_implied_total=row.get("implied_total") or self._implied_total_mean,
-                opp_implied_total=row.get("opp_implied_total") or self._implied_total_mean,
-                opp_team=row.get("opp_team") or "",
-                string=row.get("string", 1.0) or 1.0,
-            )
-            if pd.notna(row.get("implied_total"))
-            else 1.0
-            for _, row in out.iterrows()
-        ]
+        # schedule entry) get a neutral 1.0 factor instead of NaN. The
+        # factor depends only on a handful of inputs shared by many
+        # players, so each distinct combination is computed once.
+        strings = out["string"] if "string" in out.columns else [1.0] * len(out)
+        opp_teams = out["opp_team"] if "opp_team" in out.columns else [None] * len(out)
+        seen: Dict[tuple, float] = {}
+        factors = []
+        for position, implied, opp_implied, opp_team, string in zip(
+            out["position"], out["implied_total"], out["opp_implied_total"],
+            opp_teams, strings,
+        ):
+            if not pd.notna(implied):
+                factors.append(1.0)
+                continue
+            key = (position, implied, opp_implied, opp_team, string)
+            if key not in seen:
+                seen[key] = self.factor(
+                    position=position,
+                    team_implied_total=implied or self._implied_total_mean,
+                    opp_implied_total=opp_implied or self._implied_total_mean,
+                    opp_team=opp_team or "",
+                    string=string or 1.0,
+                )
+            factors.append(seen[key])
+        out["matchup_factor"] = factors
         return out
 
     # ------------------------------------------------------------------
@@ -310,13 +324,26 @@ class MatchupModel:
         ):
             return 0.0
 
-        match = self._allowed_table[
-            (self._allowed_table["opponent"] == opp_team)
-            & (self._allowed_table["position"] == position)
-        ]
-        if match.empty:
+        allowed = self._allowed_lookup().get((opp_team, position))
+        if allowed is None:
             return 0.0
-        allowed = float(match.iloc[0]["allowed_per_game"])
         mean = self._allowed_per_pos_mean[position]
         std = self._allowed_per_pos_std[position]
         return (allowed - mean) / std
+
+    def _allowed_lookup(self) -> Dict[tuple, float]:
+        """``{(opponent, position): allowed_per_game}`` for ``_allowed_table``.
+
+        The first row wins when a pair repeats. Rebuilt whenever
+        ``_allowed_table`` is replaced.
+        """
+        if self._allowed_lookup_for is not self._allowed_table:
+            lookup: Dict[tuple, float] = {}
+            table = self._allowed_table
+            for opponent, position, allowed in zip(
+                table["opponent"], table["position"], table["allowed_per_game"]
+            ):
+                lookup.setdefault((opponent, position), float(allowed))
+            self._allowed_lookup_cache = lookup
+            self._allowed_lookup_for = table
+        return self._allowed_lookup_cache
