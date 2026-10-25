@@ -597,9 +597,15 @@ class League:
             return players
 
         locked = players.starter & players.player_id_sr.isin(real_points.index)
-        players.loc[locked, "points_avg"] = players.loc[
-            locked, "player_id_sr"
-        ].map(real_points)
+        # Nobody to lock happens whenever only some teams are projected (the
+        # move analysis projects one team) and none of theirs has played.
+        # Mapping an empty selection of string ids returns an empty string
+        # array on pandas 3.1, which can't be written into the float column.
+        if not locked.any():
+            return players
+        players.loc[locked, "points_avg"] = (
+            players.loc[locked, "player_id_sr"].map(real_points).astype(float)
+        )
         players.loc[locked, "points_stdev"] = 0.0
         return players
 
