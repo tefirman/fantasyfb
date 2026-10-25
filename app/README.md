@@ -79,8 +79,8 @@ The app is a single container. `app/Dockerfile` builds it from the repo root (`d
 | `YAHOO_REDIRECT_URI` | `https://localhost:8000/auth/yahoo/callback` | The public https callback. Must match a redirect URI registered on your Yahoo app exactly. |
 | `FANTASYFB_RUN_TIMEOUT` | `1200` | Seconds before a run is killed. |
 | `FANTASYFB_MAX_QUEUED` | `10` | Most runs queued or running at once. Each takes minutes, so a long queue is a long wait. |
-| `FANTASYFB_ENABLE_MOVES` | `0` | `1` turns on the adds and drops analyses. |
-| `FANTASYFB_ENABLE_ROOTING` | `0` | `1` turns on the rooting guide (per-game deltas). Off while it is too slow for the hosted app. |
+| `FANTASYFB_ENABLE_MOVES` | `1` | `0` turns off the adds and drops analyses. |
+| `FANTASYFB_ENABLE_ROOTING` | `1` | `0` turns off the rooting guide (per-game deltas). |
 | `FANTASYFB_COOKIE_SECURE` | `1` | `0` only for a deliberate plain-http dev setup. |
 
 **Limits built in:** each run executes in its own child process, so the timeout really stops it and a crash or out-of-memory kill fails only that run. Each visitor (the signed-in session for Yahoo, the IP address for Sleeper) can have one run in progress at a time.
@@ -125,11 +125,9 @@ doubles as an unguessable share link.
 - **`pipeline.py` duplicates the report half of `fantasyfb.league.main`.** It should move into the package
   as a reusable function both can call.
 - **Abuse protection is basic.** There is a queue cap, one run per visitor, and a per-run timeout, but no per-IP request rate limiting or CAPTCHA.
-- **Adds and drops are off by default.** They're slow (a full season sim per candidate) and give an edge over other
-  managers. The server refuses them and the page hides them unless `FANTASYFB_ENABLE_MOVES=1` is set. When on, Yahoo
+- **Adds, drops, and the rooting guide are on by default.** The faster simulator makes them practical. Set
+  `FANTASYFB_ENABLE_MOVES=0` or `FANTASYFB_ENABLE_ROOTING=0` and the server refuses them and the page hides them. Yahoo
   adds use the CLI's usual rostership filter, capped at 5 per position. Pickups and trades aren't exposed.
-- **The rooting guide is off by default.** It computes a delta for every game in the league, which is too slow on
-  Cloud Run for now. The server refuses it and the page hides it unless `FANTASYFB_ENABLE_ROOTING=1` is set.
 - **Best ball leagues** run as redraft; Sleeper's best ball flag isn't read yet.
 - **Adds** only re-simulate the top 5 free agents per position by WAR, because Sleeper has no roster
   percentages to filter on.

@@ -323,3 +323,18 @@ def test_rooting_guide_is_refused_unless_enabled():
     on = TestClient(create_app(runner=lambda o, p: "<html></html>", lookup=fake_lookup, enable_rooting=True))
     assert 'name="deltas"' in on.get("/").text
     assert on.post("/api/runs", json={"league_id": LEAGUE_ID, "team": "Alpha", "deltas": True}).status_code == 202
+
+
+def test_moves_and_rooting_default_on_and_env_turns_them_off(monkeypatch):
+    def page(**kw):
+        return TestClient(create_app(runner=lambda o, p: "<html></html>", lookup=fake_lookup, **kw)).get("/").text
+
+    monkeypatch.delenv("FANTASYFB_ENABLE_MOVES", raising=False)
+    monkeypatch.delenv("FANTASYFB_ENABLE_ROOTING", raising=False)
+    html = page()
+    assert 'name="adds"' in html and 'name="deltas"' in html
+
+    monkeypatch.setenv("FANTASYFB_ENABLE_MOVES", "0")
+    monkeypatch.setenv("FANTASYFB_ENABLE_ROOTING", "0")
+    html = page()
+    assert 'name="adds"' not in html and 'name="deltas"' not in html
