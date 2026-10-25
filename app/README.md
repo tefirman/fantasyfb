@@ -12,10 +12,12 @@ It lives in `app/`, outside `src/`, so it's never part of the PyPI package.
 ## Run it
 
 ```bash
-pip install -e . -r app/requirements.txt
+pip install -e . -r app/requirements.txt -c app/constraints.txt
 uvicorn fantasyfb_web.main:app --app-dir app --reload
 # open http://127.0.0.1:8000
 ```
+
+`app/constraints.txt` pins every dependency to the version the tests ran on, and the Docker image and the deploy workflow install with it. Without it the image would pick up each package's newest release on build day, which once broke live-week adds and drops (pandas 3.1.0). To upgrade, update `uv.lock`, then regenerate the file with the commands in its header, run the tests, and merge.
 
 Sleeper works as-is over plain http. Yahoo needs https (see below).
 
