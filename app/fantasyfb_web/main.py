@@ -113,13 +113,14 @@ def create_app(
     )
     sessions = sessions or SessionStore()
     if enable_moves is None:
-        # Adds and drops are slow (a full season sim per candidate) and give
-        # an edge over other managers, so the hosted app leaves them off.
-        enable_moves = os.environ.get("FANTASYFB_ENABLE_MOVES", "0") == "1"
+        # Move analysis got fast enough to run by default (candidates replay
+        # shared random draws and only re-project the changed team). Set to 0
+        # to turn it off on a constrained host.
+        enable_moves = os.environ.get("FANTASYFB_ENABLE_MOVES", "1") == "1"
     if enable_rooting is None:
-        # The rooting guide computes a delta for every game in the league,
-        # which is too slow for the hosted app until it is sped up.
-        enable_rooting = os.environ.get("FANTASYFB_ENABLE_ROOTING", "0") == "1"
+        # The rooting guide runs one season sim per team, which the faster
+        # simulator makes cheap. Set to 0 to turn it off on a constrained host.
+        enable_rooting = os.environ.get("FANTASYFB_ENABLE_ROOTING", "1") == "1"
     if cookie_secure is None:
         # Secure cookies need https, which Yahoo requires of the redirect
         # anyway. Only turn this off deliberately.
