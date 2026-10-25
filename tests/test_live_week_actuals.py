@@ -185,6 +185,20 @@ class TestApplyLiveWeekActuals:
         assert bench["points_avg"] == 5.0
         assert bench["points_stdev"] == 4.0
 
+    def test_no_locked_starters_leaves_projections_alone(self):
+        # A team projected on its own, none of whose starters has played:
+        # nothing is locked, and an empty string-id selection must not be
+        # written into the float points column (a TypeError on pandas 3.1).
+        provider = _FakeProvider(_box_score())
+        lg = _make_league(provider=provider, nfl_schedule=_schedule_done_and_late())
+        players = _players()
+        players["player_id_sr"] = players["player_id_sr"].astype("str")
+        players["starter"] = players.fantasy_team == "B"
+
+        out = _run_at(lg, _NOW, lambda: lg._apply_live_week_actuals(players, 3))
+
+        pd.testing.assert_frame_equal(out, players)
+
     def test_does_not_mutate_input(self):
         provider = _FakeProvider(_box_score())
         lg = _make_league(provider=provider, nfl_schedule=_schedule_done_and_late())
