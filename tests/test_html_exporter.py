@@ -209,6 +209,20 @@ class TestFantasyHtmlExporter:
         exporter.export_standings(_standings())
         assert _data(exporter.render())["deltas"] == []
 
+    def test_adds_position_filter_offers_flex(self, tmp_path):
+        # The filter runs client-side and there is no JS runtime in the tests,
+        # so check the report script's wiring: the FLEX button, and a FLEX
+        # match on RB/WR/TE only.
+        exp = FantasyHtmlExporter(str(tmp_path / "r.html"), week=3, me="Alpha")
+        exp.export_standings(_standings())
+        exp.export_analysis(pd.DataFrame({"player_to_add": ["A"], "position": ["WR"], "earnings": [1.0]}), "Adds")
+        html = exp.render()
+        assert 'var ADD_POS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"]' in html
+        assert 'var FLEX_POS = ["RB", "WR", "TE"]' in html
+        assert 'S.addPos === "FLEX" ? FLEX_POS.indexOf(a.position) >= 0' in html
+        # The Free agents filter is unchanged.
+        assert 'seg("fapos", POS.map' in html
+
     def test_unknown_analysis_name_raises(self, exporter):
         with pytest.raises(ValueError):
             exporter.export_analysis(pd.DataFrame(), "Deltas")

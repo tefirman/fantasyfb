@@ -13,6 +13,9 @@
   var OBJECTIVE = SFB ? "chance of 13+ wins" : "expected earnings";
   var ANALYSES = ["adds", "pickups", "drops", "trades"];
   var POS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"];
+  // The Adds filter also offers FLEX: the positions a W/R/T slot can take.
+  var FLEX_POS = ["RB", "WR", "TE"];
+  var ADD_POS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
   var ORD = { QB: 0, RB: 1, WR: 2, TE: 3, K: 4, DEF: 5 };
   var FA_LIMIT = 40;
 
@@ -438,7 +441,9 @@
   function posTag(name, key) { var p = byName[name]; return p ? pos(p[key || "position"]) : ""; }
 
   function addsView() {
-    var rows = D.adds.filter(function (a) { return S.addPos === "ALL" || a.position === S.addPos; })
+    var rows = D.adds.filter(function (a) {
+      return S.addPos === "ALL" || (S.addPos === "FLEX" ? FLEX_POS.indexOf(a.position) >= 0 : a.position === S.addPos);
+    })
       .sort(function (a, b) { return S.aDir * (num(a[S.aKey]) - num(b[S.aKey])); }).map(function (a) {
         var p = byName[a.player_to_add] || {};
         return "<tr><td><span style=\"font-weight:500\">" + esc(a.player_to_add) + "</span> " + sub(a.current_team) + "</td><td>" + pos(a.position) + "</td>" +
@@ -451,7 +456,7 @@
       ? '<div style="font-size:13px;padding:var(--space-3);border:1px dashed var(--color-divider);color:var(--color-neutral-800)">Add simulations were only run for ' + esc(D.me) + " this run — switch back to see your own team’s results.</div>" : "";
     return '<div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-4);flex-wrap:wrap">' +
       '<span style="font-size:13px;color:var(--color-neutral-700)">Adding a free agent to an open roster spot · no drop assumed</span>' +
-      seg("addpos", POS.map(function (p) { return [p, p === "ALL" ? "All" : p]; }), S.addPos, "add-pos") + "</div>" + other + table(820, head, rows);
+      seg("addpos", ADD_POS.map(function (p) { return [p, p === "ALL" ? "All" : p]; }), S.addPos, "add-pos") + "</div>" + other + table(820, head, rows);
   }
 
   function pickupsView() {
