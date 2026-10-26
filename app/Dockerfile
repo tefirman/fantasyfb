@@ -13,7 +13,8 @@ WORKDIR /home/user/fantasyfb
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 COPY app ./app
-RUN pip install . -r app/requirements.txt
+# Constraints pin every dependency to the versions the tests ran on (see the file's header).
+RUN pip install . -r app/requirements.txt -c app/constraints.txt
 
 # WORKDIR is created as root, but a run writes NewInjuries.csv/OldInjuries.csv
 # to the working directory, so the unprivileged user needs to own it.

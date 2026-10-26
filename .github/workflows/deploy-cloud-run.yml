@@ -45,7 +45,7 @@ jobs:
       - name: Install package + app deps
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]" -r app/requirements.txt
+          python -m pip install -e ".[dev]" -r app/requirements.txt -c app/constraints.txt
 
       # Hermetic (Sleeper and the simulation are stubbed). The full suite runs in test.yml.
       - name: Run app tests
