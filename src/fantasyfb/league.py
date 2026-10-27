@@ -10,6 +10,7 @@
 '''
 
 import pandas as pd
+import copy
 import os
 import numpy as np
 import datetime
@@ -194,6 +195,67 @@ class League:
         self.war_sim()
         self.get_schedule()
         self.starters(self.week)
+
+    def for_league(self, client: FantasyPlatformClient, name: str = None) -> "League":
+        """
+        Builds a League for another league on the same platform, reusing the
+        league-independent work already done here.
+
+        The NFL data, player pool, projections and matchup model are shared by
+        reference; only the settings, teams, rosters, schedule and lineups are
+        pulled from ``client``. That skips the data load and matchup fit that
+        dominate ``League()``, which matters when many leagues with the same
+        scoring and roster rules are analyzed back to back (e.g. the Scott
+        Fish Bowl field). ``war_sim`` is not rerun, so the ``war`` columns carry
+        this league's values rather than the new league's.
+
+        Args:
+            client: client for the other league.
+            name: team name identifying "my team" in the other league, if any.
+
+        Returns:
+            A new League; this one is left unchanged.
+
+        Raises:
+            ValueError: if the other league's scoring or roster spots differ,
+                since the shared projections would not apply to it.
+        """
+        other = copy.copy(self)
+        other.client = client
+        other.name = name
+        other.lg_id = getattr(client, "lg_id", None)
+        if hasattr(client, "my_team_name"):
+            client.my_team_name = name
+        other.my_team_key = client.get_my_team_key()
+        other.load_settings()
+        # Zero-weight categories are filled in lazily as stats load, so only
+        # the categories that actually score are compared.
+        scored = lambda scoring: {k: v for k, v in scoring.items() if v}
+        if (
+            scored(other.scoring) != scored(self.scoring)
+            or not other.roster_spots.equals(self.roster_spots)
+        ):
+            raise ValueError(
+                "Scoring or roster spots differ from the template league, so "
+                "its projections can't be reused; construct a League directly."
+            )
+        other.load_fantasy_teams()
+        other.schedule_manager = ScheduleManager(
+            client, other.teams, other.settings, other.lg_id, other.latest_season
+        )
+        roster_week = min(other.week, other.settings["end_week"])
+        selected = client.get_team_rosters(other.teams, roster_week)
+        other.players = pd.merge(
+            left=self.players.drop(columns=["fantasy_team", "selected_position"]),
+            right=selected,
+            how="left",
+            on="player_id",
+        )
+        other.lineup_optimizer = LineupOptimizer(other.roster_spots, other.teams, client)
+        other.move_analyzer = MoveAnalyzer(other)
+        other.get_schedule()
+        other.starters(other.week)
+        return other
 
     def load_settings(self, bestball: str = ""):
         """
