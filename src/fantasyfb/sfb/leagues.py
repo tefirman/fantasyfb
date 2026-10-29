@@ -16,6 +16,9 @@ _SLEEPER = re.compile(r"sleeper\.com/roster/(\d+)/(\d+)")
 _MFL = re.compile(r"myfantasyleague\.com/\d+/fantasy_box_score\?L=(\d+)&amp;F=(\d+)")
 _CELL = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
 _TAGS = re.compile(r"<script.*?</script>|<[^>]+>", re.S)
+_MANAGER = re.compile(r'class="full">([^<]*?)\s*<br>')
+_LEAGUE_NAME = re.compile(r'<span[^>]*>(.*?)</span>', re.S)
+_HANDLE = re.compile(r"\(@([^)]+)\)")
 
 
 def parse_leaderboard(page: str) -> pd.DataFrame:
@@ -23,8 +26,10 @@ def parse_leaderboard(page: str) -> pd.DataFrame:
 
     Returns:
         DataFrame with ``platform`` ("sleeper" or "mfl"), ``league_id``,
-        ``roster_id`` and the leaderboard's ``rank``, ``w``, ``l``, ``pf``,
-        ``avg`` and ``pa``. Rows without a Sleeper or MyFantasyLeague link are skipped.
+        ``roster_id``, the owner's ``manager`` name, Sleeper ``handle`` (empty when
+        the SFB couldn't match one), the SFB ``league_name``, and the leaderboard's
+        ``rank``, ``w``, ``l``, ``pf``, ``avg`` and ``pa``. Rows without a Sleeper
+        or MyFantasyLeague link are skipped.
     """
     if "<tbody>" not in page:
         raise ValueError("No leaderboard table found in the page")
@@ -39,7 +44,13 @@ def parse_leaderboard(page: str) -> pd.DataFrame:
             continue
         cells = [re.sub(r"\s+", " ", html.unescape(_TAGS.sub(" ", cell))).strip()
                  for cell in _CELL.findall(row)]
+        who = _MANAGER.search(row)
+        who = html.unescape(who.group(1)).strip() if who else ""
+        handle = _HANDLE.search(who)
+        league_name = _LEAGUE_NAME.search(row)
         rows.append(dict(platform=platform, league_id=league_id, roster_id=int(roster_id),
+                         manager=_HANDLE.sub("", who).strip(), handle=handle.group(1) if handle else "",
+                         league_name=html.unescape(_TAGS.sub("", league_name.group(1))).strip() if league_name else "",
                          rank=cells[0], w=cells[-5], l=cells[-4], pf=cells[-3], avg=cells[-2], pa=cells[-1]))
     return pd.DataFrame(rows)
 

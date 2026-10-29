@@ -187,13 +187,13 @@ def test_regular_season_results_include_median_wins():
 
 LEADERBOARD = """
 <table><thead><tr><td>Rank</td></tr></thead><tbody>
-<tr><td>1</td><td class="full">Sleeper</td><td class="full">Ann (@ann) <span>Team A</span>
+<tr><td>1</td><td class="full">Sleeper</td><td class="full">Ann Lee (@ann)	<br> <span class="text-link-gradient2">Sonic</span> --
 <a href="javascript:openWin('https://sleeper.com/roster/1111/3')">See Team</a></td>
 <td>9</td><td>3</td><td>1500.50</td><td>250.08</td><td>1200.00</td></tr>
-<tr><td>2</td><td class="full">Sleeper</td><td class="full">Bo <span>Team B</span>
+<tr><td>2</td><td class="full">Sleeper</td><td class="full">Bo Kim 	<br> <span class="text-link-gradient2">Sonic</span> --
 <a href="javascript:openWin('https://sleeper.com/roster/1111/4')">See Team</a></td>
 <td>8</td><td>4</td><td>1400.00</td><td>233.33</td><td>1250.00</td></tr>
-<tr><td>3</td><td class="full">MFL</td><td class="full">Cy <span>Team C</span>
+<tr><td>3</td><td class="full">MFL</td><td class="full">Cy Ng (@cy)	<br> <span class="text-link-gradient2">Zelda &amp; Co</span> --
 <a href="javascript:openWin('https://www43.myfantasyleague.com/2026/fantasy_box_score?L=555&amp;F=0004&amp;O=07&amp;TYPE=BOTH')">See Team</a></td>
 <td>7</td><td>5</td><td>1300.00</td><td>216.67</td><td>1300.00</td></tr>
 <tr><td>4</td><td>no link here</td></tr>
@@ -209,6 +209,14 @@ class TestLeaderboard:
         first = teams.iloc[0]
         assert (first["rank"], first.w, first.l, first.pf, first.avg, first.pa) == (
             "1", "9", "3", "1500.50", "250.08", "1200.00")
+        assert (first.manager, first.handle, first.league_name) == ("Ann Lee", "ann", "Sonic")
+
+    def test_a_team_without_a_matched_handle_has_an_empty_one(self):
+        second = parse_leaderboard(LEADERBOARD).iloc[1]
+        assert (second.manager, second.handle, second.league_name) == ("Bo Kim", "", "Sonic")
+
+    def test_html_entities_in_names_are_decoded(self):
+        assert parse_leaderboard(LEADERBOARD).iloc[2].league_name == "Zelda & Co"
 
     def test_league_list_counts_listed_teams(self):
         leagues = league_list(parse_leaderboard(LEADERBOARD))

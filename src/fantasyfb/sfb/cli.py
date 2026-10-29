@@ -2,7 +2,7 @@
 
     sfb-field leagues leaderboard.html --out-dir sfb/          # once per season
     sfb-field collect sfb/leagues.csv --out-dir sfb/data       # pulls Sleeper (~20 minutes)
-    sfb-field simulate sfb/data --out sfb/odds.csv             # offline, under a minute
+    sfb-field simulate sfb/data --out-dir sfb                  # offline, under a minute
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from .collect import DEFAULT_MAX_CALLS_PER_MINUTE, collect_field
 from .field import FieldData, simulate_field
@@ -44,8 +45,11 @@ def _simulate(args) -> int:
     cut = result.cut_line
     print(f"{len(result.teams)} teams, quota {result.quota}; points cut line {np.nanmean(cut):.0f} "
           f"(sd {np.nanstd(cut):.1f}, 5-95%: {np.nanpercentile(cut, 5):.0f}-{np.nanpercentile(cut, 95):.0f})")
-    result.teams.to_csv(args.out, index=False)
-    print(f"wrote {args.out}")
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    result.teams.to_csv(out_dir / "odds.csv", index=False)
+    pd.DataFrame({"num_sim": np.arange(len(cut)), "cut_line": cut}).to_csv(out_dir / "cut_line.csv", index=False)
+    print(f"wrote odds.csv and cut_line.csv to {out_dir}")
     return 0
 
 
@@ -70,7 +74,7 @@ def main(argv=None) -> int:
 
     simulate = commands.add_parser("simulate", help="simulate the field from collected data (offline)")
     simulate.add_argument("data", help="directory written by the collect step")
-    simulate.add_argument("--out", default="odds.csv")
+    simulate.add_argument("--out-dir", default=".", help="where to write odds.csv and cut_line.csv (default: here)")
     simulate.add_argument("--num-sims", type=int, default=1000)
     simulate.add_argument("--playoff-reps", type=int, default=20)
     simulate.add_argument("--seed", type=int, default=1)
