@@ -568,6 +568,40 @@ class SeasonSimulator:
         )
         return sim_1, sim_2
 
+    def schedule_with_projections(self, player_projections: pd.DataFrame,
+                                  schedule_df: pd.DataFrame) -> pd.DataFrame:
+        """Attach each team's weekly projection to every game on the schedule.
+
+        Completed games are locked to their real scores (standard deviation 0),
+        exactly as ``simulate_season`` does before drawing any scores.
+
+        Args:
+            player_projections: DataFrame with columns [fantasy_team, week, points_avg, points_stdev].
+            schedule_df: DataFrame with columns [week, team_1, team_2, score_1, score_2]
+
+        Returns:
+            The schedule with ``points_avg_1/2`` and ``points_stdev_1/2`` columns.
+        """
+        locked = self._lock_completed_weeks(player_projections, schedule_df)
+        return self._merge_schedule_projections(schedule_df, locked)
+
+    def regular_season_results(self, schedule_df: pd.DataFrame,
+                               sim_1: np.ndarray, sim_2: np.ndarray) -> pd.DataFrame:
+        """Wins and points for every team in every simulated regular season.
+
+        Args:
+            schedule_df: Schedule with ``week``, ``team_1`` and ``team_2``.
+            sim_1, sim_2: ``(num_sims, num_games)`` scores, row-aligned with
+                ``schedule_df``. Weeks from ``playoff_start_week`` on are ignored.
+
+        Returns:
+            DataFrame with one row per simulation and team: ``num_sim``,
+            ``team``, ``wins`` (including median-game wins when the league
+            awards them) and ``points``.
+        """
+        standings, _, _ = self._calculate_regular_season_standings(schedule_df, sim_1, sim_2)
+        return standings[['num_sim', 'team', 'wins', 'points']]
+
     def _calculate_regular_season_standings(
         self, schedule_df: pd.DataFrame, sim_1: np.ndarray, sim_2: np.ndarray,
     ) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:

@@ -61,6 +61,7 @@ fantasyfb = "fantasyfb.league:main"
 snake-draft = "fantasyfb.drafts.snake:main"
 salary-cap-draft = "fantasyfb.drafts.salary_cap:main"
 draft-prep = "fantasyfb.drafts.prep:main"
+sfb-field = "fantasyfb.sfb.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
