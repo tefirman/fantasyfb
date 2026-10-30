@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<meta name="description" content="Playoff odds for every Sleeper team in the Scott Fish Bowl, simulated across the whole field.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f5f2;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #75736d;
+  --line: #e3e1db;
+  --series: #2a78d6;
+  --series-soft: #cde2fb;
+  --focus: #1c5cab;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface: #1a1a19;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-3: #a09f95;
+    --line: #34332f;
+    --series: #3987e5;
+    --series-soft: #0d366b;
+    --focus: #86b6ef;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211;
+  --surface: #1a1a19;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --ink-3: #a09f95;
+  --line: #34332f;
+  --series: #3987e5;
+  --series-soft: #0d366b;
+  --focus: #86b6ef;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px 56px; }
+h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; }
+h2 { font-size: 1.1rem; margin: 0 0 8px; }
+.sub { color: var(--ink-2); margin: 0 0 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.muted { color: var(--ink-2); }
+.small { font-size: .875rem; }
+a { color: var(--series); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.search { position: relative; margin-bottom: 16px; }
+.search input {
+  width: 100%; font: inherit; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.results { list-style: none; margin: 4px 0 0; padding: 0; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.results[hidden] { display: none; }
+.results button {
+  display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 12px;
+  text-align: left; font: inherit; color: inherit; background: none; border: 0;
+  border-bottom: 1px solid var(--line); padding: 10px 14px; cursor: pointer;
+}
+.results li:last-child button { border-bottom: 0; }
+.results button:hover, .results button:focus-visible { background: var(--bg); }
+.results .name { font-weight: 600; overflow-wrap: anywhere; }
+.results .pct { color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.results .detail { display: block; color: var(--ink-2); font-size: .875rem; overflow-wrap: anywhere; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 12px 0 4px; }
+.tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.tile .num { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.tile .lab { color: var(--ink-2); font-size: .875rem; }
+
+.rounds { display: grid; grid-template-columns: minmax(0, 11rem) 1fr 4.5rem; gap: 6px 10px; align-items: center; margin-top: 8px; }
+.rounds .lab { font-size: .9rem; color: var(--ink-2); }
+.rounds .track { height: 14px; border-radius: 0 4px 4px 0; position: relative; }
+.rounds .bar { height: 100%; background: var(--series); border-radius: 0 4px 4px 0; min-width: 2px; }
+.rounds .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+@media (max-width: 520px) { .rounds { grid-template-columns: minmax(0, 8rem) 1fr 4rem; } }
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; white-space: normal; overflow-wrap: break-word; min-width: 7.5rem; }
+th { color: var(--ink-2); font-weight: 600; }
+tr.me td { background: var(--series-soft); }
+td button { font: inherit; color: var(--series); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; }
+
+.hist { width: 100%; height: auto; display: block; }
+.hist text { fill: var(--ink-2); font-size: 11px; }
+.hist .bar { fill: var(--series); }
+.hist .bar:hover, .hist .bar:focus { fill: var(--focus); }
+.hist .band { fill: var(--series-soft); }
+.hist .axis { stroke: var(--line); }
+.hist .med { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; }
+#hist-readout { min-height: 1.5em; color: var(--ink-2); font-size: .9rem; }
+details summary { cursor: pointer; color: var(--ink-2); }
+details p, details ul { color: var(--ink-2); font-size: .9rem; }
+footer { color: var(--ink-3); font-size: .85rem; margin-top: 24px; }
+.back { background: none; border: 0; color: var(--series); font: inherit; padding: 0; cursor: pointer; margin-bottom: 8px; }
+@media (max-width: 520px) {
+  .card { padding: 12px; }
+  th, td { padding: 6px 3px; font-size: .8rem; }
+  th:first-child, td:first-child { min-width: 5rem; overflow-wrap: anywhere; }
+}
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>__TITLE__</h1>
+  <p class="sub" id="subtitle"></p>
+
+  <div class="search">
+    <label for="q" class="small muted">Find a team by Sleeper handle, name, or league name</label>
+    <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. tefirman51" aria-controls="results">
+    <ul class="results" id="results" role="listbox" hidden></ul>
+  </div>
+
+  <section id="team" hidden></section>
+
+  <section id="field">
+    <div class="card">
+      <h2>How many points does it take to get in?</h2>
+      <p class="muted small" id="cut-summary"></p>
+      <svg class="hist" id="hist" role="img" aria-label="Distribution of the points needed to qualify on points across simulations"></svg>
+      <div id="hist-readout" aria-live="polite"></div>
+      <details><summary>Show as a table</summary><div class="scroll"><table id="hist-table"></table></div></details>
+    </div>
+    <div class="card">
+      <h2>Most likely champions</h2>
+      <div class="scroll"><table id="top"></table></div>
+    </div>
+  </section>
+
+  <details class="card" id="about">
+    <summary><strong>How these odds are made</strong></summary>
+    <ul>
+      <li>Every Sleeper league in the field is simulated through week 11, with the weekly median game, using fantasyfb's player projections. Completed weeks use real scores.</li>
+      <li>Each NFL player gets one random performance per week and simulation that every team starting him shares, so big games lift the whole field together instead of canceling out across leagues.</li>
+      <li>Teams with 13 or more wins qualify, and the rest of the field fills by points, scaled to the teams simulated (__QUOTA__ of __TEAMS__).</li>
+      <li>In weeks 12-17 a team's round score is its points-per-game average over every game played so far (times 1 in weeks 12-14, times 0.5 in weeks 15-17) plus that week's score. The field shrinks to __ROUND_SIZES__ teams, and the top week 17 score wins. These counts are scaled to the teams simulated.</li>
+      <li>The 17 MyFantasyLeague leagues are not simulated. Projections reflect rosters, injuries, and lineups when the data was collected, so they will move.</li>
+      <li>Seeding and tiebreakers are not described in the SFB rules, so exact ties are not specially handled. These are estimates, not official standings.</li>
+    </ul>
+  </details>
+
+  <footer>Built with <a href="https://github.com/tefirman/fantasyfb">fantasyfb</a>. Not affiliated with the Scott Fish Bowl. Data as of __GENERATED__.</footer>
+</main>
+
+<script id="odds-data" type="application/json">__DATA__</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("odds-data").textContent);
+  var T = D.teams, ROUNDS = D.rounds;
+  var byKey = {}, byLeague = {};
+  T.forEach(function (t, n) {
+    t.n = n;
+    byKey[t.l + "-" + t.i] = t;
+    (byLeague[t.l] = byLeague[t.l] || []).push(t);
+    t.search = [t.h, t.m, t.s, t.t].join(" ").toLowerCase();
+  });
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function pct(x) {
+    var p = x * 100;
+    if (p === 0) return "0%";
+    if (p < 0.1) return "<0.1%";
+    if (p < 10) return p.toFixed(1) + "%";
+    if (p > 99.5 && p < 100) return ">99.5%";
+    return Math.round(p) + "%";
+  }
+  function fmt(x, d) { return Number(x).toLocaleString(undefined, {maximumFractionDigits: d || 0, minimumFractionDigits: d || 0}); }
+  function title(t) { return t.t; }
+  function bare(s) { return s.replace(/^@/, "").toLowerCase(); }
+  function who(t) {
+    var parts = [];
+    if (t.h) parts.push("@" + t.h);
+    if (t.m) parts.push(t.m);
+    return parts.join(" · ");
+  }
+  function detail(t) {
+    return [who(t), t.s].filter(Boolean).join(" · ");
+  }
+
+  $("subtitle").textContent = "Through week " + D.through_week + " results · " + fmt(D.sims) + " simulations of " +
+    fmt(D.teams_count) + " teams in " + D.leagues_count + " Sleeper leagues";
+
+  // ---- search ----
+  var input = $("q"), list = $("results");
+  function search(text) {
+    var words = text.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    var hits = T.filter(function (t) { return words.every(function (w) { return t.search.indexOf(w) >= 0; }); });
+    hits.sort(function (a, b) {
+      var ea = a.h.toLowerCase() === words.join(" ") ? 0 : 1, eb = b.h.toLowerCase() === words.join(" ") ? 0 : 1;
+      return ea - eb || b.q - a.q;
+    });
+    return hits.slice(0, 12);
+  }
+  function renderResults() {
+    var hits = search(input.value);
+    list.replaceChildren();
+    list.hidden = !input.value.trim();
+    if (!hits.length) {
+      if (input.value.trim()) { var li = el("li"); var b = el("div", "muted small", "No matching team. The 17 MyFantasyLeague leagues are not included."); b.style.padding = "10px 14px"; li.appendChild(b); list.appendChild(li); }
+      return;
+    }
+    hits.forEach(function (t) {
+      var li = el("li"), b = el("button"), left = el("span"), n = el("span", "name", title(t));
+      left.appendChild(n);
+      var d = el("span", "detail", detail(t));
+      left.appendChild(d);
+      b.appendChild(left);
+      b.appendChild(el("span", "pct", pct(t.q) + " to qualify"));
+      b.type = "button";
+      b.addEventListener("click", function () { show(t, true); });
+      li.appendChild(b); list.appendChild(li);
+    });
+  }
+  input.addEventListener("input", renderResults);
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { var h = search(input.value); if (h.length) show(h[0], true); }
+    if (e.key === "Escape") { list.hidden = true; }
+  });
+
+  // ---- team view ----
+  function tile(num, lab) { var d = el("div", "tile"); d.appendChild(el("div", "num", num)); d.appendChild(el("div", "lab", lab)); return d; }
+  function show(t, push) {
+    list.hidden = true; input.value = "";
+    if (push) history.pushState(null, "", "#" + t.l + "-" + t.i);
+    var root = $("team");
+    root.replaceChildren();
+
+    var back = el("button", "back", "← Field overview"); back.type = "button";
+    back.addEventListener("click", function () { history.pushState(null, "", location.pathname + location.search); route(); });
+    root.appendChild(back);
+
+    var card = el("div", "card");
+    card.appendChild(el("h2", null, title(t)));
+    var meta = el("p", "muted small");
+    meta.appendChild(document.createTextNode(detail(t) + (detail(t) ? " · " : "")));
+    var link = el("a", null, "Sleeper league"); link.href = "https://sleeper.com/leagues/" + encodeURIComponent(t.l); link.rel = "noopener";
+    meta.appendChild(link);
+    card.appendChild(meta);
+
+    var tiles = el("div", "tiles");
+    tiles.appendChild(tile(pct(t.q), "Make the playoffs"));
+    tiles.appendChild(tile(pct(t.r[3]), "Reach the semi-finals"));
+    tiles.appendChild(tile(pct(t.r[4]), "Reach the finals"));
+    tiles.appendChild(tile(pct(t.w), "Win the title"));
+    card.appendChild(tiles);
+    root.appendChild(card);
+
+    var chart = el("div", "card");
+    chart.appendChild(el("h2", null, "Chance to start each round"));
+    var grid = el("div", "rounds");
+    var vals = [t.q].concat(t.r).concat([t.w]);
+    D.round_labels.forEach(function (lab, k) {
+      grid.appendChild(el("div", "lab", lab));
+      var track = el("div", "track"), bar = el("div", "bar");
+      bar.style.width = Math.max(0, Math.min(100, vals[k] * 100)) + "%";
+      track.appendChild(bar); grid.appendChild(track);
+      grid.appendChild(el("div", "val", pct(vals[k])));
+    });
+    chart.appendChild(grid);
+    var tot = el("p", "muted small", "Projected regular season: " + fmt(t.g, 1) + " wins (including median games) and " + fmt(t.p, 1) + " points per game.");
+    tot.style.marginBottom = "0"; tot.style.marginTop = "12px";
+    chart.appendChild(tot);
+    root.appendChild(chart);
+
+    var mates = (byLeague[t.l] || []).slice().sort(function (a, b) { return b.q - a.q; });
+    var lg = el("div", "card");
+    lg.appendChild(el("h2", null, "Your league"));
+    var wrap = el("div", "scroll"), tbl = el("table");
+    var head = el("tr");
+    ["Team", "Playoffs", "Semis", "Finals", "Title"].forEach(function (h) { head.appendChild(el("th", null, h)); });
+    tbl.appendChild(head);
+    mates.forEach(function (m) {
+      var tr = el("tr", m === t ? "me" : ""), td = el("td"), b = el("button", null, title(m)); b.type = "button";
+      b.addEventListener("click", function () { show(m, true); });
+      td.appendChild(b); tr.appendChild(td);
+      [m.q, m.r[3], m.r[4], m.w].forEach(function (v) { tr.appendChild(el("td", null, pct(v))); });
+      tbl.appendChild(tr);
+    });
+    wrap.appendChild(tbl); lg.appendChild(wrap); root.appendChild(lg);
+
+    root.hidden = false; $("field").hidden = true;
+    window.scrollTo(0, 0);
+  }
+  function route() {
+    var t = byKey[decodeURIComponent(location.hash.slice(1))];
+    if (t) { show(t, false); } else { $("team").hidden = true; $("field").hidden = false; histogram(); }
+  }
+  window.addEventListener("popstate", route);
+
+  // ---- field view ----
+  function histogram() {
+    var h = D.cut, svg = $("hist"), NS = "http://www.w3.org/2000/svg", readout = $("hist-readout");
+    var W = Math.max(280, Math.round(svg.getBoundingClientRect().width) || 720);
+    var H = Math.max(170, Math.min(240, Math.round(W * 0.32))), L = 8, R = 8, B = 40, TOP = 8;
+    svg.replaceChildren();
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    var max = Math.max.apply(null, h.counts), n = h.counts.length;
+    var x = function (v) { return L + (v - h.start) / (h.width * n) * (W - L - R); };
+    var y = function (c) { return TOP + (H - B - TOP) * (1 - c / max); };
+    function add(tag, attrs, text) {
+      var e = document.createElementNS(NS, tag);
+      Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+      if (text) e.textContent = text;
+      svg.appendChild(e); return e;
+    }
+    add("rect", {"class": "band", x: x(h.p5), y: TOP, width: x(h.p95) - x(h.p5), height: H - B - TOP});
+    var bw = (W - L - R) / n;
+    h.counts.forEach(function (c, k) {
+      if (!c) return;
+      var lo = h.start + k * h.width, rect = add("rect", {"class": "bar", x: x(lo) + 1, y: y(c), width: Math.max(1, bw - 2), height: H - B - y(c), rx: 2, tabindex: 0});
+      var msg = fmt(lo) + " to " + fmt(lo + h.width) + " points: " + fmt(c / h.total * 100, 1) + "% of simulations";
+      rect.addEventListener("pointerenter", function () { readout.textContent = msg; });
+      rect.addEventListener("focus", function () { readout.textContent = msg; });
+    });
+    add("line", {"class": "axis", x1: L, x2: W - R, y1: H - B, y2: H - B});
+    add("line", {"class": "med", x1: x(h.p50), x2: x(h.p50), y1: TOP, y2: H - B});
+    var perLabel = Math.max(1, Math.ceil(70 / bw)), step = h.width * perLabel;
+    for (var v = Math.ceil(h.start / step) * step; v <= h.start + h.width * n; v += step) {
+      add("text", {x: x(v), y: H - B + 16, "text-anchor": "middle"}, fmt(v));
+    }
+    add("text", {x: W / 2, y: H - 6, "text-anchor": "middle"}, "Points needed to qualify on points, 11 regular-season weeks");
+  }
+  function histogramText() {
+    var h = D.cut;
+    $("cut-summary").textContent = "Teams with 13 or more wins qualify automatically; the rest of the field fills by points. Across simulations the last team in typically needs about " +
+      fmt(h.p50) + " points (" + fmt(h.p50 / D.reg_weeks, 1) + " per game), and 9 times out of 10 between " + fmt(h.p5) + " and " + fmt(h.p95) +
+      ". The dashed line is the middle value and the shaded band is that 90% range.";
+    var tbl = $("hist-table"), head = el("tr");
+    ["Points", "Share of simulations"].forEach(function (c) { head.appendChild(el("th", null, c)); });
+    tbl.appendChild(head);
+    h.counts.forEach(function (c, k) {
+      if (!c) return;
+      var tr = el("tr"), lo = h.start + k * h.width;
+      tr.appendChild(el("td", null, fmt(lo) + " to " + fmt(lo + h.width)));
+      tr.appendChild(el("td", null, fmt(c / h.total * 100, 1) + "%"));
+      tbl.appendChild(tr);
+    });
+  }
+  function topTable() {
+    var tbl = $("top"), head = el("tr");
+    ["Team", "Playoffs", "Semis", "Finals", "Title"].forEach(function (c) { head.appendChild(el("th", null, c)); });
+    tbl.appendChild(head);
+    T.slice().sort(function (a, b) { return b.w - a.w; }).slice(0, 25).forEach(function (t) {
+      var tr = el("tr"), td = el("td"), b = el("button", null, title(t) + (t.h && bare(t.h) !== bare(t.t) ? " (@" + t.h + ")" : "")); b.type = "button";
+      b.addEventListener("click", function () { show(t, true); });
+      td.appendChild(b); tr.appendChild(td);
+      [t.q, t.r[3], t.r[4], t.w].forEach(function (v) { tr.appendChild(el("td", null, pct(v))); });
+      tbl.appendChild(tr);
+    });
+  }
+  histogramText(); histogram(); topTable(); route();
+  var resizing;
+  window.addEventListener("resize", function () { clearTimeout(resizing); resizing = setTimeout(function () { if (!$("field").hidden) histogram(); }, 120); });
+})();
+</script>
+</body>
+</html>

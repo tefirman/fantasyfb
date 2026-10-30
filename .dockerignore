@@ -10,3 +10,4 @@
 **/*.pyc
 **/*.egg-info
 app/tests
+app/sfb_site

@@ -16,6 +16,7 @@ on:
     paths:
       - "src/**"
       - "app/**"
+      - "!app/sfb_site/**"
       - "pyproject.toml"
       - ".github/workflows/deploy-cloud-run.yml"
   workflow_dispatch:
