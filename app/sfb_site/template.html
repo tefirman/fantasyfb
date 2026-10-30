@@ -135,6 +135,8 @@ footer { color: var(--ink-3); font-size: .85rem; margin-top: 24px; }
 .teamplot .cutband { fill: var(--alert); opacity: .08; }
 .teamplot .cutlab { fill: var(--alert); }
 .teamplot circle.t { opacity: .75; }
+.teamplot circle.mine { fill: none; stroke: var(--focus); stroke-width: 3; pointer-events: none; }
+.teamplot .minelab { fill: var(--focus); font-weight: 600; font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .teamplot circle.pick { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
 .tip { position: absolute; z-index: 2; pointer-events: none; background: var(--surface); color: var(--ink);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: .85rem; line-height: 1.35;
@@ -304,6 +306,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
     list.hidden = true; input.value = "";
     if (push) history.pushState(null, "", "#" + t.l + "-" + t.i);
     var root = $("team");
+    $("field").appendChild(plotCard);  // park the shared scatter before the team view is rebuilt
     root.replaceChildren();
 
     var back = el("button", "back", "← Field overview"); back.type = "button";
@@ -357,14 +360,20 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
       [m.q, m.r[3], m.r[4], m.w].forEach(function (v) { tr.appendChild(el("td", null, pct(v))); });
       tbl.appendChild(tr);
     });
-    wrap.appendChild(tbl); lg.appendChild(wrap); root.appendChild(lg);
+    wrap.appendChild(tbl); lg.appendChild(wrap);
+    root.appendChild(plotCard); root.appendChild(lg);
 
     root.hidden = false; $("field").hidden = true;
+    plotTeam = t; teamScatter();
     window.scrollTo(0, 0);
   }
   function route() {
     var t = byKey[decodeURIComponent(location.hash.slice(1))];
-    if (t) { show(t, false); } else { $("team").hidden = true; $("field").hidden = false; histogram(); teamScatter(); scatter(); }
+    if (t) { show(t, false); } else {
+      $("team").hidden = true; $("field").hidden = false;
+      $("field").insertBefore(plotCard, champCard); plotTeam = null;
+      histogram(); teamScatter(); scatter();
+    }
   }
   window.addEventListener("popstate", route);
 
@@ -431,6 +440,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
   }
 
   // ---- players ----
+  var plotCard = $("teamplot-card"), champCard = $("top").closest(".card"), plotTeam = null;
   var P = D.players || [], playerSort = "q", playerAll = false;
   function hex(c) { c = c.trim().replace("#", ""); return [0, 2, 4].map(function (i) { return parseInt(c.substr(i, 2), 16); }); }
   function ramp(f) {
@@ -497,6 +507,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
 
   // ---- every team ----
   function teamScatter() {
+    var mine = plotTeam;
     var svg = $("teamplot"), NS = "http://www.w3.org/2000/svg", tip = $("teamtip"), readout = $("teamplot-readout");
     var W = Math.max(280, Math.round(svg.getBoundingClientRect().width) || 720), H = Math.max(280, Math.min(460, Math.round(W * 0.65)));
     var L = 52, R = 12, TOP = 10, B = 44, rw = D.reg_weeks, cut = D.cut;
@@ -527,6 +538,11 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
     add("line", {"class": "cutoff", x1: L, x2: W - R, y1: y(cut.p50), y2: y(cut.p50)});
     add("text", {"class": "cutlab", x: x(D.auto_wins) + 4, y: TOP + 10}, D.auto_wins + " wins: in");
     add("text", {"class": "cutlab", x: W - R - 2, y: y(cut.p50) - 5, "text-anchor": "end"}, "points cut line, about " + fmt(cut.p50));
+    if (mine) {
+      var mx = x(mine.g), my = y(mine.p * rw);
+      add("circle", {"class": "mine", cx: mx, cy: my, r: 9});
+      add("text", {"class": "minelab", x: Math.min(mx + 13, W - R - 60), y: my - 12}, "This team");
+    }
     var pick = add("circle", {"class": "pick", r: 6, cx: -10, cy: -10});
     function nearest(px, py) {
       var best = null, bd = 14 * 14;
@@ -589,7 +605,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
   }
   histogramText(); histogram(); topTable(); players(); teamScatter(); route();
   var resizing;
-  window.addEventListener("resize", function () { clearTimeout(resizing); resizing = setTimeout(function () { if (!$("field").hidden) { histogram(); teamScatter(); scatter(); } }, 120); });
+  window.addEventListener("resize", function () { clearTimeout(resizing); resizing = setTimeout(function () { if (!$("field").hidden) { histogram(); scatter(); } teamScatter(); }, 120); });
 })();
 </script>
 </body>
