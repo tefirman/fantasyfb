@@ -69,6 +69,7 @@ def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, thr
         "teams_count": len(teams),
         "leagues_count": int(odds.league_id.nunique()),
         "reg_weeks": rules.regular_season_weeks,
+        "auto_wins": rules.auto_wins,
         "cut": {"start": start, "width": bin_width, "counts": counts.tolist(), "total": int(len(cut)),
                 "p5": round(float(p5), 1), "p50": round(float(p50), 1), "p95": round(float(p95), 1)},
         "round_labels": ["Make the playoffs"] + [f"Reach {r}" for r in rounds[1:]] + ["Win the title"],

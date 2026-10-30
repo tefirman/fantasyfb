@@ -17,6 +17,7 @@
   --series: #2a78d6;
   --series-soft: #cde2fb;
   --focus: #1c5cab;
+  --alert: #c8372d;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -30,6 +31,7 @@
     --series: #3987e5;
     --series-soft: #0d366b;
     --focus: #86b6ef;
+  --alert: #f08a80;
   }
 }
 :root[data-theme="dark"] {
@@ -43,6 +45,7 @@
   --series: #3987e5;
   --series-soft: #0d366b;
   --focus: #86b6ef;
+  --alert: #f08a80;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -125,6 +128,14 @@ footer { color: var(--ink-3); font-size: .85rem; margin-top: 24px; }
 .scatter .hit { fill: transparent; cursor: pointer; }
 .scatter .hit:hover + .ring, .scatter .hit:focus + .ring { stroke: var(--ink); }
 .scatter .ring { fill: none; stroke: transparent; stroke-width: 2; pointer-events: none; }
+.teamplot { width: 100%; height: auto; display: block; }
+.teamplot text { fill: var(--ink-2); font-size: 11px; }
+.teamplot .axis { stroke: var(--line); }
+.teamplot .cutoff { stroke: var(--alert); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.teamplot .cutband { fill: var(--alert); opacity: .08; }
+.teamplot .cutlab { fill: var(--alert); }
+.teamplot circle.t { opacity: .75; }
+.teamplot circle.pick { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
 .tip { position: absolute; z-index: 2; pointer-events: none; background: var(--surface); color: var(--ink);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: .85rem; line-height: 1.35;
   box-shadow: 0 2px 10px rgba(0,0,0,.18); max-width: 16rem; }
@@ -159,6 +170,16 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
       <div id="hist-readout" aria-live="polite"></div>
       <details><summary>Show as a table</summary><div class="scroll"><table id="hist-table"></table></div></details>
     </div>
+    <div class="card" id="teamplot-card">
+      <h2>Where every team stands</h2>
+      <p class="muted small">Every team in the field: projected wins against projected season points, colored by its chance of making the playoffs. Teams to the right of the vertical red line (13 wins) or above the horizontal red line (the points cut line) are on track to qualify. Hover or tap a dot for details, and click it to open the team.</p>
+      <div class="plot-wrap">
+        <svg class="teamplot" id="teamplot" role="img" aria-label="Every team's projected wins against projected season points"></svg>
+        <div class="tip" id="teamtip" role="status" hidden></div>
+      </div>
+      <div class="legend"><span>Chance of making the playoffs:</span><span>0%</span><span class="ramp" id="teamramp"></span><span>100%</span></div>
+      <div id="teamplot-readout" class="small muted" aria-live="polite"></div>
+    </div>
     <div class="card">
       <h2>Most likely champions</h2>
       <div class="scroll"><table id="top"></table></div>
@@ -184,6 +205,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
       <li>Each NFL player gets one random performance per week and simulation that every team starting him shares, so big games lift the whole field together instead of canceling out across leagues.</li>
       <li>Teams with 13 or more wins qualify, and the rest of the field fills by points, scaled to the teams simulated (__QUOTA__ of __TEAMS__).</li>
       <li>In weeks 12-17 a team's round score is its points-per-game average over every game played so far (times 1 in weeks 12-14, times 0.5 in weeks 15-17) plus that week's score. The field shrinks to __ROUND_SIZES__ teams, and the top week 17 score wins. These counts are scaled to the teams simulated.</li>
+      <li>Each dot under "Where every team stands" is one team. The dashed red lines mark 13 wins, which qualifies a team automatically, and the points cut line, with the shaded band covering the 5th to 95th percentile of that line across simulations. Wins and points are simulation averages, so teams near a line can go either way.</li>
       <li>A player's swing reads the shared draws back as an experiment: in the simulations where he has a better stretch, how much more often do the teams starting him do well? It is measured for a one-standard-deviation better stretch. Qualification swing covers the remaining regular-season weeks and is in percentage points of qualification odds; playoff swing covers weeks 12-17 and is in playoff rounds advanced, for teams that made it. It reflects each player's projected mean and spread, not scouting, and only players started on at least 50 teams are shown.</li>
       <li>The 17 MyFantasyLeague leagues are not simulated. Projections reflect rosters, injuries, and lineups when the data was collected, so they will move.</li>
       <li>Seeding and tiebreakers are not described in the SFB rules, so exact ties are not specially handled. These are estimates, not official standings.</li>
@@ -342,7 +364,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
   }
   function route() {
     var t = byKey[decodeURIComponent(location.hash.slice(1))];
-    if (t) { show(t, false); } else { $("team").hidden = true; $("field").hidden = false; histogram(); scatter(); }
+    if (t) { show(t, false); } else { $("team").hidden = true; $("field").hidden = false; histogram(); teamScatter(); scatter(); }
   }
   window.addEventListener("popstate", route);
 
@@ -472,6 +494,68 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
     $("lo").textContent = fmt(smin * 100, 0) + "%"; $("hi").textContent = fmt(smax * 100, 0) + "%";
     $("ramp").style.background = "linear-gradient(to right," + ramp(0) + "," + ramp(1) + ")";
   }
+
+  // ---- every team ----
+  function teamScatter() {
+    var svg = $("teamplot"), NS = "http://www.w3.org/2000/svg", tip = $("teamtip"), readout = $("teamplot-readout");
+    var W = Math.max(280, Math.round(svg.getBoundingClientRect().width) || 720), H = Math.max(280, Math.min(460, Math.round(W * 0.65)));
+    var L = 52, R = 12, TOP = 10, B = 44, rw = D.reg_weeks, cut = D.cut;
+    svg.replaceChildren(); svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    var xs = T.map(function (t) { return t.g; }), ys = T.map(function (t) { return t.p * rw; });
+    var xmin = Math.min(Math.min.apply(null, xs), D.auto_wins - 1), xmax = Math.max(Math.max.apply(null, xs), D.auto_wins + 1);
+    var ymin = Math.min(Math.min.apply(null, ys), cut.p5) - 20, ymax = Math.max(Math.max.apply(null, ys), cut.p95) + 20;
+    var x = function (v) { return L + (v - xmin) / (xmax - xmin) * (W - L - R); };
+    var y = function (v) { return TOP + (1 - (v - ymin) / (ymax - ymin)) * (H - TOP - B); };
+    function add(tag, attrs, text) {
+      var e = document.createElementNS(NS, tag);
+      Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+      if (text) e.textContent = text;
+      svg.appendChild(e); return e;
+    }
+    add("rect", {"class": "cutband", x: L, y: y(cut.p95), width: W - L - R, height: y(cut.p5) - y(cut.p95)});
+    add("line", {"class": "axis", x1: L, x2: W - R, y1: H - B, y2: H - B});
+    add("line", {"class": "axis", x1: L, x2: L, y1: TOP, y2: H - B});
+    var v, stepX = niceStep((xmax - xmin) / Math.max(3, Math.floor((W - L) / 70))), stepY = niceStep((ymax - ymin) / 6);
+    for (v = Math.ceil(xmin / stepX) * stepX; v <= xmax; v += stepX) add("text", {x: x(v), y: H - B + 16, "text-anchor": "middle"}, fmt(v));
+    for (v = Math.ceil(ymin / stepY) * stepY; v <= ymax; v += stepY) add("text", {x: L - 6, y: y(v) + 4, "text-anchor": "end"}, fmt(v));
+    add("text", {x: (L + W - R) / 2, y: H - 6, "text-anchor": "middle"}, "Projected regular-season wins (including median games)");
+    add("text", {x: 12, y: (TOP + H - B) / 2, "text-anchor": "middle", transform: "rotate(-90 12 " + (TOP + H - B) / 2 + ")"}, "Projected season points");
+    T.slice().sort(function (a, b) { return a.q - b.q; }).forEach(function (t) {
+      add("circle", {"class": "t", cx: x(t.g), cy: y(t.p * rw), r: 2.6, fill: ramp(t.q)});
+    });
+    add("line", {"class": "cutoff", x1: x(D.auto_wins), x2: x(D.auto_wins), y1: TOP, y2: H - B});
+    add("line", {"class": "cutoff", x1: L, x2: W - R, y1: y(cut.p50), y2: y(cut.p50)});
+    add("text", {"class": "cutlab", x: x(D.auto_wins) + 4, y: TOP + 10}, D.auto_wins + " wins: in");
+    add("text", {"class": "cutlab", x: W - R - 2, y: y(cut.p50) - 5, "text-anchor": "end"}, "points cut line, about " + fmt(cut.p50));
+    var pick = add("circle", {"class": "pick", r: 6, cx: -10, cy: -10});
+    function nearest(px, py) {
+      var best = null, bd = 14 * 14;
+      for (var i = 0; i < T.length; i++) {
+        var dx = x(T[i].g) - px, dy = y(T[i].p * rw) - py, d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = T[i]; }
+      }
+      return best;
+    }
+    function point(e) { var r = svg.getBoundingClientRect(), s = W / r.width; return [(e.clientX - r.left) * s, (e.clientY - r.top) * s]; }
+    function clear() { tip.hidden = true; pick.setAttribute("cx", -10); }
+    function reveal(t) {
+      var cx = x(t.g), cy = y(t.p * rw);
+      pick.setAttribute("cx", cx); pick.setAttribute("cy", cy);
+      var lines = [title(t) + (t.h && bare(t.h) !== bare(t.t) ? " (@" + t.h + ")" : ""), t.s || "",
+        "Projected " + fmt(t.g, 1) + " wins and " + fmt(t.p * rw) + " points", pct(t.q) + " chance of making the playoffs"].filter(Boolean);
+      tip.replaceChildren(); tip.appendChild(el("strong", null, lines[0]));
+      lines.slice(1).forEach(function (l) { tip.appendChild(el("div", null, l)); });
+      tip.hidden = false;
+      var tw = tip.offsetWidth, th = tip.offsetHeight, k = svg.getBoundingClientRect().width / W;
+      tip.style.left = Math.max(0, Math.min(W * k - tw, cx * k - tw / 2)) + "px";
+      tip.style.top = (cy * k - th - 12 < 0 ? cy * k + 14 : cy * k - th - 12) + "px";
+      readout.textContent = lines.join(". ");
+    }
+    svg.onpointermove = function (e) { var p = point(e), t = nearest(p[0], p[1]); if (t) reveal(t); else clear(); };
+    svg.onpointerleave = clear;
+    svg.onclick = function (e) { var p = point(e), t = nearest(p[0], p[1]); if (t) show(t, true); };
+    $("teamramp").style.background = "linear-gradient(to right," + ramp(0) + "," + ramp(1) + ")";
+  }
   function niceStep(raw) {
     var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), f = raw / mag;
     return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag;
@@ -503,9 +587,9 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
     $("player-more").addEventListener("click", function () { playerAll = !playerAll; playerTable(); });
     scatter(); playerTable();
   }
-  histogramText(); histogram(); topTable(); players(); route();
+  histogramText(); histogram(); topTable(); players(); teamScatter(); route();
   var resizing;
-  window.addEventListener("resize", function () { clearTimeout(resizing); resizing = setTimeout(function () { if (!$("field").hidden) { histogram(); scatter(); } }, 120); });
+  window.addEventListener("resize", function () { clearTimeout(resizing); resizing = setTimeout(function () { if (!$("field").hidden) { histogram(); teamScatter(); scatter(); } }, 120); });
 })();
 </script>
 </body>

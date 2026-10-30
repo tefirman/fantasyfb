@@ -101,3 +101,11 @@ def test_player_rows_skip_thin_and_unmeasured_players():
     rows = build.player_rows(players)
     assert [r["n"] for r in rows] == ["A"]
     assert rows[0]["q"] == 0.05 and rows[0]["k"] == 400
+
+
+def test_page_data_carries_the_cutoffs_the_team_scatter_draws():
+    data = build.page_data(odds_frame(), np.array([2380.0, 2400.0, 2420.0]), names_frame(), through_week=7, rules=RULES)
+    assert data["auto_wins"] == RULES.auto_wins
+    assert data["reg_weeks"] == RULES.regular_season_weeks
+    assert data["cut"]["p5"] < data["cut"]["p50"] < data["cut"]["p95"]
+    assert all({"g", "p", "q"} <= set(team) for team in data["teams"])
