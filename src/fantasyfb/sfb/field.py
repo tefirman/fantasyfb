@@ -20,6 +20,8 @@ import numpy as np
 import pandas as pd
 
 from ..sim.season_simulator import SeasonSimulator
+from .players import (PlayoffSwing, owners, player_sds, qualification_swing,
+                      standardized_output, swing_table)
 
 
 @dataclass(frozen=True)
@@ -71,10 +73,13 @@ class FieldResult:
     of starting each later round (``reach_<round>``), ``win``, and expected
     ``wins``, ``points`` and ``avg_ppg`` for the regular season. ``cut_line`` is
     the points total of the last team to qualify on points, per simulation.
+    ``players`` has one row per player with his ``qual_swing`` and
+    ``playoff_swing`` (see ``sfb.players``) and how widely he is started.
     """
     teams: pd.DataFrame
     cut_line: np.ndarray
     quota: int
+    players: Optional[pd.DataFrame] = None
 
 
 def simulate_field(
@@ -97,7 +102,8 @@ def simulate_field(
     """
     rng = np.random.default_rng(seed)
     weeks, num_players = team_week_matrices(data)
-    wins, points = simulate_regular_season(data, weeks, num_players, num_sims, rng)
+    player_draws = {}
+    wins, points = simulate_regular_season(data, weeks, num_players, num_sims, rng, player_draws)
     qual, auto, quota = qualify(wins, points, rules)
 
     by_points = qual & ~auto
@@ -107,11 +113,21 @@ def simulate_field(
     mu = np.column_stack([weeks[w][1] for w in rules.playoff_weeks])
     sd = np.column_stack([weeks[w][2] for w in rules.playoff_weeks])
 
+    playoff_draws = {}
+
     def draws(prng, r):
         A, _, team_sd = weeks[rules.playoff_weeks[r]]
-        return standardized_noise(A, team_sd, prng.standard_normal((num_players, num_sims), dtype=np.float32)).T
+        week = rules.playoff_weeks[r]
+        playoff_draws[week] = prng.standard_normal((num_players, num_sims), dtype=np.float32)
+        return standardized_noise(A, team_sd, playoff_draws[week]).T
 
-    reach = simulate_playoffs(qual, points, mu, sd, rules, seed=seed, reps=playoff_reps, draws=draws)
+    reg_weeks, po_weeks = sorted(player_draws), list(rules.playoff_weeks)
+    own_regular, own_playoff = owners(weeks, reg_weeks), owners(weeks, po_weeks)
+    po_sds = player_sds(weeks, po_weeks)
+    swing = PlayoffSwing(qual, own_playoff)
+    reach = simulate_playoffs(
+        qual, points, mu, sd, rules, seed=seed, reps=playoff_reps, draws=draws,
+        on_replay=lambda advanced: swing.add(advanced, standardized_output(playoff_draws, po_sds, po_weeks)))
     teams = data.teams.copy()
     teams["qualify"] = qual.mean(0)
     for i, name in enumerate(rules.round_names[1:], start=1):
@@ -120,7 +136,12 @@ def simulate_field(
     teams["wins"] = wins.mean(0)
     teams["points"] = points.mean(0)
     teams["avg_ppg"] = teams.points / rules.regular_season_weeks
-    return FieldResult(teams=teams, cut_line=cut_line, quota=quota)
+    players = swing_table(
+        pd.factorize(data.starters.player_id)[1],
+        qualification_swing(qual, own_regular,
+                            standardized_output(player_draws, player_sds(weeks, reg_weeks), reg_weeks)),
+        swing.swing(), swing.playoff_share(), own_regular, own_playoff)
+    return FieldResult(teams=teams, cut_line=cut_line, quota=quota, players=players)
 
 
 def team_week_matrices(data: FieldData):
@@ -160,8 +181,12 @@ def standardized_noise(A: np.ndarray, team_sd: np.ndarray, draws: np.ndarray) ->
 
 def simulate_regular_season(
     data: FieldData, weeks: dict, num_players: int, num_sims: int, rng: np.random.Generator,
+    player_draws: Optional[dict] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Wins and points, as (num_sim, num_team) arrays, for every league with shared player draws."""
+    """Wins and points, as (num_sim, num_team) arrays, for every league with shared player draws.
+
+    ``player_draws``, if given, is filled with each simulated week's (num_player, num_sim) draws.
+    """
     settings = data.settings
     team_index = pd.MultiIndex.from_frame(data.teams[["league_id", "team"]])
     first_week = int(settings.first_week.min())
@@ -170,6 +195,8 @@ def simulate_regular_season(
         A, _, team_sd = weeks[week]
         draws = rng.standard_normal((num_players, num_sims), dtype=np.float32)
         noise[week] = standardized_noise(A, team_sd, draws)
+        if player_draws is not None:
+            player_draws[week] = draws
 
     wins = np.zeros((num_sims, len(data.teams)), dtype=np.float32)
     points = np.zeros_like(wins)
@@ -228,6 +255,7 @@ def simulate_playoffs(
     seed: int = 0,
     reps: int = 1,
     draws: Optional[Callable] = None,
+    on_replay: Optional[Callable] = None,
 ) -> np.ndarray:
     """Plays the playoff rounds for each simulation.
 
@@ -242,18 +270,21 @@ def simulate_playoffs(
         draws: optional ``draws(rng, r)`` returning (num_sim, num_team) standard normals for
             round ``r`` (e.g. shared player draws); defaults to independent draws per team.
         reps: replays per regular-season simulation, averaged.
+        on_replay: optional ``on_replay(advanced)`` called after each replay with the
+            (num_sim, num_team) number of rounds each team advanced (0 if it missed the playoffs).
 
     Returns:
         (num_team, num_rounds + 1): the probability of starting each round, then of winning.
     """
     if reps > 1:
-        return np.mean([simulate_playoffs(qualified, total, mu, sd, rules, seed + i, draws=draws)
-                        for i in range(reps)], axis=0)
+        return np.mean([simulate_playoffs(qualified, total, mu, sd, rules, seed + i, draws=draws,
+                                          on_replay=on_replay) for i in range(reps)], axis=0)
     rng = np.random.default_rng(seed)
     scale = qualified.shape[1] / rules.field_teams
     alive = qualified.copy()
     total = total.astype(np.float64)
     reached = []
+    advanced = np.zeros(total.shape, dtype=np.float32)
     for r in range(len(rules.round_starts)):
         reached.append(alive.mean(0))
         z = draws(rng, r) if draws else rng.standard_normal(total.shape)
@@ -264,5 +295,8 @@ def simulate_playoffs(
         keep = 1 if last else max(1, round(rules.round_starts[r + 1] * scale))
         rank = np.argsort(np.argsort(np.where(alive, -score, np.inf), axis=1), axis=1)
         alive = alive & (rank < keep)
+        advanced += alive
     reached.append(alive.mean(0))
+    if on_replay:
+        on_replay(advanced)
     return np.column_stack(reached)
