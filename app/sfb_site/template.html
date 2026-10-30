@@ -559,7 +559,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
       var cx = x(t.g), cy = y(t.p * rw);
       pick.setAttribute("cx", cx); pick.setAttribute("cy", cy);
       var lines = [title(t) + (t.h && bare(t.h) !== bare(t.t) ? " (@" + t.h + ")" : ""), t.s || "",
-        "Projected " + fmt(t.g, 1) + " wins and " + fmt(t.p * rw) + " points", pct(t.q) + " to make the playoffs, " + pct(t.r[3]) + " to reach the semis", pct(t.w) + " to win it all"].filter(Boolean);
+        "Projected " + fmt(t.g, 1) + " wins and " + fmt(t.p * rw) + " points", pct(t.q) + " to make the playoffs", pct(t.r[3]) + " to reach the semis", pct(t.w) + " to win it all"].filter(Boolean);
       tip.replaceChildren(); tip.appendChild(el("strong", null, lines[0]));
       lines.slice(1).forEach(function (l) { tip.appendChild(el("div", null, l)); });
       tip.hidden = false;
