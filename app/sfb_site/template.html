@@ -382,7 +382,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
   function histogram() {
     var h = D.cut, svg = $("hist"), NS = "http://www.w3.org/2000/svg", readout = $("hist-readout");
     var W = Math.max(280, Math.round(svg.getBoundingClientRect().width) || 720);
-    var H = Math.max(170, Math.min(240, Math.round(W * 0.32))), L = 8, R = 8, B = 40, TOP = 8;
+    var H = Math.max(170, Math.min(240, Math.round(W * 0.32))), L = W < 420 ? 38 : 54, R = 8, B = 40, TOP = 8;
     svg.replaceChildren();
     svg.setAttribute("viewBox", "0 0 " + W + " " + H);
     var max = Math.max.apply(null, h.counts), n = h.counts.length;
@@ -404,6 +404,10 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
       rect.addEventListener("focus", function () { readout.textContent = msg; });
     });
     add("line", {"class": "axis", x1: L, x2: W - R, y1: H - B, y2: H - B});
+    add("line", {"class": "axis", x1: L, x2: L, y1: TOP, y2: H - B});
+    var maxShare = max / h.total * 100, shareStep = niceStep(maxShare / 5);
+    for (var s = 0; s <= maxShare; s += shareStep) add("text", {x: L - 6, y: y(s / 100 * h.total) + 4, "text-anchor": "end"}, fmt(s) + "%");
+    if (W >= 420) add("text", {x: 11, y: (TOP + H - B) / 2, "text-anchor": "middle", transform: "rotate(-90 11 " + (TOP + H - B) / 2 + ")"}, "Share of simulations");
     add("line", {"class": "med", x1: x(h.p50), x2: x(h.p50), y1: TOP, y2: H - B});
     var perLabel = Math.max(1, Math.ceil(70 / bw)), step = h.width * perLabel;
     for (var v = Math.ceil(h.start / step) * step; v <= h.start + h.width * n; v += step) {
