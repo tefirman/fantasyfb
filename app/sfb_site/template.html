@@ -138,10 +138,11 @@ footer { color: var(--ink-3); font-size: .85rem; margin-top: 24px; }
 .teamplot circle.mine { fill: none; stroke: var(--focus); stroke-width: 3; pointer-events: none; }
 .teamplot .minelab { fill: var(--focus); font-weight: 600; font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .teamplot circle.pick { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .tip { position: absolute; z-index: 2; pointer-events: none; background: var(--surface); color: var(--ink);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: .85rem; line-height: 1.35;
-  box-shadow: 0 2px 10px rgba(0,0,0,.18); max-width: 16rem; }
-.tip strong { display: block; }
+  box-shadow: 0 2px 10px rgba(0,0,0,.18); white-space: nowrap; }
+.tip > * { display: block; overflow: hidden; text-overflow: ellipsis; max-width: min(26rem, calc(100vw - 64px)); }
 .tip[hidden] { display: none; }
 .legend { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: .85rem; color: var(--ink-2); flex-wrap: wrap; }
 .legend .ramp { width: 120px; height: 10px; border-radius: 5px; border: 1px solid var(--line); }
@@ -180,7 +181,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
         <div class="tip" id="teamtip" role="status" hidden></div>
       </div>
       <div class="legend"><span>Chance of making the playoffs:</span><span>0%</span><span class="ramp" id="teamramp"></span><span>100%</span></div>
-      <div id="teamplot-readout" class="small muted" aria-live="polite"></div>
+      <div id="teamplot-readout" class="sr" aria-live="polite"></div>
     </div>
     <div class="card">
       <h2>Most likely champions</h2>
@@ -194,7 +195,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
         <div class="tip" id="tip" role="status" hidden></div>
       </div>
       <div class="legend"><span>Share of playoff teams starting him:</span><span id="lo"></span><span class="ramp" id="ramp"></span><span id="hi"></span></div>
-      <div id="scatter-readout" class="small muted" aria-live="polite"></div>
+      <div id="scatter-readout" class="sr" aria-live="polite"></div>
       <div class="scroll"><table id="player-table"></table></div>
       <button class="more" id="player-more" type="button"></button>
     </div>
@@ -451,7 +452,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
   function rnd(v) { return (v >= 0 ? "+" : "") + fmt(v, 2) + " rounds"; }
   function who2(p) { return p.n + (p.p || p.t ? " (" + [p.p, p.t].filter(Boolean).join(", ") + ")" : ""); }
   function playerTip(p) { return [who2(p), "Qualification swing: " + pts(p.q), "Playoff swing: " + rnd(p.r),
-    "Starts on " + fmt(p.k) + " teams, " + fmt(p.f * 100, 1) + "% of the field and " + fmt(p.s * 100, 1) + "% of playoff teams"]; }
+    "Starts on " + fmt(p.k) + " teams (" + fmt(p.f * 100, 1) + "% of the field)", fmt(p.s * 100, 1) + "% of playoff teams start him"]; }
   function scatter() {
     if (!P.length) return;
     var svg = $("scatter"), NS = "http://www.w3.org/2000/svg", tip = $("tip"), readout = $("scatter-readout");
@@ -558,7 +559,7 @@ th button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; 
       var cx = x(t.g), cy = y(t.p * rw);
       pick.setAttribute("cx", cx); pick.setAttribute("cy", cy);
       var lines = [title(t) + (t.h && bare(t.h) !== bare(t.t) ? " (@" + t.h + ")" : ""), t.s || "",
-        "Projected " + fmt(t.g, 1) + " wins and " + fmt(t.p * rw) + " points", pct(t.q) + " chance of making the playoffs"].filter(Boolean);
+        "Projected " + fmt(t.g, 1) + " wins and " + fmt(t.p * rw) + " points", pct(t.q) + " to make the playoffs, " + pct(t.r[3]) + " to reach the semis", pct(t.w) + " to win it all"].filter(Boolean);
       tip.replaceChildren(); tip.appendChild(el("strong", null, lines[0]));
       lines.slice(1).forEach(function (l) { tip.appendChild(el("div", null, l)); });
       tip.hidden = false;
