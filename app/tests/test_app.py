@@ -176,7 +176,11 @@ def test_pre_draft_league_rejected(seen):
 
 
 def test_unknown_run_is_404(client):
-    assert client.get("/runs/deadbeef").status_code == 404
+    page = client.get("/runs/deadbeef")
+    assert page.status_code == 404
+    assert page.headers["content-type"].startswith("text/html")
+    assert 'href="/"' in page.text and "expired" in page.text
+    assert client.get("/runs/deadbeef/download").headers["content-type"].startswith("text/html")
     assert client.get("/api/runs/deadbeef").status_code == 404
 
 

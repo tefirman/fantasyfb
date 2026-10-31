@@ -408,9 +408,19 @@ def create_app(
             "error": job.error,
         }
 
+    def _run_missing_page(request: Request) -> Response:
+        # Browsers land here from old tabs and bookmarks, so answer with a
+        # page that leads back home rather than the API's bare JSON error.
+        return templates.TemplateResponse(
+            request, "run_missing.html.j2", {"yahoo_enabled": yahoo_config is not None}, status_code=404
+        )
+
     @app.get("/runs/{job_id}", response_class=HTMLResponse)
     def run_page(request: Request, job_id: str):
-        job = _get_job(request, job_id)
+        try:
+            job = _get_job(request, job_id)
+        except HTTPException:
+            return _run_missing_page(request)
         if job.status == DONE:
             return HTMLResponse(_with_app_bar(job.html, job.id))
         return templates.TemplateResponse(
@@ -419,7 +429,10 @@ def create_app(
 
     @app.get("/runs/{job_id}/download")
     def download(request: Request, job_id: str) -> Response:
-        job = _get_job(request, job_id)
+        try:
+            job = _get_job(request, job_id)
+        except HTTPException:
+            return _run_missing_page(request)
         if job.status != DONE:
             raise HTTPException(409, "This run hasn't finished yet.")
         filename = f"fantasyfb_{job.opts.league_id or job.opts.platform}.html"
