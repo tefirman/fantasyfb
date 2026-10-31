@@ -1,0 +1,21 @@
+{% extends "base.html.j2" %}
+{% block title %}Run not found · fantasyfb{% endblock %}
+{% block main %}
+<section>
+  <div class="kicker">404 · Run not found</div>
+  <h1 style="margin:0;font-size:52px;line-height:1">This run has expired</h1>
+</section>
+
+<div class="blueprint panel">
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <p style="margin:0">
+    Finished runs are only kept for a few hours, so this report is no longer available.
+    The link may also be mistyped, or belong to a private run from a different browser session.
+  </p>
+  <p class="muted" style="margin:0;font-size:14px">
+    Simulations are quick to repeat. Pick your league again to get a fresh report, and use
+    "Download report" on the finished page if you want to keep a copy.
+  </p>
+  <p style="margin:0"><a class="btn btn-primary" href="/" style="min-height:36px">Run a new simulation</a></p>
+</div>
+{% endblock %}
