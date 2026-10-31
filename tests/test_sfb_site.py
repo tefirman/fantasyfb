@@ -89,3 +89,23 @@ class TestRender:
         page = build.render(data(), "t", Rules(), generated="")
         # 4 teams of 5,004 simulated, so each round starts with a tiny scaled field
         assert re.search(r"The field shrinks to [\d, and]+ teams", page)
+
+
+def test_player_rows_skip_thin_and_unmeasured_players():
+    players = pd.DataFrame({
+        "player_id": ["a", "b", "c"], "name": ["A", "B", "C"], "position": ["QB", "WR", None],
+        "nfl_team": ["BUF", "SEA", "NYJ"], "teams": [400, 3, 200], "field_share": [0.08, 0.0, 0.04],
+        "playoff_share": [0.09, 0.0, 0.05], "qual_swing": [0.05, 0.4, float("nan")],
+        "playoff_swing": [0.2, 0.9, 0.1],
+    })
+    rows = build.player_rows(players)
+    assert [r["n"] for r in rows] == ["A"]
+    assert rows[0]["q"] == 0.05 and rows[0]["k"] == 400
+
+
+def test_page_data_carries_the_cutoffs_the_team_scatter_draws():
+    data = build.page_data(odds_frame(), np.array([2380.0, 2400.0, 2420.0]), names_frame(), through_week=7, rules=RULES)
+    assert data["auto_wins"] == RULES.auto_wins
+    assert data["reg_weeks"] == RULES.regular_season_weeks
+    assert data["cut"]["p5"] < data["cut"]["p50"] < data["cut"]["p95"]
+    assert all({"g", "p", "q"} <= set(team) for team in data["teams"])

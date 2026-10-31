@@ -16,6 +16,7 @@ import pandas as pd
 from .collect import DEFAULT_MAX_CALLS_PER_MINUTE, collect_field
 from .field import FieldData, simulate_field
 from .leagues import league_list, parse_leaderboard, read_league_ids
+from .players import add_player_info
 
 
 def _leagues(args) -> int:
@@ -49,7 +50,8 @@ def _simulate(args) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     result.teams.to_csv(out_dir / "odds.csv", index=False)
     pd.DataFrame({"num_sim": np.arange(len(cut)), "cut_line": cut}).to_csv(out_dir / "cut_line.csv", index=False)
-    print(f"wrote odds.csv and cut_line.csv to {out_dir}")
+    add_player_info(result.players).to_csv(out_dir / "players.csv", index=False)
+    print(f"wrote odds.csv, cut_line.csv and players.csv to {out_dir}")
     return 0
 
 

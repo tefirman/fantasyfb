@@ -16,7 +16,7 @@ sfb-field simulate sfb/data --out-dir sfb
 
 # build the page
 python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
-    --leaderboard notes/SFB16Leaderboard.html --data sfb/data --out sfb/index.html
+    --leaderboard notes/SFB16Leaderboard.html --data sfb/data --players sfb/players.csv --out sfb/index.html
 ```
 
 `collect` can be re-run for a few leagues with `--only ID,ID`, and a refresh only needs `collect` and `simulate` again. The leaderboard page is only read for names, so it does not need to be re-saved unless teams change.

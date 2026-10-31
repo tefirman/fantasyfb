@@ -289,3 +289,21 @@ class TestCollectField:
         assert sfb_collect.collect_field(["B", "A"], tmp_path, workers=1, log=lambda *_: None) == []
         settings = pd.read_parquet(tmp_path / "settings.parquet")
         assert sorted(settings.league_id) == ["A", "B", "C"]  # A refreshed in place, not duplicated
+
+
+def test_owners_marks_teams_that_start_the_player_in_any_week():
+    from fantasyfb.sfb.players import owners
+    data = make_field()
+    weeks, _ = team_week_matrices(data)
+    own = owners(weeks, [1, 2])
+    assert own.shape[0] == len(data.teams)
+    assert (own.sum(1) == 1).all()  # one starter per team
+
+
+def test_simulate_field_reports_a_positive_swing_for_a_shared_starter():
+    result = simulate_field(make_field(), num_sims=400, playoff_reps=5, seed=4, rules=TINY)
+    players = result.players.set_index("player_id")
+    assert players.loc["shared", "teams"] == 2
+    assert players.loc["shared", "qual_swing"] > 0
+    assert players.loc["shared", "playoff_swing"] > 0
+    assert len(players) == 2 * 4 - 2 + 1

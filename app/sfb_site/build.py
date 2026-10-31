@@ -1,9 +1,11 @@
 """Build the SFB odds page: one self-contained HTML file.
 
     python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \\
-        --leaderboard notes/SFB16Leaderboard.html --data sfb/data --out sfb/index.html
+        --leaderboard notes/SFB16Leaderboard.html --data sfb/data --players sfb/players.csv \\
+        --out sfb/index.html
 
-Inputs are the files written by ``sfb-field simulate`` (odds.csv, cut_line.csv),
+Inputs are the files written by ``sfb-field simulate`` (odds.csv, cut_line.csv, and
+players.csv for the player swings, which is optional),
 the saved leaderboard page (for handles and team names to search by), and the
 collected data directory (for the week the odds are through). The page needs no
 server, so it can be opened from disk or hosted anywhere static.
@@ -15,6 +17,7 @@ import datetime
 import html
 import json
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -29,9 +32,19 @@ def _label(name: str) -> str:
     return name.replace("_", " ").title().replace("Semi Finals", "Semi-Finals")
 
 
+def player_rows(players: pd.DataFrame, min_teams: int = 50) -> list:
+    """Players with a measurable swing, for the page. Players on few teams are too noisy to rank."""
+    keep = players[(players.teams >= min_teams) & players.qual_swing.notna() & players.playoff_swing.notna()]
+    return [
+        {"n": r.name, "p": r.position, "t": r.nfl_team, "k": int(r.teams), "q": round(float(r.qual_swing), 4),
+         "r": round(float(r.playoff_swing), 4), "f": round(float(r.field_share), 4), "s": round(float(r.playoff_share), 4)}
+        for r in keep.fillna({"position": "", "nfl_team": ""}).itertuples(index=False)
+    ]
+
+
 def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, through_week: int,
-              rules: Rules = Rules(), bin_width: int = 5) -> dict:
-    """The JSON the page reads: a row per team, the cut-line histogram, and labels."""
+              rules: Rules = Rules(), bin_width: int = 5, players: Optional[pd.DataFrame] = None) -> dict:
+    """The JSON the page reads: a row per team, the cut-line histogram, labels, and the player swings."""
     odds = odds.merge(
         names.loc[names.platform == "sleeper", ["league_id", "roster_id", "manager", "handle", "league_name"]],
         on=["league_id", "roster_id"], how="left",
@@ -56,10 +69,12 @@ def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, thr
         "teams_count": len(teams),
         "leagues_count": int(odds.league_id.nunique()),
         "reg_weeks": rules.regular_season_weeks,
+        "auto_wins": rules.auto_wins,
         "cut": {"start": start, "width": bin_width, "counts": counts.tolist(), "total": int(len(cut)),
                 "p5": round(float(p5), 1), "p50": round(float(p50), 1), "p95": round(float(p95), 1)},
         "round_labels": ["Make the playoffs"] + [f"Reach {r}" for r in rounds[1:]] + ["Win the title"],
         "teams": teams,
+        "players": player_rows(players) if players is not None else [],
     }
 
 
@@ -89,6 +104,7 @@ def main(argv=None) -> int:
     parser.add_argument("--cut-line", required=True, help="cut_line.csv from sfb-field simulate")
     parser.add_argument("--leaderboard", required=True, help="saved SFB leaderboard page")
     parser.add_argument("--data", required=True, help="collected data directory (for the week)")
+    parser.add_argument("--players", help="players.csv from sfb-field simulate (adds the player section)")
     parser.add_argument("--out", default="index.html")
     parser.add_argument("--title", default="Scott Fish Bowl playoff odds")
     args = parser.parse_args(argv)
@@ -97,7 +113,8 @@ def main(argv=None) -> int:
     cut = pd.read_csv(args.cut_line).cut_line.to_numpy()
     names = parse_leaderboard(Path(args.leaderboard).read_text(encoding="utf-8", errors="replace"))
     first_week = int(pd.read_parquet(Path(args.data) / "settings.parquet").first_week.min())
-    data = page_data(odds, cut, names, through_week=first_week - 1)
+    players = pd.read_csv(args.players, dtype={"player_id": str}) if args.players else None
+    data = page_data(odds, cut, names, through_week=first_week - 1, players=players)
     Path(args.out).write_text(render(data, args.title, generated=datetime.date.today().strftime("%B %-d, %Y")), encoding="utf-8")
     print(f"wrote {args.out} ({Path(args.out).stat().st_size / 1e6:.2f} MB, {len(data['teams'])} teams)")
     return 0
