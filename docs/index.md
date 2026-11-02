@@ -16,9 +16,9 @@ simulations to value pickups, trades, and draft picks.
 
 !!! tip "Try it in your browser"
     The [fantasyfb web app](https://fantasy.taylorfirman.com/) runs season
-    sims for a Sleeper or Yahoo league with nothing to install. It is a
-    lighter version of the CLI, so adds, drops, and the rooting guide are
-    left to the package.
+    sims, adds, drops, and the rooting guide for a Sleeper or Yahoo league
+    with nothing to install. Pickups, trades, and the draft tools are left
+    to the package. See [Web app](web-app.md).
 
 ## What's here
 
@@ -27,8 +27,11 @@ simulations to value pickups, trades, and draft picks.
   credential-free Sleeper/generic options.
 - **[First weekly report](quickstart.md)** — end-to-end walkthrough
   from a fresh install to a finished Excel or HTML report.
+- **[Web app](web-app.md)** — the hosted version, and what it leaves
+  to the package.
 - **[CLI reference](cli/index.md)** — one page per entry point
-  (`fantasyfb`, `snake-draft`, `salary-cap-draft`, `draft-prep`).
+  (`fantasyfb`, `snake-draft`, `salary-cap-draft`, `draft-prep`,
+  `sfb-field`).
 - **[Architecture](architecture.md)** — what each subpackage does and
   how the pieces fit together.
 - **[API reference](api/index.md)** — auto-generated from docstrings
@@ -55,13 +58,14 @@ need [OAuth credentials](platforms.md#yahoo) set up first — or pass
 
 ## Command-line tools
 
-After install, four entry points are on your `PATH`:
+After install, five entry points are on your `PATH`:
 
 | Command            | Use                                  |
 | ------------------ | ------------------------------------ |
 | `fantasyfb`        | Weekly projections + lineup analysis |
 | `snake-draft`      | Live snake-draft cockpit             |
-| `salary-cap-draft` | Live salary-cap (auction) draft tool |
+| `salary-cap-draft` | Live salary-cap draft tool           |
 | `draft-prep`       | Pre-draft tiers / VORP / mocks       |
+| `sfb-field`        | Field-wide Scott Fish Bowl odds      |
 
 Run any with `--help` for the full option list.

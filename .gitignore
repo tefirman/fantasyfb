@@ -216,6 +216,9 @@ cache/
 # personal notes/documentation
 notes/
 
+# sfb-field run output (collected Sleeper data, odds, generated page); the package is src/fantasyfb/sfb/
+/sfb/
+
 # macOS
 .DS_Store
 
