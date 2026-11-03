@@ -40,12 +40,14 @@ nav:
   - Install: install.md
   - Connecting a league: platforms.md
   - First weekly report: quickstart.md
+  - Web app: web-app.md
   - CLI reference:
       - cli/index.md
       - fantasyfb: cli/fantasyfb.md
       - snake-draft: cli/snake-draft.md
       - salary-cap-draft: cli/salary-cap-draft.md
       - draft-prep: cli/draft-prep.md
+      - sfb-field: cli/sfb-field.md
   - Architecture: architecture.md
   - API reference:
       - api/index.md
