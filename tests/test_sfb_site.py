@@ -70,7 +70,7 @@ class TestPageData:
 
 class TestRender:
     def page(self):
-        return build.render(data(), "SFB <odds> & more", RULES, generated="October 28, 2026")
+        return build.render(data(), "SFB <odds> & more", RULES)
 
     def test_every_placeholder_is_filled(self):
         assert not re.findall(r"__[A-Z_]+__", self.page())
@@ -86,9 +86,27 @@ class TestRender:
         assert "<title>SFB &lt;odds&gt; &amp; more</title>" in self.page()
 
     def test_round_sizes_follow_the_rules_scaled_to_the_teams_simulated(self):
-        page = build.render(data(), "t", Rules(), generated="")
+        page = build.render(data(), "t", Rules())
         # 4 teams of 5,004 simulated, so each round starts with a tiny scaled field
         assert re.search(r"The field shrinks to [\d, and]+ teams", page)
+
+
+class TestDesign:
+    def test_updated_and_default_team_ride_along_in_the_data(self):
+        d = build.page_data(odds_frame(), np.array([2380.0, 2400.0]), names_frame(), through_week=7, rules=RULES,
+                            updated="2026-10-30T14:30:00-04:00", default_team="ann")
+        assert d["updated"] == "2026-10-30T14:30:00-04:00" and d["default_team"] == "ann"
+
+    def test_page_is_self_contained_apart_from_fonts(self):
+        page = build.render(data(), "t", RULES)
+        assert "--color-accent-900" in page and "@import" not in page  # design tokens inlined, fonts linked instead
+        assert "url(data:image/png;base64," in page
+        assert re.findall(r"https?://[^\s\"')]+", page.split("<script")[0].replace("https://github.com/tefirman/fantasyfb", "")) \
+            == ["https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&display=swap"]
+
+    def test_method_copy_is_templated_from_the_rules(self):
+        page = build.render(data(), "t", RULES)
+        assert "through week 11" in page and "Teams with 13 or more wins" in page
 
 
 def test_player_rows_skip_thin_and_unmeasured_players():
