@@ -23,6 +23,8 @@ python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
 
 ## Notes
 
-- Odds are through the last completed week in the collected data, shown at the top of the page.
+- The header and footer show when the simulations finished (the modification time of `odds.csv`), in the viewer's locale.
+- The team that opens by default comes from `--default-team` (a Sleeper handle, `tefirman51` unless changed; pass an empty string for none). A `#league-roster` in the URL takes precedence.
+- The page links Google Fonts (Barlow) and makes no other external requests; the design tokens and logo are inlined.
 - The round sizes and average weights live in `fantasyfb.sfb.Rules`. Update them there when the SFB publishes its final cut sizes after week 11.
 - The 17 MyFantasyLeague leagues are not simulated, so their teams are not searchable.

@@ -2,7 +2,7 @@
 
     python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \\
         --leaderboard notes/SFB16Leaderboard.html --data sfb/data --players sfb/players.csv \\
-        --out sfb/index.html
+        --out sfb/index.html [--default-team HANDLE]
 
 Inputs are the files written by ``sfb-field simulate`` (odds.csv, cut_line.csv, and
 players.csv for the player swings, which is optional),
@@ -13,9 +13,11 @@ server, so it can be opened from disk or hosted anywhere static.
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
 import html
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +28,8 @@ from fantasyfb.sfb.field import Rules
 from fantasyfb.sfb.leagues import parse_leaderboard
 
 TEMPLATE = Path(__file__).with_name("template.html")
+INDUSTRY_CSS = Path(__file__).resolve().parents[2] / "src" / "fantasyfb" / "io" / "templates" / "industry-styles.css"
+LOGO = Path(__file__).resolve().parents[1] / "fantasyfb_web" / "static" / "fantasyfb_logo.png"
 
 
 def _label(name: str) -> str:
@@ -43,7 +47,8 @@ def player_rows(players: pd.DataFrame, min_teams: int = 50) -> list:
 
 
 def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, through_week: int,
-              rules: Rules = Rules(), bin_width: int = 5, players: Optional[pd.DataFrame] = None) -> dict:
+              rules: Rules = Rules(), bin_width: int = 5, players: Optional[pd.DataFrame] = None,
+              updated: str = "", default_team: str = "") -> dict:
     """The JSON the page reads: a row per team, the cut-line histogram, labels, and the player swings."""
     odds = odds.merge(
         names.loc[names.platform == "sleeper", ["league_id", "roster_id", "manager", "handle", "league_name"]],
@@ -64,6 +69,8 @@ def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, thr
     p5, p50, p95 = np.percentile(cut, [5, 50, 95])
     rounds = [_label(n) for n in rules.round_names]
     return {
+        "updated": updated,
+        "default_team": default_team,
         "through_week": through_week,
         "sims": int(len(cut_line)),
         "teams_count": len(teams),
@@ -78,20 +85,26 @@ def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, thr
     }
 
 
-def render(data: dict, title: str, rules: Rules = Rules(), generated: str = "") -> str:
+def render(data: dict, title: str, rules: Rules = Rules()) -> str:
     # Names are untrusted text inside a script block: keep "<" and line separators from ending it.
     blob = (json.dumps(data, separators=(",", ":"), ensure_ascii=False)
             .replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
     scale = data["teams_count"] / rules.field_teams
     sizes = [f"{round(n * scale):,}" for n in rules.round_starts[1:]]
     sizes = ", ".join(sizes[:-1]) + f", and {sizes[-1]}"
+    # The design system's stylesheet is inlined, minus its font @import: the template links Google Fonts itself.
+    css = re.sub(r"@import url\(.*?\);", "",INDUSTRY_CSS.read_text(encoding="utf-8"))
+    logo = "data:image/png;base64," + base64.b64encode(LOGO.read_bytes()).decode("ascii")
     page = TEMPLATE.read_text(encoding="utf-8")
     for key, value in {
+        "__INDUSTRY_CSS__": css,
+        "__LOGO__": logo,
         "__TITLE__": html.escape(title),
+        "__REG_WEEKS__": str(data["reg_weeks"]),
+        "__AUTO_WINS__": str(data["auto_wins"]),
         "__QUOTA__": f"{round(rules.field_quota * scale):,}",
         "__TEAMS__": f"{data['teams_count']:,}",
         "__ROUND_SIZES__": sizes,
-        "__GENERATED__": generated,
         "__DATA__": blob,
     }.items():
         page = page.replace(key, value)
@@ -106,7 +119,9 @@ def main(argv=None) -> int:
     parser.add_argument("--data", required=True, help="collected data directory (for the week)")
     parser.add_argument("--players", help="players.csv from sfb-field simulate (adds the player section)")
     parser.add_argument("--out", default="index.html")
-    parser.add_argument("--title", default="Scott Fish Bowl playoff odds")
+    parser.add_argument("--title", default="SFB16 playoff projections")
+    parser.add_argument("--default-team", default="tefirman51",
+                        help="Sleeper handle whose team opens when the URL has no #league-roster (empty for none)")
     args = parser.parse_args(argv)
 
     odds = pd.read_csv(args.odds, dtype={"league_id": str})
@@ -114,8 +129,10 @@ def main(argv=None) -> int:
     names = parse_leaderboard(Path(args.leaderboard).read_text(encoding="utf-8", errors="replace"))
     first_week = int(pd.read_parquet(Path(args.data) / "settings.parquet").first_week.min())
     players = pd.read_csv(args.players, dtype={"player_id": str}) if args.players else None
-    data = page_data(odds, cut, names, through_week=first_week - 1, players=players)
-    Path(args.out).write_text(render(data, args.title, generated=datetime.date.today().strftime("%B %-d, %Y")), encoding="utf-8")
+    # The simulations finish when odds.csv is written, so that is the page's "last updated" time.
+    updated = datetime.datetime.fromtimestamp(Path(args.odds).stat().st_mtime).astimezone().isoformat(timespec="seconds")
+    data = page_data(odds, cut, names, through_week=first_week - 1, players=players, updated=updated, default_team=args.default_team)
+    Path(args.out).write_text(render(data, args.title), encoding="utf-8")
     print(f"wrote {args.out} ({Path(args.out).stat().st_size / 1e6:.2f} MB, {len(data['teams'])} teams)")
     return 0
 
