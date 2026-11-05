@@ -99,6 +99,9 @@ markdown_extensions:
       alternate_style: true
 
 extra:
+  analytics:
+    provider: google
+    property: G-1MRV3D498D
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/tefirman/fantasyfb
