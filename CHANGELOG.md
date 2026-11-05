@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **SFB playoff page shows the fantasyfb logo as its browser tab icon** (#141): the page had no favicon, so tabs and bookmarks showed a blank globe. `app/sfb_site/build.py` now inlines the web app's 32px icon as the favicon and its 180px icon as the iPhone and Android home screen icon, as data URIs, so the page is still one self-contained file (about 23 KB larger). A test checks both links.
+- **Docs site counts visits with Google Analytics 4 and asks for cookie consent**: `mkdocs.yml` enables Material for MkDocs's Google analytics provider and its consent banner, so visitors can accept or reject the cookies before anything is recorded. Material also reports the search terms typed into the docs search box. The fantasyfb package, the HTML reports it writes, and the hosted web app are unchanged and track nothing.
 
 ## [0.12.0] — 2026-11-03
 

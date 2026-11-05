@@ -99,6 +99,17 @@ markdown_extensions:
       alternate_style: true
 
 extra:
+  analytics:
+    provider: google
+    property: G-1MRV3D498D
+  consent:
+    title: Cookies
+    description: >-
+      This site uses Google Analytics cookies to count visits to the documentation.
+      Accepting is optional and nothing else on the site depends on it.
+    actions:
+      - accept
+      - reject
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/tefirman/fantasyfb
