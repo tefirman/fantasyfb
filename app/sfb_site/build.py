@@ -33,6 +33,20 @@ STATIC = Path(__file__).resolve().parents[1] / "fantasyfb_web" / "static"
 LOGO = STATIC / "fantasyfb_logo.png"
 
 
+GA_ID = re.compile(r"G-[A-Z0-9]{4,20}")
+
+
+def analytics_snippet(ga_id: str) -> str:
+    """The Google Analytics 4 tag for the page's head, or nothing when no measurement ID is given."""
+    if not ga_id:
+        return ""
+    if not GA_ID.fullmatch(ga_id):
+        raise ValueError(f"not a GA4 measurement ID (expected G-XXXXXXXXXX): {ga_id!r}")
+    return (f'<script async src="https://www.googletagmanager.com/gtag/js?id={ga_id}"></script>\n'
+            f'<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}'
+            f'gtag("js",new Date());gtag("config","{ga_id}");</script>\n')
+
+
 def _data_uri(path: Path) -> str:
     return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
 
@@ -90,7 +104,7 @@ def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, thr
     }
 
 
-def render(data: dict, title: str, rules: Rules = Rules()) -> str:
+def render(data: dict, title: str, rules: Rules = Rules(), ga_id: str = "") -> str:
     # Names are untrusted text inside a script block: keep "<" and line separators from ending it.
     blob = (json.dumps(data, separators=(",", ":"), ensure_ascii=False)
             .replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
@@ -101,6 +115,7 @@ def render(data: dict, title: str, rules: Rules = Rules()) -> str:
     css = re.sub(r"@import url\(.*?\);", "",INDUSTRY_CSS.read_text(encoding="utf-8"))
     page = TEMPLATE.read_text(encoding="utf-8")
     for key, value in {
+        "__ANALYTICS__": analytics_snippet(ga_id),
         "__INDUSTRY_CSS__": css,
         "__LOGO__": _data_uri(LOGO),
         "__FAVICON__": _data_uri(STATIC / "icon-32.png"),
@@ -126,6 +141,8 @@ def main(argv=None) -> int:
     parser.add_argument("--players", help="players.csv from sfb-field simulate (adds the player section)")
     parser.add_argument("--out", default="index.html")
     parser.add_argument("--title", default="SFB16 playoff projections")
+    parser.add_argument("--ga-id", default="",
+                        help="Google Analytics 4 measurement ID (G-XXXXXXXXXX) to count page views; no tag is added without it")
     parser.add_argument("--default-team", default="tefirman51",
                         help="Sleeper handle whose team opens when the URL has no #league-roster (empty for none)")
     args = parser.parse_args(argv)
@@ -138,7 +155,7 @@ def main(argv=None) -> int:
     # The simulations finish when odds.csv is written, so that is the page's "last updated" time.
     updated = datetime.datetime.fromtimestamp(Path(args.odds).stat().st_mtime).astimezone().isoformat(timespec="seconds")
     data = page_data(odds, cut, names, through_week=first_week - 1, players=players, updated=updated, default_team=args.default_team)
-    Path(args.out).write_text(render(data, args.title), encoding="utf-8")
+    Path(args.out).write_text(render(data, args.title, ga_id=args.ga_id), encoding="utf-8")
     print(f"wrote {args.out} ({Path(args.out).stat().st_size / 1e6:.2f} MB, {len(data['teams'])} teams)")
     return 0
 
