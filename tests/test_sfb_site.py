@@ -109,6 +109,22 @@ class TestDesign:
         assert re.search(r'<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,[A-Za-z0-9+/=]+">', page)
         assert re.search(r'<link rel="apple-touch-icon" href="data:image/png;base64,[A-Za-z0-9+/=]+">', page)
 
+    def test_no_analytics_tag_unless_a_measurement_id_is_given(self):
+        page = build.render(data(), "t", RULES)
+        assert "googletagmanager" not in page and "gtag" not in page
+
+    def test_measurement_id_adds_the_ga4_tag_to_the_head(self):
+        page = build.render(data(), "t", RULES, ga_id="G-ABC123DEF4")
+        head = page.split("</head>")[0]
+        assert 'src="https://www.googletagmanager.com/gtag/js?id=G-ABC123DEF4"' in head
+        assert 'gtag("config","G-ABC123DEF4")' in head
+
+    def test_malformed_measurement_ids_are_refused(self):
+        import pytest
+        for bad in ["GTM-KNWPV5RC", 'G-AB"><script>', "UA-12345-1"]:
+            with pytest.raises(ValueError):
+                build.render(data(), "t", RULES, ga_id=bad)
+
     def test_method_copy_is_templated_from_the_rules(self):
         page = build.render(data(), "t", RULES)
         assert "through week 11" in page and "Teams with 13 or more wins" in page
