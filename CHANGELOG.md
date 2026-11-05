@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **SFB playoff page shows the fantasyfb logo as its browser tab icon** (#141): the page had no favicon, so tabs and bookmarks showed a blank globe. `app/sfb_site/build.py` now inlines the web app's 32px icon as the favicon and its 180px icon as the iPhone and Android home screen icon, as data URIs, so the page is still one self-contained file (about 23 KB larger). A test checks both links.
+- **Docs `site_url` points at the custom domain**: `mkdocs.yml` still said `https://tefirman.github.io/fantasyfb/`, which now redirects to `https://taylorfirman.com/fantasyfb/`, so the built pages carried canonical links and a sitemap for the redirecting address. Both now use the custom domain. Deployment is unchanged, since the workflow uploads `site/` to GitHub Pages without reading `site_url`.
 
 ## [0.12.0] — 2026-11-03
 
