@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **SFB playoff page can count visits with Google Analytics 4**: `app/sfb_site/build.py` takes `--ga-id G-XXXXXXXXXX` and adds the standard GA4 tag to the page's head. Without the flag no tag is added and the page makes no requests beyond Google Fonts, so builds from the repo track nothing by default. A malformed ID (a Tag Manager `GTM-` ID, an old `UA-` ID, or anything that could break out of the script) is refused instead of written into the page. Tests cover the default, the tag, and the refusals.
+
 ### Changed
 - **SFB playoff page shows the fantasyfb logo as its browser tab icon** (#141): the page had no favicon, so tabs and bookmarks showed a blank globe. `app/sfb_site/build.py` now inlines the web app's 32px icon as the favicon and its 180px icon as the iPhone and Android home screen icon, as data URIs, so the page is still one self-contained file (about 23 KB larger). A test checks both links.
 
