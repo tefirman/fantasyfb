@@ -29,7 +29,12 @@ from fantasyfb.sfb.leagues import parse_leaderboard
 
 TEMPLATE = Path(__file__).with_name("template.html")
 INDUSTRY_CSS = Path(__file__).resolve().parents[2] / "src" / "fantasyfb" / "io" / "templates" / "industry-styles.css"
-LOGO = Path(__file__).resolve().parents[1] / "fantasyfb_web" / "static" / "fantasyfb_logo.png"
+STATIC = Path(__file__).resolve().parents[1] / "fantasyfb_web" / "static"
+LOGO = STATIC / "fantasyfb_logo.png"
+
+
+def _data_uri(path: Path) -> str:
+    return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 def _label(name: str) -> str:
@@ -94,11 +99,12 @@ def render(data: dict, title: str, rules: Rules = Rules()) -> str:
     sizes = ", ".join(sizes[:-1]) + f", and {sizes[-1]}"
     # The design system's stylesheet is inlined, minus its font @import: the template links Google Fonts itself.
     css = re.sub(r"@import url\(.*?\);", "",INDUSTRY_CSS.read_text(encoding="utf-8"))
-    logo = "data:image/png;base64," + base64.b64encode(LOGO.read_bytes()).decode("ascii")
     page = TEMPLATE.read_text(encoding="utf-8")
     for key, value in {
         "__INDUSTRY_CSS__": css,
-        "__LOGO__": logo,
+        "__LOGO__": _data_uri(LOGO),
+        "__FAVICON__": _data_uri(STATIC / "icon-32.png"),
+        "__TOUCH_ICON__": _data_uri(STATIC / "icon-180.png"),
         "__TITLE__": html.escape(title),
         "__REG_WEEKS__": str(data["reg_weeks"]),
         "__AUTO_WINS__": str(data["auto_wins"]),

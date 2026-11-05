@@ -104,6 +104,11 @@ class TestDesign:
         assert re.findall(r"https?://[^\s\"')]+", page.split("<script")[0].replace("https://github.com/tefirman/fantasyfb", "")) \
             == ["https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&display=swap"]
 
+    def test_page_has_the_logo_as_its_favicon_and_home_screen_icon(self):
+        page = build.render(data(), "t", RULES)
+        assert re.search(r'<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,[A-Za-z0-9+/=]+">', page)
+        assert re.search(r'<link rel="apple-touch-icon" href="data:image/png;base64,[A-Za-z0-9+/=]+">', page)
+
     def test_method_copy_is_templated_from_the_rules(self):
         page = build.render(data(), "t", RULES)
         assert "through week 11" in page and "Teams with 13 or more wins" in page
