@@ -21,6 +21,15 @@ python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
 
 `collect` can be re-run for a few leagues with `--only ID,ID`, and a refresh only needs `collect` and `simulate` again. The leaderboard page is only read for names, so it does not need to be re-saved unless teams change.
 
+## Automatic refresh
+
+`.github/workflows/sfb-refresh.yml` does the steps above daily at 6:17 AM Pacific (14:17 UTC, so 7:17 AM during daylight time) and on demand from the Actions tab, then pushes the page to `tefirman/sfb-odds`. It reads the league list and saved leaderboard from `inputs/` in that repo, so re-upload `inputs/SFB16Leaderboard.html` and `inputs/leagues.csv` there when teams change. One-time setup in this repo's settings:
+
+- Secret `SFB_ODDS_PUSH_TOKEN`: a fine-grained personal access token with Contents: write on `tefirman/sfb-odds` only.
+- Variable `SFB_GA_ID`: the Google Analytics measurement ID. The run fails without it instead of publishing a page with no analytics.
+
+Failed leagues are retried once, and the run stops without publishing if any still fail or Sleeper rate-limits it. Sleeper's full player list is cached per UTC day, so re-running the workflow the same day does not request it again.
+
 ## Notes
 
 - The header and footer show when the simulations finished (the modification time of `odds.csv`), in the viewer's locale.
