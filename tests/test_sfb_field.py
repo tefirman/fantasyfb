@@ -269,6 +269,7 @@ class TestCollectField:
             schedule=pd.DataFrame({"league_id": [league_id], "week": [1]}),
             settings=pd.DataFrame({"league_id": [league_id], "first_week": [7]}),
             teams=pd.DataFrame({"league_id": [league_id], "team": ["t"], "roster_id": [1]}),
+            rosters=pd.DataFrame({"league_id": [league_id], "team": ["t"], "player_id": ["p"]}),
         )
 
     def test_failures_are_reported_and_retries_merge_into_existing_files(self, tmp_path, monkeypatch):

@@ -21,7 +21,7 @@ from ..data.sleeper_client import SleeperClient
 from ..league import League
 from ..sim.season_simulator import SeasonSimulator
 
-TABLES = ("starters", "schedule", "settings", "teams")
+TABLES = ("starters", "schedule", "settings", "teams", "rosters")
 DEFAULT_MAX_CALLS_PER_MINUTE = 500
 
 
@@ -110,7 +110,9 @@ def collect_league(template: League, league_id: str) -> Dict[str, pd.DataFrame]:
     schedule = schedule[["week", "team_1", "team_2", "points_avg_1", "points_stdev_1",
                          "points_avg_2", "points_stdev_2"]]
     roster_ids = {team["name"]: int(team["team_key"]) for team in league.teams}
+    rostered = league.players.loc[league.players.fantasy_team.notna(), ["fantasy_team", "player_id"]]
     return dict(
+        rosters=rostered.rename(columns={"fantasy_team": "team"}).assign(league_id=league_id),
         starters=starters.rename(columns={"fantasy_team": "team", "points_avg": "mu", "points_stdev": "sd"})
                          .drop(columns="points_var").assign(league_id=league_id),
         schedule=schedule.assign(league_id=league_id),

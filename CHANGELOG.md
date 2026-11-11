@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`sfb-field injuries` and `check-injuries` find injuries across the whole SFB field** (#147): `add_injuries` flags newly hurt players only when they are on the template league's rosters, which for the SFB is 12 of about 4,800 teams, so a starter hurt on other leagues' rosters never got an `until` and stayed in every lineup. `collect` now also writes `rosters.parquet`, and `sfb-field injuries` lists players rostered on 20 or more field teams (`--min-teams`) who carry an out designation without an `until` reaching the week, plus listed players who now look healthy, using the Sleeper player list the run already pulled. `sfb-field check-injuries` validates an edited `injured_list.csv` (same columns, `until` a whole week from 1 to 18, no duplicates, only players Sleeper knows, at most 25 changed rows). The SFB refresh workflow uses both to update the list before each daily run.
 - **SFB playoff page can count visits with Google Analytics 4** (#142): `app/sfb_site/build.py` takes `--ga-id G-XXXXXXXXXX` and adds the standard GA4 tag to the page's head. Without the flag no tag is added and the page makes no requests beyond Google Fonts, so builds from the repo track nothing by default. A malformed ID (a Tag Manager `GTM-` ID, an old `UA-` ID, or anything that could break out of the script) is refused instead of written into the page. Tests cover the default, the tag, and the refusals.
 
 ### Changed
