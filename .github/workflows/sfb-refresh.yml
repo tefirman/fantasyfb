@@ -11,8 +11,6 @@ on:
     # hour because scheduled runs often start late then.
     - cron: "17 14 * * *"
   workflow_dispatch:
-  push:
-    branches: [sfb-refresh-workflow] # TEMPORARY: remove before merging
 
 permissions:
   contents: read
