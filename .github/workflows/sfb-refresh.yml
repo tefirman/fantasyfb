@@ -11,6 +11,11 @@ on:
     # hour because scheduled runs often start late then.
     - cron: "17 14 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Injury step only: research and validate, show the proposed diff, commit and publish nothing"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -106,8 +111,22 @@ jobs:
         if: steps.scan.outputs.changes == 'true'
         run: sfb-field check-injuries injured_list.before.csv fantasy-data/fantasyfb/injured_list.csv
 
+      # A dry run stops here: the proposed change goes to the run's summary
+      # page instead of fantasy-data, and the refresh below is skipped.
+      - name: Show the proposed change (dry run)
+        if: steps.scan.outputs.changes == 'true' && inputs.dry_run
+        run: |
+          {
+            echo "## Proposed injured_list.csv changes (dry run, nothing committed)"
+            echo '```diff'
+            diff -u injured_list.before.csv fantasy-data/fantasyfb/injured_list.csv || true
+            echo '```'
+            echo
+            cat scan/summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Commit the update
-        if: steps.scan.outputs.changes == 'true'
+        if: steps.scan.outputs.changes == 'true' && !inputs.dry_run
         run: |
           cd fantasy-data
           if git diff --quiet; then
@@ -122,7 +141,7 @@ jobs:
       # raw.githubusercontent.com is cached for a few minutes, and the refresh
       # reads the list from there, so wait until it serves the new file.
       - name: Wait for the new list to be served
-        if: steps.scan.outputs.changes == 'true'
+        if: steps.scan.outputs.changes == 'true' && !inputs.dry_run
         run: |
           want=$(sha256sum fantasy-data/fantasyfb/injured_list.csv | cut -d' ' -f1)
           for i in $(seq 1 20); do
@@ -135,7 +154,7 @@ jobs:
   refresh:
     name: Collect, simulate, publish
     needs: injuries
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
