@@ -13,8 +13,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from ..data.player_data_manager import INJURED_LIST_URL
+from ..data.sleeper_client import SleeperClient
 from .collect import DEFAULT_MAX_CALLS_PER_MINUTE, collect_field
 from .field import FieldData, simulate_field
+from .injuries import scan_injuries, validate_injured_list
 from .leagues import league_list, parse_leaderboard, read_league_ids
 from .players import add_player_info
 
@@ -55,6 +58,36 @@ def _simulate(args) -> int:
     return 0
 
 
+def _injuries(args) -> int:
+    data = Path(args.data)
+    week = args.week or int(pd.read_parquet(data / "settings.parquet").first_week.min())
+    new, old = scan_injuries(
+        pd.read_parquet(data / "rosters.parquet"),
+        SleeperClient("").get_all_players(),
+        pd.read_csv(args.injured_list),
+        week,
+        args.min_teams,
+    )
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    new.to_csv(out_dir / "new_injuries.csv", index=False)
+    old.to_csv(out_dir / "old_injuries.csv", index=False)
+    print(f"week {week}: {len(new)} new injuries to research, {len(old)} listed players who look healthy")
+    return 0
+
+
+def _check_injuries(args) -> int:
+    after = pd.read_csv(args.after)
+    known = [p for p in SleeperClient("").get_all_players().player_id_sr.dropna()]
+    try:
+        validate_injured_list(pd.read_csv(args.before), after, known, args.max_changes)
+    except ValueError as e:
+        print(f"injured_list.csv rejected: {e}", file=sys.stderr)
+        return 1
+    print(f"injured_list.csv ok ({len(after)} rows)")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="sfb-field", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -73,6 +106,21 @@ def main(argv=None) -> int:
                          help="Sleeper asks for under 1,000 (default: %(default)s)")
     collect.add_argument("--only", help="comma-separated league IDs to (re)collect instead of the whole list")
     collect.set_defaults(run=_collect)
+
+    injuries = commands.add_parser(
+        "injuries", help="list injuries across the field that injured_list.csv doesn't cover (uses cached Sleeper data)")
+    injuries.add_argument("data", help="directory written by the collect step (needs rosters.parquet)")
+    injuries.add_argument("--injured-list", default=INJURED_LIST_URL, help="injured_list.csv path or URL (default: the live one)")
+    injuries.add_argument("--week", type=int, help="week being projected (default: the collected leagues' first week)")
+    injuries.add_argument("--min-teams", type=int, default=20, help="field teams that must roster a player (default: %(default)s)")
+    injuries.add_argument("--out-dir", default=".", help="where to write new_injuries.csv and old_injuries.csv")
+    injuries.set_defaults(run=_injuries)
+
+    check = commands.add_parser("check-injuries", help="validate an edited injured_list.csv before it is committed")
+    check.add_argument("before", help="injured_list.csv as it was")
+    check.add_argument("after", help="injured_list.csv as edited")
+    check.add_argument("--max-changes", type=int, default=25)
+    check.set_defaults(run=_check_injuries)
 
     simulate = commands.add_parser("simulate", help="simulate the field from collected data (offline)")
     simulate.add_argument("data", help="directory written by the collect step")

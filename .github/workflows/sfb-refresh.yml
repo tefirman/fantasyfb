@@ -20,8 +20,121 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Updates injured_list.csv in tefirman/fantasy-data before the refresh reads
+  # it, using yesterday's saved rosters (the refresh saves them at the end) and
+  # today's Sleeper statuses, so it costs no extra Sleeper calls. It never blocks
+  # the refresh: continue-on-error lets the refresh run with the list as it is.
+  injuries:
+    name: Update the injury list
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fine-grained PAT with Contents: write on tefirman/fantasy-data only.
+      - name: Check out the injury list
+        uses: actions/checkout@v4
+        with:
+          repository: tefirman/fantasy-data
+          token: ${{ secrets.FANTASY_DATA_PUSH_TOKEN }}
+          path: fantasy-data
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Get today's date
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Sleeper's player list
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fantasyfb/sleeper_players.json
+          key: sleeper-players-${{ steps.day.outputs.day }}
+
+      # The newest rosters the refresh saved. On the very first run there are
+      # none, so the scan is skipped until the refresh has run once.
+      - name: Restore the last collected rosters
+        id: rosters
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            sfb/data/rosters.parquet
+            sfb/data/settings.parquet
+          key: sfb-rosters-none
+          restore-keys: sfb-rosters-
+
+      - name: Scan for uncovered injuries
+        id: scan
+        if: steps.rosters.outputs.cache-matched-key != ''
+        run: |
+          sfb-field injuries sfb/data --injured-list fantasy-data/fantasyfb/injured_list.csv --out-dir scan | tee scan.log
+          echo "week=$(python -c "import pandas as pd; print(int(pd.read_parquet('sfb/data/settings.parquet').first_week.min()))")" >> "$GITHUB_OUTPUT"
+          if [ "$(wc -l < scan/new_injuries.csv)" -gt 1 ] || [ "$(wc -l < scan/old_injuries.csv)" -gt 1 ]; then
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Headless Claude Code, not the GitHub app: it needs only the API key.
+      # Tools are limited to web research and editing the one list, with no
+      # shell, so a hostile web page cannot reach the keys or other files.
+      - name: Research and update the list
+        id: research
+        if: steps.scan.outputs.changes == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WEEK: ${{ steps.scan.outputs.week }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          cp fantasy-data/fantasyfb/injured_list.csv injured_list.before.csv
+          sed -e "s/{WEEK_PLUS_3}/$((WEEK + 3))/g" -e "s/{WEEK}/$WEEK/g" .github/prompts/sfb-injuries.md > prompt.md
+          claude -p "$(cat prompt.md)" --max-turns 60 \
+            --allowedTools "WebSearch" "WebFetch" "Read" \
+              "Edit(fantasy-data/fantasyfb/injured_list.csv)" "Write(scan/summary.md)"
+          cat scan/summary.md
+
+      - name: Validate the edited list
+        if: steps.scan.outputs.changes == 'true'
+        run: sfb-field check-injuries injured_list.before.csv fantasy-data/fantasyfb/injured_list.csv
+
+      - name: Commit the update
+        if: steps.scan.outputs.changes == 'true'
+        run: |
+          cd fantasy-data
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update injured list (automated, week ${{ steps.scan.outputs.week }})"
+          git push origin HEAD:main
+
+      # raw.githubusercontent.com is cached for a few minutes, and the refresh
+      # reads the list from there, so wait until it serves the new file.
+      - name: Wait for the new list to be served
+        if: steps.scan.outputs.changes == 'true'
+        run: |
+          want=$(sha256sum fantasy-data/fantasyfb/injured_list.csv | cut -d' ' -f1)
+          for i in $(seq 1 20); do
+            got=$(curl -fsS https://raw.githubusercontent.com/tefirman/fantasy-data/main/fantasyfb/injured_list.csv | sha256sum | cut -d' ' -f1)
+            [ "$got" = "$want" ] && exit 0
+            sleep 30
+          done
+          echo "The new list was not being served after 10 minutes; the refresh may use the old one." >&2
+
   refresh:
     name: Collect, simulate, publish
+    needs: injuries
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -127,3 +240,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "Refresh the odds through week $week (automated)"
           git push origin HEAD:main
+
+      # Tomorrow's injury scan reads these, so a failed refresh doesn't save
+      # half-collected files.
+      - name: Save the rosters for the next injury scan
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            sfb/data/rosters.parquet
+            sfb/data/settings.parquet
+          key: sfb-rosters-${{ github.run_id }}

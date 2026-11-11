@@ -47,6 +47,12 @@ Runs the whole field offline. Every player gets one random draw per week and sim
 | `--playoff-reps` | 20      | Playoff replays per regular-season simulation      |
 | `--seed`         | 1       | Random seed                                        |
 
+### `injuries` and `check-injuries`
+
+`sfb-field injuries sfb/data --out-dir scan` lists the injuries the odds depend on that `injured_list.csv` does not cover yet. It reads `rosters.parquet` (written by `collect`) and Sleeper's player list, which the run already has cached, so it makes no extra Sleeper requests. A player counts once he is rostered on `--min-teams` field teams (default 20), bench and IR included. It writes `new_injuries.csv` (out designation, no `until` reaching the week) and `old_injuries.csv` (listed, but no longer carrying a designation, so probably back early). `--injured-list` takes a path or URL and defaults to the live list.
+
+`sfb-field check-injuries before.csv after.csv` validates an edited list before it is committed: the same four columns, `until` a whole week from 1 to 18, no duplicate players, only players Sleeper knows, and at most `--max-changes` (default 25) rows added, removed or changed. It exits 1 with the reasons if any check fails.
+
 ## Output
 
 | File           | Contents                                                                                                   |

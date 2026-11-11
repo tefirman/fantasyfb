@@ -28,6 +28,8 @@ python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
 - Secret `SFB_ODDS_PUSH_TOKEN`: a fine-grained personal access token with Contents: write on `tefirman/sfb-odds` only.
 - Variable `SFB_GA_ID`: the Google Analytics measurement ID. The run fails without it instead of publishing a page with no analytics.
 
+Each run first updates `injured_list.csv` in `tefirman/fantasy-data`: `sfb-field injuries` scans the rosters the previous run saved (cached between runs) against today's Sleeper statuses, headless Claude Code researches each uncovered player with web search and edits only that file, `sfb-field check-injuries` validates the edit, and a bot commits it. The prompt is `.github/prompts/sfb-injuries.md`. This step never blocks the refresh, and the first run has no saved rosters, so it skips the scan. Extra setup for it: secret `ANTHROPIC_API_KEY`, and secret `FANTASY_DATA_PUSH_TOKEN` (a fine-grained PAT with Contents: write on `tefirman/fantasy-data` only). Review the bot's commits in that repo and revert any bad row; a manual `/update-injuries` still works and wins, since the next scan only touches players it finds uncovered.
+
 Failed leagues are retried once, and the run stops without publishing if any still fail or Sleeper rate-limits it. Sleeper's full player list is cached per UTC day, so re-running the workflow the same day does not request it again.
 
 ## Notes
