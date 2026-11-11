@@ -51,6 +51,13 @@ class TestScanInjuries:
         new, _ = scan_injuries(rosters({"1": 30}), questionable, LISTED.iloc[0:0], 9)
         assert new.empty
 
+    def test_a_stray_space_in_sleepers_id_does_not_hide_a_listed_player(self):
+        spaced = PLAYERS.assign(player_id_sr=[" g1", " g2", " g3", " g4", None])
+        new, old = scan_injuries(rosters({"1": 30, "3": 40, "4": 40}), spaced, LISTED, 9)
+        assert new.name.tolist() == ["Star"]  # Listed is covered even though Sleeper's ID has a space
+        assert new.player_id_sr.tolist() == ["g1"]  # and the ID written out is clean
+        assert old.name.tolist() == ["Healed"]
+
     def test_a_team_rostering_a_player_twice_counts_once(self):
         doubled = pd.concat([rosters({"1": 3})] * 2)
         assert rostered_counts(doubled)["1"] == 3
