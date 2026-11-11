@@ -78,7 +78,7 @@ def _injuries(args) -> int:
 
 def _check_injuries(args) -> int:
     after = pd.read_csv(args.after)
-    known = [p for p in SleeperClient("").get_all_players().player_id_sr.dropna()]
+    known = SleeperClient("").get_all_players().player_id_sr.dropna().str.strip().tolist()
     try:
         validate_injured_list(pd.read_csv(args.before), after, known, args.max_changes)
     except ValueError as e:

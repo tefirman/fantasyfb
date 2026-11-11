@@ -57,6 +57,10 @@ def scan_injuries(
         designation (columns ``player_id_sr, name, position, until, status``),
         so they are probably back early.
     """
+    # Sleeper's gsis_id has a stray leading space for some players (" 00-0035228"),
+    # which would hide them from the list and from the validator's known IDs.
+    players = players.assign(player_id_sr=players.player_id_sr.str.strip())
+    injured_list = injured_list.assign(player_id_sr=injured_list.player_id_sr.str.strip())
     covered = set(injured_list.loc[injured_list.until >= current_week, "player_id_sr"])
     teams = rostered_counts(rosters).rename("teams")
     pool = players.merge(teams, left_on="player_id", right_index=True, how="left")
