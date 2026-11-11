@@ -1,0 +1,129 @@
+name: SFB refresh
+
+# Rebuilds the Scott Fish Bowl odds page from fresh Sleeper data and publishes
+# it to tefirman/sfb-odds (https://taylorfirman.com/sfb-odds/). See
+# app/sfb_site/README.md. The league list and saved leaderboard it reads live
+# in that repo under inputs/, since they are once-per-season files.
+
+on:
+  schedule:
+    # 6:17 AM Pacific (PST), 7:17 AM during daylight time. Off the top of the
+    # hour because scheduled runs often start late then.
+    - cron: "17 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sfb-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Collect, simulate, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # The default GITHUB_TOKEN can't push to another repo, so this takes a
+      # fine-grained PAT with Contents: write on tefirman/sfb-odds only.
+      - name: Check out the published site
+        uses: actions/checkout@v4
+        with:
+          repository: tefirman/sfb-odds
+          token: ${{ secrets.SFB_ODDS_PUSH_TOKEN }}
+          path: site
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      # Sleeper asks callers to pull its full player list once or twice a day.
+      # A fresh runner has no cache, so keep the file per UTC day: a manual
+      # re-run on the same day reuses it instead of asking again.
+      - name: Get today's date
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Sleeper's player list
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fantasyfb/sleeper_players.json
+          key: sleeper-players-${{ steps.day.outputs.day }}
+
+      - name: Collect the Sleeper leagues
+        shell: bash
+        run: sfb-field collect site/inputs/leagues.csv --out-dir sfb/data 2>&1 | tee collect.log
+        continue-on-error: true
+        id: collect
+
+      # Failed leagues are listed as "FAILED <id>: <error>". Retry just those
+      # once, and stop if any still fail, so a partial page is never published.
+      - name: Retry failed leagues once
+        if: steps.collect.outcome == 'failure'
+        shell: bash
+        run: |
+          if grep -q "429 Client Error\|Too Many Requests" collect.log; then
+            echo "Sleeper rate-limited the run; not retrying." >&2
+            exit 1
+          fi
+          failed=$(grep -oE '^FAILED [0-9]+' collect.log | awk '{print $2}' | paste -sd, -)
+          if [ -z "$failed" ]; then
+            echo "collect failed without naming any leagues" >&2
+            exit 1
+          fi
+          echo "Retrying: $failed"
+          sfb-field collect site/inputs/leagues.csv --out-dir sfb/data --only "$failed"
+
+      - name: Simulate the field
+        run: sfb-field simulate sfb/data --out-dir sfb
+
+      # The measurement ID is public but deliberately kept out of the repo, so
+      # it comes from the SFB_GA_ID repository variable. Fail rather than
+      # silently publish a page without analytics.
+      - name: Build the page
+        env:
+          GA_ID: ${{ vars.SFB_GA_ID }}
+        run: |
+          if [ -z "$GA_ID" ]; then
+            echo "Set the SFB_GA_ID repository variable (Settings > Variables)." >&2
+            exit 1
+          fi
+          python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
+            --leaderboard site/inputs/SFB16Leaderboard.html --data sfb/data \
+            --players sfb/players.csv --out sfb/index.html --ga-id "$GA_ID"
+
+      - name: Sanity-check the output
+        run: |
+          python - <<'EOF'
+          import pandas as pd
+          odds = pd.read_csv("sfb/odds.csv")
+          assert len(odds) > 4500, f"only {len(odds)} teams"
+          assert not odds.isna().any().any(), "NaN in odds.csv"
+          assert abs(odds.win.sum() - 1) < 1e-6, f"win odds sum to {odds.win.sum()}"
+          assert "googletagmanager" in open("sfb/index.html", encoding="utf-8").read(), "analytics tag missing"
+          print(f"{len(odds)} teams, win sums to {odds.win.sum():.6f}")
+          EOF
+
+      - name: Publish
+        run: |
+          week=$(python -c "import pandas as pd; print(int(pd.read_parquet('sfb/data/settings.parquet').first_week.min()) - 1)")
+          cp sfb/index.html site/index.html
+          cd site
+          if git diff --quiet; then
+            echo "Page unchanged; nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Refresh the odds through week $week (automated)"
+          git push origin HEAD:main
