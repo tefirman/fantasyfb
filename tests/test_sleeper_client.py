@@ -478,6 +478,26 @@ class TestSleeperClientGetAllPlayers:
         assert players.iloc[0]["status"] == "Questionable"
 
     @patch("fantasyfb.data.sleeper_client.fetch_all_players")
+    def test_gsis_id_is_stripped_so_joins_on_player_id_sr_match(self, mock_fetch):
+        mock_fetch.return_value = {
+            "1": {"position": "QB", "full_name": "Spaced", "gsis_id": " 00-0035228"},
+            "2": {"position": "QB", "full_name": "Blank", "gsis_id": "  "},
+            "3": {"position": "QB", "full_name": "Missing"},
+        }
+        players = sleeper_client.SleeperClient("123").get_all_players().set_index("name")
+        assert players.loc["Spaced", "player_id_sr"] == "00-0035228"
+        assert players["player_id_sr"].isna()[["Blank", "Missing"]].all()
+
+    @pytest.mark.parametrize("sleeper, expected", [
+        ("Out", "O"), ("Doubtful", "D"), ("PUP", "PUP-R"), ("Sus", "SUSP"), ("COV", "COVID-19"),
+        ("IR", "IR"), ("NA", "NA"), ("Questionable", "Questionable"),
+    ])
+    @patch("fantasyfb.data.sleeper_client.fetch_all_players")
+    def test_out_designations_use_the_codes_add_injuries_looks_for(self, mock_fetch, sleeper, expected):
+        mock_fetch.return_value = {"1": {"position": "RB", "full_name": "Hurt", "injury_status": sleeper}}
+        assert sleeper_client.SleeperClient("123").get_all_players().iloc[0]["status"] == expected
+
+    @patch("fantasyfb.data.sleeper_client.fetch_all_players")
     def test_falls_back_to_first_last_name_when_full_name_missing(self, mock_fetch):
         mock_fetch.return_value = {
             "100": {"position": "WR", "first_name": "Jane", "last_name": "Doe"},
