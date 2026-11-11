@@ -130,6 +130,17 @@ UNSUPPORTED_SCORING_KEYS = (
 SEARCH_RANK_UNRANKED = 9_000_000
 FREE_AGENT_RANK_CUTOFF = 300
 
+# Sleeper spells out the designations that PlayerDataManager.add_injuries looks
+# for by their Yahoo codes ("Out", not "O"), so without this map a player
+# Sleeper lists as Out was never treated as injured. IR and NA already match.
+SLEEPER_TO_YAHOO_STATUS = {
+    "Out": "O",
+    "Doubtful": "D",
+    "PUP": "PUP-R",
+    "Sus": "SUSP",
+    "COV": "COVID-19",
+}
+
 
 # Plain-language names for the warning, which is shown to end users in the
 # web app's report as well as logged.
@@ -596,14 +607,17 @@ class SleeperClient(FantasyPlatformClient):
             name = info.get("full_name") or " ".join(
                 part for part in (info.get("first_name"), info.get("last_name")) if part
             )
+            status = info.get("injury_status") or info.get("status")
             records.append({
                 "player_id": player_id,
                 "name": name,
                 "position": position,
                 "editorial_team_abbr": info.get("team"),
-                "status": info.get("injury_status") or info.get("status"),
+                "status": SLEEPER_TO_YAHOO_STATUS.get(status, status),
                 "eligible_positions": info.get("fantasy_positions") or [position],
-                "player_id_sr": info.get("gsis_id"),
+                # Some gsis_ids carry a stray leading space (" 00-0035228"), which
+                # silently fails every join on player_id_sr, injured_list.csv included.
+                "player_id_sr": (info.get("gsis_id") or "").strip() or None,
                 "yahoo_id": info.get("yahoo_id"),
                 "sleeper_rank": _sleeper_rank(info.get("search_rank")),
             })

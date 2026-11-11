@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Sleeper players hurt per Sleeper's own designations were never treated as injured, and some manual injury timelines never applied** (#148): two bugs in `SleeperClient.get_all_players` made `injured_list.csv` and the injury flags miss Sleeper players. First, Sleeper spells out `Out`, `Doubtful`, `PUP` and `Sus`, but `PlayerDataManager.add_injuries` looks for the Yahoo codes `O`, `D`, `PUP-R` and `SUSP`, so only `IR` and `NA` ever matched. On the Nov 9 SFB data, 25 field starters (Rhamondre Stevenson in 394 leagues, Jaylen Waddle in 370) were `Out` per Sleeper and stayed in every lineup with no `until`. Second, Sleeper's `gsis_id` has a stray leading space for some players (`" 00-0035228"`), so the join to `injured_list.csv` on `player_id_sr` failed silently and Kyler Murray's listed `until` of 11 never applied. `get_all_players` now maps Sleeper's designations to the Yahoo codes and strips the ID. On the same league, Murray gets `until` 11, Puka Nacua, Josh Jacobs and Sam Darnold are flagged out for the week, and 63 of the 74 listed players match, up from 58. The other 11 still miss, mostly names that differ by suffix (Michael Pittman Jr.), which is a separate problem.
+
 ### Added
 - **SFB playoff page can count visits with Google Analytics 4** (#142): `app/sfb_site/build.py` takes `--ga-id G-XXXXXXXXXX` and adds the standard GA4 tag to the page's head. Without the flag no tag is added and the page makes no requests beyond Google Fonts, so builds from the repo track nothing by default. A malformed ID (a Tag Manager `GTM-` ID, an old `UA-` ID, or anything that could break out of the script) is refused instead of written into the page. Tests cover the default, the tag, and the refusals.
 
