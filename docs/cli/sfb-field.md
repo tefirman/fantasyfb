@@ -12,7 +12,7 @@ sfb-field collect sfb/leagues.csv --out-dir sfb/data    # pulls Sleeper, about 2
 sfb-field simulate sfb/data --out-dir sfb               # offline, under a minute
 ```
 
-The three steps are separate so that the slow, network-bound one (`collect`) can be done once and the simulation re-run as often as you like. Run output is written to `sfb/` in the repo root, which is gitignored.
+The three steps are separate so that the slow, network-bound one (`collect`) can be done once and the simulation re-run as often as you like. Run output is written to `sfb/` in the repo root, which is gitignored. The public odds page is refreshed from these same steps every day by a GitHub Action, so you only need to run them yourself for a local run (see [Automatic refresh](#automatic-refresh)).
 
 ### `leagues`
 
@@ -25,7 +25,7 @@ Reads the league IDs out of a saved copy of the SFB leaderboard page, so the SFB
 
 ### `collect`
 
-Pulls each Sleeper league's settings, rosters, and schedule into parquet files, about 18 requests per league. Requests go through a shared limiter and the command stops at the first HTTP 429. The 400 Sleeper leagues of the 2026 field took about 20 minutes. A failed league is reported on stderr and the command exits 1, so you can re-run just those with `--only`.
+Pulls each Sleeper league's settings, rosters, and schedule into parquet files (`rosters.parquet` is what the [`injuries`](#injuries-and-check-injuries) scan reads), about 18 requests per league. Sleeper's full player list is fetched once and cached per UTC day, so re-running the same day does not request it again. Requests go through a shared limiter and the command stops at the first HTTP 429. The 400 Sleeper leagues of the 2026 field took about 20 minutes. A failed league is reported on stderr and the command exits 1, so you can re-run just those with `--only`.
 
 | Flag                      | Default | Meaning                                                      |
 | ------------------------- | ------- | ------------------------------------------------------------ |
@@ -52,6 +52,20 @@ Runs the whole field offline. Every player gets one random draw per week and sim
 `sfb-field injuries sfb/data --out-dir scan` lists the injuries the odds depend on that `injured_list.csv` does not cover yet. It reads `rosters.parquet` (written by `collect`) and Sleeper's player list, which the run already has cached, so it makes no extra Sleeper requests. A player counts once he is rostered on `--min-teams` field teams (default 20), bench and IR included. It writes `new_injuries.csv` (out designation, no `until` reaching the week) and `old_injuries.csv` (listed, but no longer carrying a designation, so probably back early). `--injured-list` takes a path or URL and defaults to the live list.
 
 `sfb-field check-injuries before.csv after.csv` validates an edited list before it is committed: the same four columns, `until` a whole week from 1 to 18, no duplicate players, only players Sleeper knows, and at most `--max-changes` (default 25) rows added, removed or changed. It exits 1 with the reasons if any check fails.
+
+The scan only looks at players on `--min-teams` or more field teams, so a rarely rostered player who is hurt still depends on the template league's rosters and the manual list.
+
+## Automatic refresh
+
+The odds page at [taylorfirman.com/sfb-odds](https://taylorfirman.com/sfb-odds/) is rebuilt every day at 6:17 AM Pacific by the `SFB refresh` GitHub Action (`.github/workflows/sfb-refresh.yml`), and it can be run on demand from the repo's Actions tab. Each run does the following:
+
+1. Updates `injured_list.csv` in `tefirman/fantasy-data`. `injuries` scans the rosters the previous run saved against today's Sleeper statuses, headless Claude Code researches each uncovered player with web search and edits only that file, `check-injuries` validates the edit, and a bot commits it. This step never blocks the refresh, and the first run has no saved rosters, so it skips the scan.
+2. Runs `collect` and `simulate`. Failed leagues are retried once, and the run stops without publishing if any still fail or Sleeper rate-limits it.
+3. Builds the page with `app/sfb_site/build.py` and pushes it to `tefirman/sfb-odds`.
+
+Running the workflow by hand with `dry_run` checked tries the injury step without changing anything: it researches and validates, shows the proposed diff on the run's summary page, and skips the commit and the refresh. Review the bot's commits in `fantasy-data` and revert any bad row. A manual `/update-injuries` run still works and wins, since the next scan only touches players it finds uncovered.
+
+The league list and saved leaderboard are read from `inputs/` in `tefirman/sfb-odds`, so re-upload them there when teams change. The secrets and variables the workflow needs are listed in [`app/sfb_site/README.md`](https://github.com/tefirman/fantasyfb/blob/main/app/sfb_site/README.md#automatic-refresh).
 
 ## Output
 
