@@ -134,7 +134,9 @@ jobs:
           sed -e "s/{WEEK_PLUS_3}/$((WEEK + 3))/g" -e "s/{WEEK}/$WEEK/g" .github/prompts/sfb-injuries.md > prompt.md
           # Only Edit(path) rules are path-checked; Write(path) matches nothing.
           # The summary is Claude's final message, so no second file is needed.
-          claude -p "$(cat prompt.md)" --max-turns 60 \
+          # The model is pinned so the cost per run doesn't change when the CLI's
+          # default does.
+          claude -p "$(cat prompt.md)" --model claude-sonnet-5-5 --max-turns 60 \
             --allowedTools "WebSearch" "WebFetch" "Read" \
               "Edit(fantasy-data/fantasyfb/injured_list.csv)" | tee scan/summary.md
 
