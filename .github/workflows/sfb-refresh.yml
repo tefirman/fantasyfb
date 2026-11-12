@@ -16,6 +16,10 @@ on:
         description: "Injury step only: research and validate, show the proposed diff, commit and publish nothing"
         type: boolean
         default: false
+      skip_injuries:
+        description: "Skip the injury step (it costs about $0.50 in Claude tokens when there is something to research); ignored by dry runs"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,12 +29,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The injury step costs Claude tokens, so scheduled runs do it only on Sundays
+  # and Wednesdays (Thursday's game and Friday's designations before the lock,
+  # then the weekend's injuries once their timelines are out). Manual runs do it
+  # unless skip_injuries is checked; run one by hand for news in between.
+  plan:
+    name: Decide whether to update injuries
+    runs-on: ubuntu-latest
+    outputs:
+      injuries: ${{ steps.decide.outputs.injuries }}
+    steps:
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          SKIP: ${{ inputs.skip_injuries }}
+        run: |
+          injuries=false
+          if [ "$EVENT" = "schedule" ]; then
+            case "$(date -u +%a)" in Sun|Wed) injuries=true ;; esac
+          elif [ "$DRY_RUN" = "true" ] || [ "$SKIP" != "true" ]; then
+            injuries=true
+          fi
+          echo "injuries=$injuries" >> "$GITHUB_OUTPUT"
+          echo "Injury step: $injuries"
+
   # Updates injured_list.csv in tefirman/fantasy-data before the refresh reads
   # it, using yesterday's saved rosters (the refresh saves them at the end) and
   # today's Sleeper statuses, so it costs no extra Sleeper calls. It never blocks
   # the refresh: continue-on-error lets the refresh run with the list as it is.
   injuries:
     name: Update the injury list
+    needs: plan
+    if: needs.plan.outputs.injuries == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     continue-on-error: true
