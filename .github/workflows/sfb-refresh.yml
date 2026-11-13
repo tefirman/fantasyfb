@@ -5,21 +5,11 @@ name: SFB refresh
 # app/sfb_site/README.md. The league list and saved leaderboard it reads live
 # in that repo under inputs/, since they are once-per-season files.
 
+# Runs only when started by hand from the Actions tab (or the GitHub app). The
+# daily refresh runs on a laptop instead (scripts/sfb_daily.sh), since
+# scheduled runs here started hours late or not at all.
 on:
-  schedule:
-    # 6:17 AM Pacific (PST), 7:17 AM during daylight time. Off the top of the
-    # hour because scheduled runs often start late then.
-    - cron: "17 14 * * *"
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Injury step only: research and validate, show the proposed diff, commit and publish nothing"
-        type: boolean
-        default: false
-      skip_injuries:
-        description: "Skip the injury step (it costs about $0.50 in Claude tokens when there is something to research); ignored by dry runs"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -29,39 +19,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # The injury step costs Claude tokens, so scheduled runs do it only on Sundays
-  # and Wednesdays (Thursday's game and Friday's designations before the lock,
-  # then the weekend's injuries once their timelines are out). Manual runs do it
-  # unless skip_injuries is checked; run one by hand for news in between.
-  plan:
-    name: Decide whether to update injuries
-    runs-on: ubuntu-latest
-    outputs:
-      injuries: ${{ steps.decide.outputs.injuries }}
-    steps:
-      - id: decide
-        env:
-          EVENT: ${{ github.event_name }}
-          DRY_RUN: ${{ inputs.dry_run }}
-          SKIP: ${{ inputs.skip_injuries }}
-        run: |
-          injuries=false
-          if [ "$EVENT" = "schedule" ]; then
-            case "$(date -u +%a)" in Sun|Wed) injuries=true ;; esac
-          elif [ "$DRY_RUN" = "true" ] || [ "$SKIP" != "true" ]; then
-            injuries=true
-          fi
-          echo "injuries=$injuries" >> "$GITHUB_OUTPUT"
-          echo "Injury step: $injuries"
-
   # Updates injured_list.csv in tefirman/fantasy-data before the refresh reads
-  # it, using yesterday's saved rosters (the refresh saves them at the end) and
-  # today's Sleeper statuses, so it costs no extra Sleeper calls. It never blocks
-  # the refresh: continue-on-error lets the refresh run with the list as it is.
+  # it, scanning the field's current rosters (one Sleeper request per league)
+  # against today's Sleeper statuses. It never blocks the refresh:
+  # continue-on-error lets the refresh run with the list as it is.
   injuries:
     name: Update the injury list
-    needs: plan
-    if: needs.plan.outputs.injuries == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     continue-on-error: true
@@ -75,6 +38,14 @@ jobs:
           repository: tefirman/fantasy-data
           token: ${{ secrets.FANTASY_DATA_PUSH_TOKEN }}
           path: fantasy-data
+
+      # Only for inputs/leagues.csv.
+      - name: Check out the league list
+        uses: actions/checkout@v4
+        with:
+          repository: tefirman/sfb-odds
+          token: ${{ secrets.SFB_ODDS_PUSH_TOKEN }}
+          path: site
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -97,24 +68,11 @@ jobs:
           path: ~/.cache/fantasyfb/sleeper_players.json
           key: sleeper-players-${{ steps.day.outputs.day }}
 
-      # The newest rosters the refresh saved. On the very first run there are
-      # none, so the scan is skipped until the refresh has run once.
-      - name: Restore the last collected rosters
-        id: rosters
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            sfb/data/rosters.parquet
-            sfb/data/settings.parquet
-          key: sfb-rosters-none
-          restore-keys: sfb-rosters-
-
       - name: Scan for uncovered injuries
         id: scan
-        if: steps.rosters.outputs.cache-matched-key != ''
         run: |
-          sfb-field injuries sfb/data --injured-list fantasy-data/fantasyfb/injured_list.csv --out-dir scan | tee scan.log
-          echo "week=$(python -c "import pandas as pd; print(int(pd.read_parquet('sfb/data/settings.parquet').first_week.min()))")" >> "$GITHUB_OUTPUT"
+          sfb-field injuries site/inputs/leagues.csv --injured-list fantasy-data/fantasyfb/injured_list.csv --out-dir scan | tee scan.log
+          echo "week=$(sed -nE 's/^week ([0-9]+):.*/\1/p' scan.log)" >> "$GITHUB_OUTPUT"
           if [ "$(wc -l < scan/new_injuries.csv)" -gt 1 ] || [ "$(wc -l < scan/old_injuries.csv)" -gt 1 ]; then
             echo "changes=true" >> "$GITHUB_OUTPUT"
           fi
@@ -144,22 +102,8 @@ jobs:
         if: steps.scan.outputs.changes == 'true'
         run: sfb-field check-injuries injured_list.before.csv fantasy-data/fantasyfb/injured_list.csv
 
-      # A dry run stops here: the proposed change goes to the run's summary
-      # page instead of fantasy-data, and the refresh below is skipped.
-      - name: Show the proposed change (dry run)
-        if: steps.scan.outputs.changes == 'true' && inputs.dry_run
-        run: |
-          {
-            echo "## Proposed injured_list.csv changes (dry run, nothing committed)"
-            echo '```diff'
-            diff -u injured_list.before.csv fantasy-data/fantasyfb/injured_list.csv || true
-            echo '```'
-            echo
-            cat scan/summary.md
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Commit the update
-        if: steps.scan.outputs.changes == 'true' && !inputs.dry_run
+        if: steps.scan.outputs.changes == 'true'
         run: |
           cd fantasy-data
           if git diff --quiet; then
@@ -174,7 +118,7 @@ jobs:
       # raw.githubusercontent.com is cached for a few minutes, and the refresh
       # reads the list from there, so wait until it serves the new file.
       - name: Wait for the new list to be served
-        if: steps.scan.outputs.changes == 'true' && !inputs.dry_run
+        if: steps.scan.outputs.changes == 'true'
         run: |
           want=$(sha256sum fantasy-data/fantasyfb/injured_list.csv | cut -d' ' -f1)
           for i in $(seq 1 20); do
@@ -187,7 +131,7 @@ jobs:
   refresh:
     name: Collect, simulate, publish
     needs: injuries
-    if: ${{ !cancelled() && !inputs.dry_run }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -294,12 +238,3 @@ jobs:
           git commit -am "Refresh the odds through week $week (automated)"
           git push origin HEAD:main
 
-      # Tomorrow's injury scan reads these, so a failed refresh doesn't save
-      # half-collected files.
-      - name: Save the rosters for the next injury scan
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            sfb/data/rosters.parquet
-            sfb/data/settings.parquet
-          key: sfb-rosters-${{ github.run_id }}

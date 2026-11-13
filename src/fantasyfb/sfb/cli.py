@@ -15,7 +15,7 @@ import pandas as pd
 
 from ..data.player_data_manager import INJURED_LIST_URL
 from ..data.sleeper_client import SleeperClient
-from .collect import DEFAULT_MAX_CALLS_PER_MINUTE, collect_field
+from .collect import DEFAULT_MAX_CALLS_PER_MINUTE, collect_field, collect_rosters
 from .field import FieldData, simulate_field
 from .injuries import scan_injuries, validate_injured_list
 from .leagues import league_list, parse_leaderboard, read_league_ids
@@ -59,10 +59,15 @@ def _simulate(args) -> int:
 
 
 def _injuries(args) -> int:
-    data = Path(args.data)
-    week = args.week or int(pd.read_parquet(data / "settings.parquet").first_week.min())
+    rosters, errors = collect_rosters(read_league_ids(args.leagues))
+    for league_id, error in errors:
+        print(f"FAILED {league_id}: {error}", file=sys.stderr)
+    if rosters.empty:
+        print("no rosters collected", file=sys.stderr)
+        return 1
+    week = args.week or SleeperClient("").get_current_week()
     new, old = scan_injuries(
-        pd.read_parquet(data / "rosters.parquet"),
+        rosters,
         SleeperClient("").get_all_players(),
         pd.read_csv(args.injured_list),
         week,
@@ -108,10 +113,10 @@ def main(argv=None) -> int:
     collect.set_defaults(run=_collect)
 
     injuries = commands.add_parser(
-        "injuries", help="list injuries across the field that injured_list.csv doesn't cover (uses cached Sleeper data)")
-    injuries.add_argument("data", help="directory written by the collect step (needs rosters.parquet)")
+        "injuries", help="list injuries across the field that injured_list.csv doesn't cover (one Sleeper request per league)")
+    injuries.add_argument("leagues", help="leagues.csv from the leagues step; current rosters are pulled fresh")
     injuries.add_argument("--injured-list", default=INJURED_LIST_URL, help="injured_list.csv path or URL (default: the live one)")
-    injuries.add_argument("--week", type=int, help="week being projected (default: the collected leagues' first week)")
+    injuries.add_argument("--week", type=int, help="week being projected (default: Sleeper's current week)")
     injuries.add_argument("--min-teams", type=int, default=20, help="field teams that must roster a player (default: %(default)s)")
     injuries.add_argument("--out-dir", default=".", help="where to write new_injuries.csv and old_injuries.csv")
     injuries.set_defaults(run=_injuries)
