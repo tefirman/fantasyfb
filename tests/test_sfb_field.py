@@ -292,6 +292,18 @@ class TestCollectField:
         assert sorted(settings.league_id) == ["A", "B", "C"]  # A refreshed in place, not duplicated
 
 
+def test_collect_rosters_lists_every_rostered_player_and_reports_failures(monkeypatch):
+    def fake_rosters(league_id):
+        if league_id == "B":
+            raise RuntimeError("404")
+        return [{"roster_id": 1, "players": ["10", "11"]}, {"roster_id": 2, "players": None}]
+
+    monkeypatch.setattr(sfb_collect, "fetch_rosters", fake_rosters)
+    rosters, errors = sfb_collect.collect_rosters(["A", "B", 7], workers=1)
+    assert errors == [("B", "RuntimeError: 404")]
+    assert rosters.values.tolist() == [["A", 1, "10"], ["A", 1, "11"], ["7", 1, "10"], ["7", 1, "11"]]
+
+
 def test_owners_marks_teams_that_start_the_player_in_any_week():
     from fantasyfb.sfb.players import owners
     data = make_field()

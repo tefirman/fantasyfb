@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs scripts/sfb_daily.sh at 8:00 AM every day, or as soon as the laptop wakes
+  if it was asleep then. Copy it to ~/Library/LaunchAgents, fill in SFB_GA_ID,
+  and load it; see app/sfb_site/README.md. launchd needs absolute paths and
+  does not read your shell profile, hence PATH below.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tefirman.sfb-daily</string>
+  <key>ProgramArguments</key>
+  <array>
+    <!-- caffeinate keeps the laptop from idling to sleep mid-run (closing the lid still does). -->
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
+    <string>/bin/bash</string>
+    <string>/Users/tfirman/.sfb-daily/fantasyfb/scripts/sfb_daily.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SFB_GA_ID</key>
+    <string>G-XXXXXXXXXX</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>8</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/tfirman/Library/Logs/sfb-daily.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/tfirman/Library/Logs/sfb-daily.log</string>
+</dict>
+</plist>

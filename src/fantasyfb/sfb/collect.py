@@ -17,7 +17,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import pandas as pd
 import requests
 
-from ..data.sleeper_client import SleeperClient
+from ..data.sleeper_client import SleeperClient, fetch_rosters
 from ..league import League
 from ..sim.season_simulator import SeasonSimulator
 
@@ -194,3 +194,36 @@ def collect_field(
         if new is not None:
             new.to_parquet(path, index=False)
     return errors
+
+
+def collect_rosters(
+    league_ids: Iterable[str],
+    workers: int = 3,
+    max_calls_per_minute: int = DEFAULT_MAX_CALLS_PER_MINUTE,
+) -> Tuple[pd.DataFrame, List[Tuple[str, str]]]:
+    """Every rostered player in each league, with one Sleeper request per league.
+
+    Much cheaper than ``collect_field`` (a minute or two for the whole field
+    instead of about 20), for the injury scan, which needs only who is rostered.
+
+    Returns:
+        ``(rosters, errors)``: ``rosters`` has ``league_id``, ``team`` (Sleeper's
+        ``roster_id``) and ``player_id`` for every player on a roster, bench and
+        IR included. ``errors`` has ``(league_id, error)`` for each league that failed.
+    """
+    rows, errors = [], []
+    with throttled_requests(max_calls_per_minute):
+        def run(league_id):
+            try:
+                return league_id, fetch_rosters(league_id)
+            except Exception as e:  # one bad league shouldn't sink the scan
+                return league_id, f"{type(e).__name__}: {e}"
+
+        with ThreadPoolExecutor(workers) as pool:
+            for league_id, result in pool.map(run, [str(league_id) for league_id in league_ids]):
+                if isinstance(result, str):
+                    errors.append((league_id, result))
+                    continue
+                rows += [(league_id, roster["roster_id"], str(player_id))
+                         for roster in result for player_id in roster.get("players") or []]
+    return pd.DataFrame(rows, columns=["league_id", "team", "player_id"]), errors

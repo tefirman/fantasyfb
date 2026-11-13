@@ -23,18 +23,42 @@ python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
 
 ## Automatic refresh
 
-`.github/workflows/sfb-refresh.yml` does the steps above daily at 6:17 AM Pacific (14:17 UTC, so 7:17 AM during daylight time) and on demand from the Actions tab, then pushes the page to `tefirman/sfb-odds`. It reads the league list and saved leaderboard from `inputs/` in that repo, so re-upload `inputs/SFB16Leaderboard.html` and `inputs/leagues.csv` there when teams change. One-time setup in this repo's settings:
+The page is refreshed every morning on a laptop by `scripts/sfb_daily.sh`, which launchd runs at 8:00 AM (or when the laptop wakes, if it was asleep then; nothing runs while it is shut down). GitHub's scheduled Actions started hours late or not at all, so the `SFB refresh` workflow (`.github/workflows/sfb-refresh.yml`) now runs only when started by hand, from the Actions tab or the GitHub mobile app, as a backup. Both do the same steps:
+
+1. Update `injured_list.csv` in `tefirman/fantasy-data`. `sfb-field injuries` pulls the field's current rosters (one Sleeper request per league, about a minute) and lists widely rostered players whose Sleeper status and the list disagree. If there are any, headless Claude Code researches each one with web search and edits only that file, `sfb-field check-injuries` validates the edit, and the change is committed and pushed. This step never blocks the refresh. The prompt is `.github/prompts/sfb-injuries.md`, and the model is pinned to Sonnet 5.5.
+2. Collect and simulate the field, retrying failed leagues once, and stop without publishing if any still fail or Sleeper rate-limits the run.
+3. Build the page with the analytics ID, sanity-check it, and push it to `tefirman/sfb-odds`.
+
+Both read the league list and saved leaderboard from `inputs/` in `tefirman/sfb-odds`, so re-upload `inputs/SFB16Leaderboard.html` and `inputs/leagues.csv` there when teams change. Review the injury commits in `fantasy-data` and revert any bad row; a manual `/update-injuries` still works and wins, since the next scan only touches players it finds uncovered.
+
+### The laptop job
+
+The script works in its own clones under `~/.sfb-daily` (this repo at `main`, `fantasy-data`, and `sfb-odds` as `site/`, plus a venv), resets them to their remotes on every run, and pushes with your own git credentials over SSH, so your working copies are never touched. The Claude step runs on your Claude subscription, not the API: the script never passes an API key. It also runs Claude with `--restricted` and `--strict-mcp-config`, so your own Claude settings, hooks and MCP servers are ignored and file access is confined to `~/.sfb-daily`, and with only web search, web fetch, read, and an edit of the one list allowed. Output goes to `~/Library/Logs/sfb-daily.log`, and a macOS notification says when the page is published or a run fails.
+
+One-time setup:
+
+```bash
+git clone git@github.com:tefirman/fantasyfb.git ~/.sfb-daily/fantasyfb
+# a long-lived sign-in for unattended runs (a normal one can lapse within days)
+claude setup-token
+security add-generic-password -U -s sfb-daily-claude -a "$USER" -w   # paste the token at the prompt
+cp ~/.sfb-daily/fantasyfb/scripts/com.tefirman.sfb-daily.plist ~/Library/LaunchAgents/
+# set SFB_GA_ID in the copy to the Google Analytics measurement ID, then:
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tefirman.sfb-daily.plist
+```
+
+The script finds `claude` on the PATH, or else the copy bundled with the VS Code extension; set `CLAUDE` in the plist to use another. To try it without committing or publishing anything, run `SFB_GA_ID=G-... ~/.sfb-daily/fantasyfb/scripts/sfb_daily.sh --dry-run`, which prints the injury diff and leaves the page at `~/.sfb-daily/sfb/index.html`. `launchctl kickstart gui/$(id -u)/com.tefirman.sfb-daily` starts a real run now, and `launchctl bootout gui/$(id -u)/com.tefirman.sfb-daily` turns the job off.
+
+### The GitHub workflow
+
+Run it from the Actions tab or the GitHub app; it has no inputs. One-time setup in this repo's settings:
 
 - Secret `SFB_ODDS_PUSH_TOKEN`: a fine-grained personal access token with Contents: write on `tefirman/sfb-odds` only.
+- Secret `FANTASY_DATA_PUSH_TOKEN`: the same, on `tefirman/fantasy-data` only.
+- Secret `ANTHROPIC_API_KEY`: the workflow's Claude step bills the API, about $0.50 on a run with something to research.
 - Variable `SFB_GA_ID`: the Google Analytics measurement ID. The run fails without it instead of publishing a page with no analytics.
 
-On Sundays and Wednesdays (scheduled runs) and on manual runs that do not skip it, the workflow first updates `injured_list.csv` in `tefirman/fantasy-data`: `sfb-field injuries` scans the rosters the previous run saved (cached between runs) against today's Sleeper statuses, headless Claude Code researches each uncovered player with web search and edits only that file, `sfb-field check-injuries` validates the edit, and a bot commits it. The prompt is `.github/prompts/sfb-injuries.md`. This step never blocks the refresh, and the first run has no saved rosters, so it skips the scan. Extra setup for it: secret `ANTHROPIC_API_KEY`, and secret `FANTASY_DATA_PUSH_TOKEN` (a fine-grained PAT with Contents: write on `tefirman/fantasy-data` only). Review the bot's commits in that repo and revert any bad row; a manual `/update-injuries` still works and wins, since the next scan only touches players it finds uncovered.
-
-To try the injury step without changing anything, run the workflow by hand from the Actions tab with `dry_run` checked. It researches and validates, shows the proposed diff and summary on the run's summary page, and skips the commit and the whole refresh.
-
-The injury step costs about $0.50 in Claude tokens on a day with something to research, so scheduled runs do it only on Sundays and Wednesdays. A manual run does it too, unless you check `skip_injuries`; a dry run ignores that box.
-
-Failed leagues are retried once, and the run stops without publishing if any still fail or Sleeper rate-limits it. Sleeper's full player list is cached per UTC day, so re-running the workflow the same day does not request it again.
+Sleeper's full player list is cached per UTC day, so re-running the workflow the same day does not request it again.
 
 ## Notes
 

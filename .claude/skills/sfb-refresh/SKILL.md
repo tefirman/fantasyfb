@@ -5,7 +5,7 @@ description: Refresh the public Scott Fish Bowl playoff odds page. Re-collects t
 
 # SFB Refresh
 
-Rebuilds the static page at https://taylorfirman.com/sfb-odds/ from fresh Sleeper data. The `SFB refresh` GitHub Action (`.github/workflows/sfb-refresh.yml`) does the same thing daily; use this skill for an immediate local run, or just trigger the workflow from the Actions tab. Reference: `app/sfb_site/README.md` and `docs/cli/sfb-field.md`. Run everything from the repo root, using the `.venv` if `sfb-field` is not on the PATH.
+Rebuilds the static page at https://taylorfirman.com/sfb-odds/ from fresh Sleeper data. `scripts/sfb_daily.sh` does the same thing (plus the injury update) every morning via launchd, and the `SFB refresh` GitHub Action (`.github/workflows/sfb-refresh.yml`) does it on manual dispatch. Use this skill for an immediate, step-by-step local run; for a quick unattended one, `launchctl kickstart gui/$(id -u)/com.tefirman.sfb-daily` or trigger the workflow from the Actions tab. Reference: `app/sfb_site/README.md` and `docs/cli/sfb-field.md`. Run everything from the repo root, using the `.venv` if `sfb-field` is not on the PATH.
 
 ## Procedure
 

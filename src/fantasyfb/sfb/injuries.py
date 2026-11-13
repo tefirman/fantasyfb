@@ -8,7 +8,9 @@ on ``min_teams`` teams (bench and IR included), which keeps the list to players
 who move the odds.
 
 Statuses come from Sleeper's player payload, the same one the collect step
-already pulls, so scanning makes no extra requests.
+already pulls. Rosters are pulled fresh (``collect.collect_rosters``, one
+request per league) rather than read from an earlier collect, which could be
+days old.
 """
 from __future__ import annotations
 
