@@ -82,3 +82,22 @@ def replay_league(request):
             snapshot_io.ReplayProxy(store, "provider"),
             snapshot_io.ReplayProxy(store, "client"),
         )
+
+
+@pytest.fixture(scope="module")
+def replay_league_generic():
+    """The offline replayed generic-platform League, for tests that copy it."""
+    import snapshot_io
+
+    matching = [d for d in snapshot_io.snapshot_dirs() if d.name.startswith("generic")]
+    if not matching:
+        pytest.skip("no recorded snapshots")
+    snapshot_dir = matching[0]
+    meta = snapshot_io.load_meta(snapshot_dir)
+    store = snapshot_io.SnapshotStore.load(snapshot_dir)
+    with snapshot_io.frozen_environment(snapshot_dir, meta["as_of"], offline=True):
+        yield snapshot_io.build_league(
+            meta,
+            snapshot_io.ReplayProxy(store, "provider"),
+            snapshot_io.ReplayProxy(store, "client"),
+        )
