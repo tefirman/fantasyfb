@@ -38,20 +38,29 @@ import argparse
 import os
 import sys
 from difflib import SequenceMatcher
-from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
 
-# readline gives input() history (up/down arrows, Ctrl-R) and tab-completion
-# for free. Unix-only; on Windows the import fails and we just lose the
-# polish without breaking the cockpit.
-try:
-    import readline
-except ImportError:  # pragma: no cover -- Windows-only fallback
-    readline = None
-
 from . import snake_cockpit as cockpit
+from .cli_common import (  # noqa: F401 -- re-exported for salary_cap and the tests
+    _completer,
+    _enable_completion,
+    _print_df,
+    _prompt_choice,
+    _prompt_int,
+    _prompt_roster_spots,
+    _set_completion_candidates,
+    ask,
+    build_league,
+    finish_draft,
+    parse_payouts,
+    parse_roster_spots,
+    print_sim_standings,
+    reset_rosters,
+    run_season_sims,
+    simulate_additions,
+)
 from .tools import round_direction
 
 
@@ -59,55 +68,6 @@ _PICK_COMMANDS = (
     "best", "lookup", "exclude", "go back", "sim", "simadd", "roster",
     "random", "random til me", "help", "exit",
 )
-
-
-# Completion pool for the next input() call. Mutable module-level state
-# because readline's completer hook can't take extra args -- the cockpit
-# updates this list before each prompt to reflect what's reasonable to
-# type at that moment.
-_completion_candidates: list[str] = []
-
-
-def _completer(text: str, state: int) -> "str | None":
-    """readline completer hook: return the `state`-th match for `text`.
-
-    Case-insensitive prefix match against ``_completion_candidates``.
-    Returning None signals "no more matches", which is how readline
-    knows when to stop calling.
-    """
-    lowered = text.lower()
-    matches = [c for c in _completion_candidates
-               if c.lower().startswith(lowered)]
-    if state < len(matches):
-        return matches[state]
-    return None
-
-
-def _enable_completion() -> None:
-    """Wire up the completer hook once at startup. Setting completer_delims
-    to empty so player names with spaces ('Justin Jefferson') complete as
-    one unit -- the default delimiters include whitespace, which would
-    otherwise truncate completion at the first space.
-
-    macOS ships Python linked against libedit rather than GNU readline,
-    and the two use different parse_and_bind syntaxes. Without the libedit
-    detection below, tab on macOS would just insert a literal tab
-    character rather than triggering completion.
-    """
-    if readline is None:
-        return
-    readline.set_completer(_completer)
-    readline.set_completer_delims("")
-    if "libedit" in (readline.__doc__ or ""):
-        readline.parse_and_bind("bind ^I rl_complete")
-    else:
-        readline.parse_and_bind("tab: complete")
-
-
-def _set_completion_candidates(names: Iterable[str]) -> None:
-    """Replace the completion pool used by the next input() prompt."""
-    global _completion_candidates
-    _completion_candidates = sorted({str(n) for n in names if n})
 
 
 _HELP_TEXT = """
@@ -172,37 +132,6 @@ def check_pick_name(league, pick_name, exceptions=()):
                  .iloc[:3][["name", "position", "current_team"]]
                  .to_string(index=False))
     return None
-
-
-def _prompt_choice(question: str, choices: tuple, default: str) -> str:
-    """Prompt for one of `choices` (case-insensitive), re-prompting on
-    anything else. Blank input accepts `default`. The literal choice words
-    are appended to `question` so it's always clear exactly what to type,
-    e.g. "Pool? (best/nearest) [best] ".
-    """
-    lowered_choices = {c.lower(): c for c in choices}
-    prompt = f"{question} ({'/'.join(choices)}) [{default}] "
-    while True:
-        raw = input(prompt).strip().lower()
-        if not raw:
-            return default
-        if raw in lowered_choices:
-            return lowered_choices[raw]
-        print(f"Please enter one of: {', '.join(choices)}")
-
-
-def _prompt_int(question: str, default: int) -> int:
-    """Prompt for a positive integer, re-prompting on anything else.
-    Blank input accepts `default`.
-    """
-    prompt = f"{question} [{default}] "
-    while True:
-        raw = input(prompt).strip()
-        if not raw:
-            return default
-        if raw.isdigit() and int(raw) > 0:
-            return int(raw)
-        print("Please enter a positive whole number.")
 
 
 def provide_pick_order(league, customize=False, already=()):
@@ -274,74 +203,6 @@ def _apply_pick(league, board, name, team_name):
 def _revert_pick(league, board, name):
     league.players.loc[league.players.name == name, "fantasy_team"] = None
     board.loc[board["name"] == name, "fantasy_team"] = pd.NA
-
-
-def parse_payouts(raw, num_teams: int):
-    default = [100 * num_teams * 0.6, 100 * num_teams * 0.3, 100 * num_teams * 0.1]
-    if not raw:
-        return default
-    parts = [p.strip() for p in str(raw).split(",")]
-    if not all(p.replace(".", "", 1).isdigit() for p in parts):
-        print("Weird values provided for payouts... Assuming standard payouts...")
-        return default
-    payouts = [float(p) for p in parts][:3]
-    if len(parts) > 3:
-        print("Too many values provided for payouts... Only using top three...")
-    return payouts
-
-
-def parse_roster_spots(raw: Optional[str]) -> Optional[pd.DataFrame]:
-    """Parse a "POS=count,POS=count,..." string (e.g. "QB=1,RB=2,W/R/T=2,
-    Q/W/R/T=1,BN=6") into the position/count DataFrame GenericClient's
-    roster_spots expects (see issue #59). Position codes aren't validated
-    here -- GenericClient.__init__ raises ValueError on an unrecognized
-    one, same error path whether the spec came from this CLI or the
-    Python API directly.
-
-    Returns:
-        None if `raw` is falsy (caller should fall back to the platform
-        default). Raises ValueError on malformed "POS=count" syntax or a
-        non-positive-integer count.
-    """
-    if not raw:
-        return None
-    positions, counts = [], []
-    for part in str(raw).split(","):
-        part = part.strip()
-        if "=" not in part:
-            raise ValueError(
-                f"Malformed roster spot {part!r} -- expected POSITION=COUNT"
-            )
-        pos, _, count = part.partition("=")
-        pos, count = pos.strip(), count.strip()
-        if not count.isdigit() or int(count) <= 0:
-            raise ValueError(
-                f"Malformed roster spot {part!r} -- count must be a positive whole number"
-            )
-        positions.append(pos)
-        counts.append(int(count))
-    return pd.DataFrame({"position": positions, "count": counts})
-
-
-def _prompt_roster_spots() -> Optional[pd.DataFrame]:
-    """Interactively prompt for a custom roster spec, same yes/no-then-detail
-    shape as the custom-draft-order prompt. Re-prompts on malformed input
-    rather than silently falling back, since a typo here should be caught
-    immediately rather than producing a confusing draft later."""
-    custom = input("Would you like to provide a custom roster spec? ")
-    if custom.strip().lower() not in ("yes", "y"):
-        return None
-    print(
-        "Enter roster spots as POSITION=COUNT pairs separated by commas, "
-        "e.g. QB=1,RB=2,WR=2,TE=1,W/R/T=1,K=1,DEF=1,BN=7 "
-        "(flex codes: W/T, W/R/T, Q/W/R/T for superflex)."
-    )
-    while True:
-        raw = input("Roster spec: ")
-        try:
-            return parse_roster_spots(raw)
-        except ValueError as exc:
-            print(exc)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -452,51 +313,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _print_df(df: pd.DataFrame, header: str) -> None:
-    print(f"\n{header}")
-    if df.empty:
-        print("(no players)")
-    else:
-        print(df.to_string(index=False))
-
-
 def main(argv=None) -> int:
     args = build_arg_parser().parse_args(argv)
 
-    if args.platform == "sleeper" and not args.sleeper_league_id:
-        print("--sleeper-league-id is required with --platform sleeper")
-        return 1
-
-    num_teams = args.num_teams
-    mock_scoring = args.mock_scoring
     try:
-        roster_spots = parse_roster_spots(args.roster_spots)
+        league = build_league(args, bestball=args.bestball)
     except ValueError as exc:
         print(exc)
         return 1
-    if args.platform == "generic":
-        if num_teams is None:
-            num_teams = _prompt_int("How many teams?", 12)
-        if mock_scoring is None:
-            mock_scoring = _prompt_choice(
-                "Scoring system?", ("standard", "half_ppr", "ppr"), "ppr",
-            )
-        if roster_spots is None:
-            roster_spots = _prompt_roster_spots()
-
-    # Lazy import so `--help` and the helper unit tests work without
-    # Yahoo creds / yahoo_fantasy_api installed.
-    import fantasyfb as fb
-    from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
-
-    league = fb.League(
-        name=args.team, num_sims=10000, season=args.season,
-        bestball=args.bestball, platform=args.platform,
-        sleeper_league_id=args.sleeper_league_id,
-        num_teams=num_teams or 12, mock_scoring=mock_scoring or "ppr",
-        roster_spots=roster_spots,
-        nfl_provider=NflreadpyProvider(refresh=args.refresh_cache),
-    )
     num_teams = len(league.teams)
     num_spots = league.roster_spots.loc[
         league.roster_spots.position != "IR", "count"
@@ -505,15 +329,8 @@ def main(argv=None) -> int:
     payouts = parse_payouts(args.payouts, num_teams)
     exclude = [v.strip() for v in args.exclude.split(",")] if args.exclude else []
 
-    # Preserve existing fantasy_team values (keepers / restored picks
-    # from --inprogress) before build_board snapshots the pool -- unless
-    # --fresh-draft says to disregard whatever's currently rostered
-    # (e.g. mock-drafting against a Sleeper league that's already
-    # mid-season and has real, non-keeper rosters from its own draft).
-    if args.fresh_draft:
-        league.players["fantasy_team"] = None
-    else:
-        league.players["fantasy_team"] = league.players.get("fantasy_team")
+    # Before build_board snapshots the pool.
+    reset_rosters(league, args.fresh_draft)
 
     if args.inprogress and os.path.exists(args.inprogress):
         progress = pd.read_csv(args.inprogress)
@@ -564,9 +381,7 @@ def main(argv=None) -> int:
         ].dropna().tolist()
         _set_completion_candidates(list(_PICK_COMMANDS) + available_names)
 
-        pick_name = check_pick_name(league, input(prompt), _PICK_COMMANDS)
-        while pick_name is None:
-            pick_name = check_pick_name(league, input(prompt), _PICK_COMMANDS)
+        pick_name = ask(prompt, lambda raw: check_pick_name(league, raw, _PICK_COMMANDS))
 
         if pick_name in league.players.name.tolist():
             team_name = league.teams[slot]["name"]
@@ -624,15 +439,10 @@ def main(argv=None) -> int:
                 ["nevermind"]
                 + league.players["name"].dropna().tolist()
             )
-            focus = check_pick_name(
-                league, input("Which player would you like to check? "),
-                ("nevermind",),
+            focus = ask(
+                "Which player would you like to check? ",
+                lambda raw: check_pick_name(league, raw, ("nevermind",)),
             )
-            while focus is None:
-                focus = check_pick_name(
-                    league, input("Which player would you like to check? "),
-                    ("nevermind",),
-                )
             if focus != "nevermind":
                 _print_df(cockpit.view_lookup(board, focus),
                           f"Lookup: {focus}")
@@ -643,19 +453,10 @@ def main(argv=None) -> int:
                 league.players.fantasy_team.isnull(), "name"
             ].dropna().tolist()
             _set_completion_candidates(["nevermind"] + available_names)
-            ignore = check_pick_name(
-                league,
-                input("Which player would you like to exclude from "
-                      "consideration? "),
-                ("nevermind",),
+            ignore = ask(
+                "Which player would you like to exclude from consideration? ",
+                lambda raw: check_pick_name(league, raw, ("nevermind",)),
             )
-            while ignore is None:
-                ignore = check_pick_name(
-                    league,
-                    input("Which player would you like to exclude from "
-                          "consideration? "),
-                    ("nevermind",),
-                )
             if ignore != "nevermind":
                 exclude.append(ignore)
 
@@ -671,13 +472,8 @@ def main(argv=None) -> int:
             _sim_baseline = None
 
         elif pick_name == "sim":
-            if args.bestball:
-                _sim_baseline = league.bestball_sims(payouts=payouts)
-            else:
-                _sim_baseline = league.season_sims(payouts=payouts)[1]
-            print(_sim_baseline[["team", "points_avg", "wins_avg",
-                                  "playoffs", "winner", "earnings"]]
-                  .to_string(index=False))
+            _sim_baseline = run_season_sims(league, payouts, args.bestball)
+            print_sim_standings(_sim_baseline)
 
         elif pick_name == "simadd":
             my_roster = cockpit.build_my_roster(board, "My Team", league.roster_spots)
@@ -716,36 +512,19 @@ def main(argv=None) -> int:
             candidates = [c for c in candidates
                           if league.players.loc[league.players.name == c, "position"]
                           .isin(["K", "DEF"]).sum() == 0]
-            def _run_sims():
-                if args.bestball:
-                    return league.bestball_sims(payouts=payouts)
-                return league.season_sims(payouts=payouts)[1]
+            def _add(candidate):
+                league.players.loc[league.players.name == candidate["name"], "fantasy_team"] = "My Team"
 
-            orig_num_sims = league.num_sims
-            league.num_sims = 1000
-            print("Running baseline sim...")
-            if _sim_baseline is None:
-                _sim_baseline = _run_sims()
-            baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
-            delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
-            delta_cols = [c for c in delta_cols if c in _sim_baseline.columns]
-            rows = []
-            for candidate in candidates:
-                print(f"  Simulating {candidate}...")
-                league.players.loc[league.players.name == candidate, "fantasy_team"] = "My Team"
-                new_standings = _run_sims()
-                league.players.loc[league.players.name == candidate, "fantasy_team"] = None
-                row = {"name": candidate}
-                for col in delta_cols:
-                    row[col] = round(
-                        new_standings.loc[new_standings.team == "My Team", col].values[0]
-                        - baseline_row[col].values[0], 3
-                    )
-                rows.append(row)
-            league.num_sims = orig_num_sims
-            if rows:
-                sort_col = "winner" if "winner" in delta_cols else delta_cols[-1]
-                result = pd.DataFrame(rows).sort_values(sort_col, ascending=False)
+            def _remove(candidate):
+                league.players.loc[league.players.name == candidate["name"], "fantasy_team"] = None
+
+            _sim_baseline, result = simulate_additions(
+                league, _sim_baseline,
+                [{"name": name, "label": name} for name in candidates],
+                run_sims=lambda: run_season_sims(league, payouts, args.bestball),
+                apply=_add, undo=_remove,
+            )
+            if result is not None:
                 _print_df(result, "Simulated impact of adding each player (delta from baseline):")
 
         elif pick_name == "roster":
@@ -815,23 +594,7 @@ def main(argv=None) -> int:
             print(f"Exiting draft. Progress saved to {output_path}.")
             return 0
 
-    standings = league.bestball_sims(payouts=payouts) if args.bestball else league.season_sims(payouts=payouts)[1]
-    print(standings[["team", "points_avg", "wins_avg",
-                     "playoffs", "winner", "earnings"]]
-          .to_string(index=False))
-    standings.to_csv("DraftResults.csv", index=False)
-
-    my_results = standings.reset_index(drop=True).loc[standings.team == "My Team"]
-    rank = my_results.index[0]
-    n = standings.shape[0]
-    if rank < n / 4:
-        print("You crushed it!!! Way to go!!!")
-    elif rank < n / 2:
-        print("Pretty darn good, but we'll see... Good luck!!!")
-    elif rank < 3 * n / 4:
-        print("Not great, but you can recover... Hit the waiver wire hard!!!")
-    else:
-        print("Less than ideal... but you have so many other redeeming qualities!!!")
+    finish_draft(league, payouts, args.bestball)
     return 0
 
 

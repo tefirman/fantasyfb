@@ -47,22 +47,22 @@ import sys
 import numpy as np
 import pandas as pd
 
-try:
-    import readline  # noqa: F401 -- imported for side effects via snake
-except ImportError:  # pragma: no cover -- Windows fallback
-    readline = None
-
 from . import salary_cap_cockpit as cockpit
-from .snake import (
+from .cli_common import (
     _enable_completion,
-    _prompt_choice,
+    _print_df,
     _prompt_int,
-    _prompt_roster_spots,
     _set_completion_candidates,
-    check_pick_name,
+    ask,
+    build_league,
+    finish_draft,
     parse_payouts,
-    parse_roster_spots,
+    print_sim_standings,
+    reset_rosters,
+    run_season_sims,
+    simulate_additions,
 )
+from .snake import check_pick_name
 from .tools import (
     _bench_slots_from_spec,
     _roster_spec_to_dict,
@@ -326,14 +326,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _print_df(df: pd.DataFrame, header: str) -> None:
-    print(f"\n{header}")
-    if df.empty:
-        print("(no players)")
-    else:
-        print(df.to_string(index=False))
-
-
 def _team_names(league) -> list[str]:
     return [t["name"] for t in league.teams]
 
@@ -357,38 +349,11 @@ def _load_progress(path: str) -> pd.DataFrame:
 def main(argv=None) -> int:
     args = build_arg_parser().parse_args(argv)
 
-    if args.platform == "sleeper" and not args.sleeper_league_id:
-        print("--sleeper-league-id is required with --platform sleeper")
-        return 1
-
-    num_teams_arg = args.num_teams
-    mock_scoring = args.mock_scoring
     try:
-        roster_spots = parse_roster_spots(args.roster_spots)
+        league = build_league(args)
     except ValueError as exc:
         print(exc)
         return 1
-    if args.platform == "generic":
-        if num_teams_arg is None:
-            num_teams_arg = _prompt_int("How many teams?", 12)
-        if mock_scoring is None:
-            mock_scoring = _prompt_choice(
-                "Scoring system?", ("standard", "half_ppr", "ppr"), "ppr",
-            )
-        if roster_spots is None:
-            roster_spots = _prompt_roster_spots()
-
-    # Lazy import so --help and helper unit tests work without Yahoo creds.
-    import fantasyfb as fb
-    from fantasyfb.data.nflreadpy_provider import NflreadpyProvider
-
-    league = fb.League(
-        name=args.team, num_sims=10000, season=args.season,
-        platform=args.platform, sleeper_league_id=args.sleeper_league_id,
-        num_teams=num_teams_arg or 12, mock_scoring=mock_scoring or "ppr",
-        roster_spots=roster_spots,
-        nfl_provider=NflreadpyProvider(refresh=args.refresh_cache),
-    )
     num_teams = len(league.teams)
     spec = _roster_spec_to_dict(league.roster_spots)
     bench = _bench_slots_from_spec(league.roster_spots)
@@ -396,15 +361,7 @@ def main(argv=None) -> int:
     payouts = parse_payouts(args.payouts, num_teams)
     exclude = [v.strip() for v in args.exclude.split(",")] if args.exclude else []
 
-    # Preserve existing fantasy_team values (keepers / restored picks from
-    # --inprogress) -- unless --fresh-draft says to disregard whatever's
-    # currently rostered (e.g. mock-drafting against a Sleeper league
-    # that's already mid-season and has real, non-keeper rosters from its
-    # own draft).
-    if args.fresh_draft:
-        league.players["fantasy_team"] = None
-    else:
-        league.players["fantasy_team"] = league.players.get("fantasy_team")
+    reset_rosters(league, args.fresh_draft)
     if "actual_salary" not in league.players.columns:
         league.players["actual_salary"] = np.nan
 
@@ -535,13 +492,10 @@ def main(argv=None) -> int:
         ].dropna().tolist()
         _set_completion_candidates(list(_PICK_COMMANDS) + available_names)
 
-        pick_name = check_pick_name(
-            league, input("\nPlayer Up For Grabs: "), _PICK_COMMANDS,
+        pick_name = ask(
+            "\nPlayer Up For Grabs: ",
+            lambda raw: check_pick_name(league, raw, _PICK_COMMANDS),
         )
-        while pick_name is None:
-            pick_name = check_pick_name(
-                league, input("\nPlayer Up For Grabs: "), _PICK_COMMANDS,
-            )
 
         if pick_name == "best":
             _print_df(
@@ -569,29 +523,21 @@ def main(argv=None) -> int:
 
         elif pick_name == "whatif":
             _set_completion_candidates(["nevermind"] + available_names)
-            target = check_pick_name(
-                league, input("Hypothetical player: "), ("nevermind",),
+            target = ask(
+                "Hypothetical player: ",
+                lambda raw: check_pick_name(league, raw, ("nevermind",)),
             )
-            while target is None:
-                target = check_pick_name(
-                    league, input("Hypothetical player: "), ("nevermind",),
-                )
             if target == "nevermind":
                 continue
             _set_completion_candidates(_team_names(league))
-            winner = check_team_name(league, input("Hypothetical winner: "))
-            while winner is None:
-                winner = check_team_name(league, input("Hypothetical winner: "))
+            winner = ask("Hypothetical winner: ", lambda raw: check_team_name(league, raw))
             max_legal = compute_max_legal_bid(
                 board, winner, args.salary_cap, roster_size, args.min_bid,
             )
-            bid = check_bid(input(f"Hypothetical bid ($, max ${max_legal}): "),
-                            max_legal)
-            while bid is None:
-                bid = check_bid(
-                    input(f"Hypothetical bid ($, max ${max_legal}): "),
-                    max_legal,
-                )
+            bid = ask(
+                f"Hypothetical bid ($, max ${max_legal}): ",
+                lambda raw: check_bid(raw, max_legal),
+            )
             _print_df(
                 cockpit.view_what_if(
                     board, name=target, bid=bid, winning_team=winner,
@@ -607,13 +553,10 @@ def main(argv=None) -> int:
             _set_completion_candidates(
                 ["nevermind"] + league.players["name"].dropna().tolist(),
             )
-            focus = check_pick_name(
-                league, input("Which player? "), ("nevermind",),
+            focus = ask(
+                "Which player? ",
+                lambda raw: check_pick_name(league, raw, ("nevermind",)),
             )
-            while focus is None:
-                focus = check_pick_name(
-                    league, input("Which player? "), ("nevermind",),
-                )
             if focus != "nevermind":
                 _print_df(
                     cockpit.view_lookup(
@@ -641,13 +584,10 @@ def main(argv=None) -> int:
 
         elif pick_name == "exclude":
             _set_completion_candidates(["nevermind"] + available_names)
-            ignore = check_pick_name(
-                league, input("Exclude which player? "), ("nevermind",),
+            ignore = ask(
+                "Exclude which player? ",
+                lambda raw: check_pick_name(league, raw, ("nevermind",)),
             )
-            while ignore is None:
-                ignore = check_pick_name(
-                    league, input("Exclude which player? "), ("nevermind",),
-                )
             if ignore != "nevermind":
                 exclude.append(ignore)
 
@@ -708,10 +648,8 @@ def main(argv=None) -> int:
             _sim_baseline = None
 
         elif pick_name == "sim":
-            _sim_baseline = league.season_sims(payouts=payouts)[1]
-            print(_sim_baseline[["team", "points_avg", "wins_avg",
-                                 "playoffs", "winner", "earnings"]]
-                  .to_string(index=False))
+            _sim_baseline = run_season_sims(league, payouts)
+            print_sim_standings(_sim_baseline)
 
         elif pick_name == "simadd":
             sim_limit = _prompt_int(
@@ -726,44 +664,37 @@ def main(argv=None) -> int:
             )
             candidates = candidates[~candidates["position"].isin(["K", "DEF"])]
 
-            def _run_sims():
-                return league.season_sims(payouts=payouts)[1]
-
-            orig_num_sims = league.num_sims
-            league.num_sims = 1000
-            print("Running baseline sim...")
-            if _sim_baseline is None:
-                _sim_baseline = _run_sims()
-            baseline_row = _sim_baseline.loc[_sim_baseline.team == "My Team"]
-            delta_cols = ["wins_avg", "points_avg", "playoffs", "winner", "runner_up", "earnings"]
-            delta_cols = [c for c in delta_cols if c in _sim_baseline.columns]
-            rows = []
+            # Assume each candidate costs what the user could actually
+            # legally pay for them -- inflated market value clipped to
+            # the user's own remaining budget -- rather than treating
+            # the pick as free like a snake-draft slot would be.
+            sim_candidates = []
             for _, cand in candidates.iterrows():
-                candidate = cand["name"]
-                # Assume each candidate costs what the user could actually
-                # legally pay for them -- inflated market value clipped to
-                # the user's own remaining budget -- rather than treating
-                # the pick as free like a snake-draft slot would be.
                 assumed_bid = cand.get("max_my_bid")
                 price = int(round(assumed_bid)) if pd.notna(assumed_bid) else args.min_bid
                 price = max(price, args.min_bid)
-                print(f"  Simulating {candidate} at ${price}...")
-                league.players.loc[league.players.name == candidate, "fantasy_team"] = "My Team"
-                league.players.loc[league.players.name == candidate, "actual_salary"] = price
-                new_standings = _run_sims()
-                league.players.loc[league.players.name == candidate, "fantasy_team"] = None
-                league.players.loc[league.players.name == candidate, "actual_salary"] = np.nan
-                row = {"name": candidate, "assumed_bid": price}
-                for col in delta_cols:
-                    row[col] = round(
-                        new_standings.loc[new_standings.team == "My Team", col].values[0]
-                        - baseline_row[col].values[0], 3
-                    )
-                rows.append(row)
-            league.num_sims = orig_num_sims
-            if rows:
-                sort_col = "winner" if "winner" in delta_cols else delta_cols[-1]
-                result = pd.DataFrame(rows).sort_values(sort_col, ascending=False)
+                sim_candidates.append({
+                    "name": cand["name"], "price": price,
+                    "label": f"{cand['name']} at ${price}",
+                    "extras": {"assumed_bid": price},
+                })
+
+            def _add(candidate):
+                on_roster = league.players.name == candidate["name"]
+                league.players.loc[on_roster, "fantasy_team"] = "My Team"
+                league.players.loc[on_roster, "actual_salary"] = candidate["price"]
+
+            def _remove(candidate):
+                on_roster = league.players.name == candidate["name"]
+                league.players.loc[on_roster, "fantasy_team"] = None
+                league.players.loc[on_roster, "actual_salary"] = np.nan
+
+            _sim_baseline, result = simulate_additions(
+                league, _sim_baseline, sim_candidates,
+                run_sims=lambda: run_season_sims(league, payouts),
+                apply=_add, undo=_remove,
+            )
+            if result is not None:
                 _print_df(
                     result,
                     "Simulated impact of adding each player at their assumed "
@@ -791,20 +722,15 @@ def main(argv=None) -> int:
             )
 
             _set_completion_candidates(_team_names(league))
-            winner = check_team_name(league, input("Who picked them? "))
-            while winner is None:
-                winner = check_team_name(league, input("Who picked them? "))
+            winner = ask("Who picked them? ", lambda raw: check_team_name(league, raw))
 
             max_legal = compute_max_legal_bid(
                 board, winner, args.salary_cap, roster_size, args.min_bid,
             )
-            bid = check_bid(
-                input(f"Winning bid ($, max ${max_legal}): "), max_legal,
+            bid = ask(
+                f"Winning bid ($, max ${max_legal}): ",
+                lambda raw: check_bid(raw, max_legal),
             )
-            while bid is None:
-                bid = check_bid(
-                    input(f"Winning bid ($, max ${max_legal}): "), max_legal,
-                )
 
             _apply_pick(league, board, pick_name, winner, bid)
             progress = pd.concat([progress, pd.DataFrame([{
@@ -815,23 +741,7 @@ def main(argv=None) -> int:
             _save_progress(progress, output_path)
             _sim_baseline = None
 
-    standings = league.season_sims(payouts=payouts)[1]
-    print(standings[["team", "points_avg", "wins_avg",
-                     "playoffs", "winner", "earnings"]]
-          .to_string(index=False))
-    standings.to_csv("DraftResults.csv", index=False)
-
-    my_results = standings.reset_index(drop=True).loc[standings.team == "My Team"]
-    rank = my_results.index[0]
-    n = standings.shape[0]
-    if rank < n / 4:
-        print("You crushed it!!! Way to go!!!")
-    elif rank < n / 2:
-        print("Pretty darn good, but we'll see... Good luck!!!")
-    elif rank < 3 * n / 4:
-        print("Not great, but you can recover... Hit the waiver wire hard!!!")
-    else:
-        print("Less than ideal... but you have so many other redeeming qualities!!!")
+    finish_draft(league, payouts)
     return 0
 
 
