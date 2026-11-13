@@ -57,13 +57,15 @@ The scan only looks at players on `--min-teams` or more field teams, so a rarely
 
 ## Automatic refresh
 
-The odds page at [taylorfirman.com/sfb-odds](https://taylorfirman.com/sfb-odds/) is rebuilt every day at 6:17 AM Pacific by the `SFB refresh` GitHub Action (`.github/workflows/sfb-refresh.yml`), and it can be run on demand from the repo's Actions tab. Each run does the following:
+The odds page at [taylorfirman.com/sfb-odds](https://taylorfirman.com/sfb-odds/) is rebuilt every day at 6:17 AM Pacific by the `SFB refresh` GitHub Action (`.github/workflows/sfb-refresh.yml`), and it can be run on demand from the repo's Actions tab. A run does the following:
 
-1. Updates `injured_list.csv` in `tefirman/fantasy-data`. `injuries` scans the rosters the previous run saved against today's Sleeper statuses, headless Claude Code researches each uncovered player with web search and edits only that file, `check-injuries` validates the edit, and a bot commits it. This step never blocks the refresh, and the first run has no saved rosters, so it skips the scan.
+1. Updates `injured_list.csv` in `tefirman/fantasy-data`, on Sundays and Wednesdays for scheduled runs and on manual runs unless `skip_injuries` is checked. `injuries` scans the rosters the previous run saved against today's Sleeper statuses, headless Claude Code researches each uncovered player with web search and edits only that file, `check-injuries` validates the edit, and a bot commits it. This step never blocks the refresh, and the first run has no saved rosters, so it skips the scan.
 2. Runs `collect` and `simulate`. Failed leagues are retried once, and the run stops without publishing if any still fail or Sleeper rate-limits it.
 3. Builds the page with `app/sfb_site/build.py` and pushes it to `tefirman/sfb-odds`.
 
-Running the workflow by hand with `dry_run` checked tries the injury step without changing anything: it researches and validates, shows the proposed diff on the run's summary page, and skips the commit and the refresh. Review the bot's commits in `fantasy-data` and revert any bad row. A manual `/update-injuries` run still works and wins, since the next scan only touches players it finds uncovered.
+The injury step costs about $0.50 in Claude tokens on a day with something to research, which is why scheduled runs do it only twice a week (Sunday covers Thursday's game and Friday's designations before the lock, Wednesday covers the weekend's injuries once their timelines are out). Run the workflow by hand for news in between, or check `skip_injuries` on a manual run to leave the injury step out. The research uses Claude Sonnet 5.5, pinned in the workflow so the cost does not change when the CLI's default model does.
+
+Running the workflow by hand with `dry_run` checked tries the injury step without changing anything: it researches and validates, shows the proposed diff on the run's summary page, and skips the commit and the refresh. A dry run ignores `skip_injuries`. Review the bot's commits in `fantasy-data` and revert any bad row. A manual `/update-injuries` run still works and wins, since the next scan only touches players it finds uncovered.
 
 The league list and saved leaderboard are read from `inputs/` in `tefirman/sfb-odds`, so re-upload them there when teams change. The secrets and variables the workflow needs are listed in [`app/sfb_site/README.md`](https://github.com/tefirman/fantasyfb/blob/main/app/sfb_site/README.md#automatic-refresh).
 
