@@ -123,6 +123,22 @@ class TestSnakeLoop:
         assert len(resumed) == 4
         assert resumed.name.tolist()[:3] == first.name.tolist()
 
+    def test_sim_and_simadd(self, draft_env, script_input, capsys):
+        from fantasyfb.drafts.snake import main
+
+        # simadd prompts: pool, scoring, players per position
+        script_input(["n", "3", "sim", "simadd", "", "", "1", "exit"])
+        assert main(_snake_args(draft_env)) == 0
+
+        out = capsys.readouterr().out
+        assert "Running baseline sim..." in out
+        assert "Simulated impact of adding each player (delta from baseline):" in out
+        assert draft_env["league"].num_sims == NUM_SIMS
+        # candidates are taken back off the roster after being simulated
+        players = draft_env["league"].players
+        mine = players.loc[players.fantasy_team == "My Team", "player_id_sr"].astype(str)
+        assert mine.str.startswith("avg_").all()
+
     def test_full_draft_writes_results(self, draft_env, script_input, capsys):
         from fantasyfb.drafts.snake import main
 
@@ -184,6 +200,20 @@ class TestSalaryCapLoop:
         assert progress.to_dict("records") == [
             {"name": target, "fantasy_team": "My Team", "winning_bid": 37},
         ]
+
+    def test_sim_and_simadd(self, draft_env, script_input, capsys):
+        from fantasyfb.drafts.salary_cap import main
+
+        script_input(["n", "sim", "simadd", "1", "exit"])
+        assert main(_cap_args()) == 0
+
+        out = capsys.readouterr().out
+        assert "Running baseline sim..." in out
+        assert "Simulated impact of adding each player at their assumed bid" in out
+        assert "assumed_bid" in out
+        league = draft_env["league"]
+        assert league.num_sims == NUM_SIMS
+        assert league.players.actual_salary.isna().all()
 
     def test_resume_restores_picks(self, draft_env, script_input):
         from fantasyfb.drafts.salary_cap import main
