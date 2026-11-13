@@ -5,7 +5,17 @@ This module contains scoring settings and roster configurations for
 various fantasy platforms like DraftKings, Underdog, etc.
 """
 
+from typing import Dict
+
 import pandas as pd
+
+# Flex slot encoding used by Yahoo league configs throughout the codebase.
+# Each entry maps the slot label to the base positions that can fill it.
+FLEX_ELIGIBILITY: Dict[str, tuple] = {
+    "W/T":     ("WR", "TE"),
+    "W/R/T":   ("WR", "RB", "TE"),
+    "Q/W/R/T": ("QB", "WR", "RB", "TE"),
+}
 
 # DraftKings Best Ball configuration
 DRAFTKINGS_CONFIG = {

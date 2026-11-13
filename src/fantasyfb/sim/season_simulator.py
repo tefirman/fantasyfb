@@ -18,13 +18,8 @@ import pandas as pd
 import numpy as np
 from typing import Callable, Dict, FrozenSet, List, Optional, Tuple
 
-# Flex slot eligibility — mirrors drafts/tools.py FLEX_ELIGIBILITY but kept
-# here to avoid a sim → drafts import dependency.
-_FLEX_ELIGIBILITY: Dict[str, Tuple[str, ...]] = {
-    "W/T":     ("WR", "TE"),
-    "W/R/T":   ("WR", "RB", "TE"),
-    "Q/W/R/T": ("QB", "WR", "RB", "TE"),
-}
+from ..configs import FLEX_ELIGIBILITY
+
 _BASE_POSITIONS: FrozenSet[str] = frozenset(("QB", "RB", "WR", "TE", "K", "DEF"))
 
 
@@ -59,7 +54,7 @@ def select_optimal_lineup(
     fixed = [(s, c) for s, c in roster_spec.items()
              if s in _BASE_POSITIONS and c > 0]
     flex  = [(s, c) for s, c in roster_spec.items()
-             if s in _FLEX_ELIGIBILITY and c > 0]
+             if s in FLEX_ELIGIBILITY and c > 0]
 
     for slot, count in fixed:
         pos_mask = np.array([p == slot for p in positions])
@@ -72,7 +67,7 @@ def select_optimal_lineup(
             available[best] = False
 
     for slot, count in flex:
-        eligible_positions = _FLEX_ELIGIBILITY[slot]
+        eligible_positions = FLEX_ELIGIBILITY[slot]
         pos_mask = np.array([p in eligible_positions for p in positions])
         for _ in range(count):
             eligible = pos_mask & available
@@ -108,7 +103,7 @@ def _lineup_score_vectorized(
     fixed = [(s, c) for s, c in roster_spec.items()
              if s in _BASE_POSITIONS and c > 0]
     flex  = [(s, c) for s, c in roster_spec.items()
-             if s in _FLEX_ELIGIBILITY and c > 0]
+             if s in FLEX_ELIGIBILITY and c > 0]
 
     def _pick_best(pos_mask: np.ndarray) -> None:
         # pos_mask: (K,) boolean indicating which players are eligible by position
@@ -129,7 +124,7 @@ def _lineup_score_vectorized(
             _pick_best(pos_mask)
 
     for slot, count in flex:
-        eligible_pos = _FLEX_ELIGIBILITY[slot]
+        eligible_pos = FLEX_ELIGIBILITY[slot]
         pos_mask = np.isin(positions, eligible_pos)
         for _ in range(count):
             _pick_best(pos_mask)

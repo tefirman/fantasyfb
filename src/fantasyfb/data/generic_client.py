@@ -32,8 +32,7 @@ _FANTASY_POSITIONS = {"QB", "RB", "WR", "TE", "K"}
 
 # Position codes accepted in a custom roster_spots DataFrame: the base
 # positions plus Yahoo-style flex codes (see FLEX_ELIGIBILITY in
-# drafts/tools.py) plus bench/IR. Kept independent of drafts/tools to
-# avoid this module importing the drafts package.
+# configs.py) plus bench/IR.
 _VALID_ROSTER_POSITIONS = {
     "QB", "RB", "WR", "TE", "K", "DEF",
     "W/T", "W/R/T", "Q/W/R/T",

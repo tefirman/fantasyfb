@@ -33,21 +33,12 @@ from typing import Dict, Iterable, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from ..configs import FLEX_ELIGIBILITY
 from ..name_utils import normalize_name_key as _normalize_name_key
 
 
 _BASE_POSITIONS: tuple[str, ...] = ("QB", "RB", "WR", "TE", "K", "DEF")
 _SEASON_GAMES: int = 17
-
-
-# Flex slot encoding used by Yahoo league configs throughout the
-# codebase. Each entry maps the slot label to the base positions that
-# can fill it.
-FLEX_ELIGIBILITY: Dict[str, tuple[str, ...]] = {
-    "W/T":     ("WR", "TE"),
-    "W/R/T":   ("WR", "RB", "TE"),
-    "Q/W/R/T": ("QB", "WR", "RB", "TE"),
-}
 
 
 def _roster_spec_to_dict(roster_spec) -> Dict[str, int]:
