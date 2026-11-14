@@ -340,14 +340,20 @@ class YahooFantasyClient(FantasyPlatformClient):
         league_info = self.lg.yhandler.get_standings_raw(self.lg_id)["fantasy_content"]
         teams_info = league_info["league"][1]["standings"][0]["teams"]
         
-        return [
-            {
-                "team_key": teams_info[str(ind)]["team"][0][0]["team_key"],
-                "name": teams_info[str(ind)]["team"][0][2]["name"],
-                "manager": teams_info[str(ind)]["team"][0][-1]['managers'][0]['manager']['nickname'],
-            }
-            for ind in range(teams_info["count"])
-        ]
+        teams = []
+        for ind in range(teams_info["count"]):
+            # Yahoo's team info is a list of single-key dicts mixed with empty lists,
+            # and the number and order of the empties changes, so look keys up by name.
+            info = {}
+            for item in teams_info[str(ind)]["team"][0]:
+                if isinstance(item, dict):
+                    info.update(item)
+            teams.append({
+                "team_key": info["team_key"],
+                "name": info["name"],
+                "manager": info["managers"][0]["manager"]["nickname"],
+            })
+        return teams
     
     def get_all_players(self, injury_tries: int = 10) -> pd.DataFrame:
         """
