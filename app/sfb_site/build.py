@@ -67,7 +67,7 @@ def player_rows(players: pd.DataFrame, min_teams: int = 50) -> list:
 
 def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, through_week: int,
               rules: Rules = Rules(), bin_width: int = 5, players: Optional[pd.DataFrame] = None,
-              updated: str = "", default_team: str = "") -> dict:
+              updated: str = "", default_team: str = "", notice: str = "") -> dict:
     """The JSON the page reads: a row per team, the cut-line histogram, labels, and the player swings."""
     odds = odds.merge(
         names.loc[names.platform == "sleeper", ["league_id", "roster_id", "manager", "handle", "league_name"]],
@@ -89,6 +89,7 @@ def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, thr
     rounds = [_label(n) for n in rules.round_names]
     return {
         "updated": updated,
+        "notice": notice,
         "default_team": default_team,
         "through_week": through_week,
         "sims": int(len(cut_line)),
@@ -154,7 +155,10 @@ def main(argv=None) -> int:
     players = pd.read_csv(args.players, dtype={"player_id": str}) if args.players else None
     # The simulations finish when odds.csv is written, so that is the page's "last updated" time.
     updated = datetime.datetime.fromtimestamp(Path(args.odds).stat().st_mtime).astimezone().isoformat(timespec="seconds")
-    data = page_data(odds, cut, names, through_week=first_week - 1, players=players, updated=updated, default_team=args.default_team)
+    notices_path = Path(args.data) / "notices.json"
+    notice = json.loads(notices_path.read_text(encoding="utf-8")).get("box_scores", "") if notices_path.exists() else ""
+    data = page_data(odds, cut, names, through_week=first_week - 1, players=players, updated=updated,
+                     default_team=args.default_team, notice=notice)
     Path(args.out).write_text(render(data, args.title, ga_id=args.ga_id), encoding="utf-8")
     print(f"wrote {args.out} ({Path(args.out).stat().st_size / 1e6:.2f} MB, {len(data['teams'])} teams)")
     return 0

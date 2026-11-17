@@ -5,6 +5,8 @@ Everything here is synthetic: tiny fields built in memory, no Sleeper calls.
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -273,7 +275,11 @@ class TestCollectField:
         )
 
     def test_failures_are_reported_and_retries_merge_into_existing_files(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(sfb_collect, "League", lambda **kwargs: object())
+        class Template:
+            def live_week_box_score_notice(self):
+                return "Week 7 games already played (BAL) have no box scores"
+
+        monkeypatch.setattr(sfb_collect, "League", lambda **kwargs: Template())
         fail = {"B"}
 
         def fake_collect(template, league_id):
@@ -285,6 +291,8 @@ class TestCollectField:
         errors = sfb_collect.collect_field(["A", "B", "C"], tmp_path, workers=1, log=lambda *_: None)
         assert errors == [("B", "RuntimeError: 404")]
         assert sorted(pd.read_parquet(tmp_path / "settings.parquet").league_id) == ["A", "C"]
+        assert json.loads((tmp_path / "notices.json").read_text()) == {
+            "box_scores": "Week 7 games already played (BAL) have no box scores"}
 
         fail.clear()
         assert sfb_collect.collect_field(["B", "A"], tmp_path, workers=1, log=lambda *_: None) == []

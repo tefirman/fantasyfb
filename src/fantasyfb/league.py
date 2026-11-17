@@ -591,6 +591,49 @@ class League:
             "team",
         ].tolist()
 
+    def _is_live_week(self, week: int) -> bool:
+        """Whether ``week`` is the current week of the latest season, past August."""
+        return (
+            week == self.current_week
+            and self.season == self.latest_season
+            and datetime.datetime.now().month > 8
+        )
+
+    def live_week_pending_box_scores(self) -> list:
+        """NFL teams counted as finished this week whose box score isn't published yet.
+
+        ``_completed_nfl_teams`` calls a game finished from its kickoff date, but
+        nflverse publishes box scores hours after the final whistle (Monday night
+        games usually show up early Tuesday). Until then those teams' starters keep
+        their projections, with full variance, in ``_live_week_actuals``.
+
+        Returns:
+            Sorted team abbreviations, empty outside a live week or when every
+            finished game has its box score.
+        """
+        week = self.current_week
+        if not self._is_live_week(week):
+            return []
+        completed = set(self._completed_nfl_teams(week))
+        if not completed:
+            return []
+        box = self.nfl_provider.get_player_stats(
+            self.season * 100 + week, self.season * 100 + week
+        )
+        published = set(box.team) if not box.empty else set()
+        return sorted(completed - published)
+
+    def live_week_box_score_notice(self) -> str:
+        """A one-sentence caveat for reports and pages when box scores are pending, else ``""``."""
+        pending = self.live_week_pending_box_scores()
+        if not pending:
+            return ""
+        return (
+            f"Week {self.current_week} games already played ({', '.join(pending)}) have no "
+            "box scores in the NFL data yet, so their players are still counted at their "
+            "projections. Numbers sharpen once the box scores are published."
+        )
+
     def _live_week_actuals(self, week: int) -> pd.Series:
         """Actual fantasy points, indexed by ``player_id_sr``, for players
         whose NFL game in ``week`` of the current season is already over.
@@ -604,12 +647,7 @@ class League:
         (real points) or not (caller keeps the projection). See issue #18.
         """
         empty = pd.Series(dtype=float, name="points")
-        in_season = (
-            week == self.current_week
-            and self.season == self.latest_season
-            and datetime.datetime.now().month > 8
-        )
-        if not in_season:
+        if not self._is_live_week(week):
             return empty
 
         completed_teams = self._completed_nfl_teams(week)

@@ -40,6 +40,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 0 32px 64px; }
 .hair { display: grid; gap: 1px; background: var(--color-divider); border: 1px solid var(--color-divider); }
 .hair > * { background: var(--color-bg); min-width: 0; }
 
+.notice { margin: 24px 0 0; padding: 12px 16px; border-left: 4px solid var(--color-accent-600); background: var(--color-accent-100); font-size: 14px; color: var(--color-neutral-900); }
 .hero { display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-end; padding: 56px 0 48px; }
 .hero-l { flex: 3 1 520px; min-width: 0; }
 .hero .kicker { margin-bottom: 14px; }
@@ -174,6 +175,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
 </header>
 
 <main>
+  <div class="notice" id="notice" role="note" hidden></div>
   <section class="hero">
     <div class="hero-l">
       <div class="kicker" id="sim-line"></div>
@@ -360,6 +362,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
   var up = D.updated ? new Date(D.updated) : null;
   var updated = up && !isNaN(up) ? up.toLocaleString(undefined, {month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"}) : "—";
   Array.prototype.forEach.call(document.querySelectorAll(".when"), function (e) { e.textContent = updated; });
+  if (D.notice) { $("notice").textContent = D.notice; $("notice").hidden = false; }
   $("sim-line").textContent = "SFB16 playoff projections · " + fmt(D.sims) + " simulations";
   $("plate").innerHTML = [["Teams simulated", fmt(D.teams_count)], ["Sleeper leagues", fmt(D.leagues_count)],
     ["Simulations", fmt(D.sims)], ["Median points cut", fmt(CUT.p50)]].map(function (s) {

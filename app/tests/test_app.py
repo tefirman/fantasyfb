@@ -260,6 +260,9 @@ class StubLeague:
         self.calls.append(("possible_adds", kwargs))
         return pd.DataFrame({"player_to_add": ["WR Free 2"], "earnings": [1.5]})
 
+    def live_week_box_score_notice(self):
+        return ""
+
 
 def test_build_report_with_stub_league():
     stub = StubLeague()
@@ -290,6 +293,16 @@ def test_build_report_shows_unsupported_scoring_notice():
     assert 'id="notices"' in html and "Scores 40+ yard rushes (10 pts)" in html
     # an ordinary run has no banner
     assert 'id="notices"' not in build_report(opts, league_factory=lambda o: StubLeague())
+
+
+def test_build_report_shows_pending_box_score_notice():
+    class PendingLeague(StubLeague):
+        def live_week_box_score_notice(self):
+            return "Week 6 games already played (BAL, LAC) have no box scores in the NFL data yet."
+
+    opts = RunOptions(league_id=LEAGUE_ID, team="Alpha", season=2026)
+    html = build_report(opts, league_factory=lambda o: PendingLeague())
+    assert 'id="notices"' in html and "(BAL, LAC) have no box scores" in html
 
 
 def test_build_report_flags_median_game_leagues():

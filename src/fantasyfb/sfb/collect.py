@@ -7,6 +7,7 @@ HTTP 429 rather than retrying through it.
 """
 from __future__ import annotations
 
+import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -161,6 +162,9 @@ def collect_field(
     errors, parts = [], {table: [] for table in TABLES}
     with throttled_requests(max_calls_per_minute) as limiter:
         template = League(platform="sleeper", sleeper_league_id=template_id or league_ids[0], num_sims=1000)
+        # Rewritten every run, so a stale caveat never outlives the box scores it was about.
+        (out_dir / "notices.json").write_text(
+            json.dumps({"box_scores": template.live_week_box_score_notice()}), encoding="utf-8")
         started = time.time()
 
         def run(league_id):

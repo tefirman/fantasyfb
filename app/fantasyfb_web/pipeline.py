@@ -133,6 +133,9 @@ def build_report(
     notices = [
         str(w.message) for w in caught if issubclass(w.category, UnsupportedScoringWarning)
     ]
+    box_scores = league.live_week_box_score_notice()
+    if box_scores:
+        notices.append(box_scores)
 
     exporter = FantasyHtmlExporter(
         output_path="",
