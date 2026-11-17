@@ -170,6 +170,7 @@ class TestPendingBoxScores:
         assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == ["DONE_TEAM"]
         notice = _run_at(lg, _NOW, lg.live_week_box_score_notice)
         assert "Week 3" in notice and "DONE_TEAM" in notice
+        assert "LATE_TEAM" not in notice and "already played" not in notice
 
     def test_nothing_pending_once_the_box_score_is_published(self):
         lg = _make_league(provider=_FakeProvider(_box_score()), nfl_schedule=_schedule_done_and_late())

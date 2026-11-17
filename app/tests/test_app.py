@@ -298,11 +298,11 @@ def test_build_report_shows_unsupported_scoring_notice():
 def test_build_report_shows_pending_box_score_notice():
     class PendingLeague(StubLeague):
         def live_week_box_score_notice(self):
-            return "Week 6 games already played (BAL, LAC) have no box scores in the NFL data yet."
+            return "Box scores for the Week 6 games of BAL, LAC, which may be underway or finished, aren't in the NFL data yet."
 
     opts = RunOptions(league_id=LEAGUE_ID, team="Alpha", season=2026)
     html = build_report(opts, league_factory=lambda o: PendingLeague())
-    assert 'id="notices"' in html and "(BAL, LAC) have no box scores" in html
+    assert 'id="notices"' in html and "BAL, LAC, which may be underway" in html
 
 
 def test_build_report_flags_median_game_leagues():
