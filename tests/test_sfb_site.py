@@ -44,6 +44,12 @@ def data():
 
 
 class TestPageData:
+    def test_notice_defaults_to_empty_and_is_passed_through(self):
+        assert data()["notice"] == ""
+        cut = np.random.default_rng(0).normal(2385, 28, 500)
+        shown = build.page_data(odds_frame(), cut, names_frame(), through_week=7, rules=RULES, notice="MNF pending")
+        assert shown["notice"] == "MNF pending"
+
     def test_teams_carry_odds_and_leaderboard_names(self):
         teams = {t["t"]: t for t in data()["teams"]}
         alpha = teams["Alpha"]
@@ -74,6 +80,14 @@ class TestRender:
 
     def test_every_placeholder_is_filled(self):
         assert not re.findall(r"__[A-Z_]+__", self.page())
+
+    def test_notice_text_is_in_the_data_block_and_cannot_break_out(self):
+        cut = np.random.default_rng(0).normal(2385, 28, 500)
+        shown = build.page_data(odds_frame(), cut, names_frame(), through_week=7, rules=RULES, notice="</script><b>pending")
+        page = build.render(shown, "SFB", RULES)
+        blob = re.search(r'<script id="odds-data" type="application/json">(.*?)</script>', page, re.S).group(1)
+        assert json.loads(blob)["notice"] == "</script><b>pending"
+        assert 'id="notice"' in page
 
     def test_team_names_cannot_break_out_of_the_data_block(self):
         page = self.page()

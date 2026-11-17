@@ -160,6 +160,37 @@ class TestLiveWeekActuals:
         assert real.empty
 
 
+class TestPendingBoxScores:
+    def test_finished_team_without_a_box_score_is_pending(self):
+        # DONE_TEAM played but only LATE_TEAM's row is published, as with a Monday
+        # night game that nflverse hasn't posted yet.
+        box = _box_score()
+        box = box[box.team == "LATE_TEAM"]
+        lg = _make_league(provider=_FakeProvider(box), nfl_schedule=_schedule_done_and_late())
+        assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == ["DONE_TEAM"]
+        notice = _run_at(lg, _NOW, lg.live_week_box_score_notice)
+        assert "Week 3" in notice and "DONE_TEAM" in notice
+
+    def test_nothing_pending_once_the_box_score_is_published(self):
+        lg = _make_league(provider=_FakeProvider(_box_score()), nfl_schedule=_schedule_done_and_late())
+        assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == []
+        assert _run_at(lg, _NOW, lg.live_week_box_score_notice) == ""
+
+    def test_empty_box_scores_leave_every_finished_team_pending(self):
+        lg = _make_league(provider=_FakeProvider(_box_score().iloc[0:0]), nfl_schedule=_schedule_done_and_late())
+        assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == ["DONE_TEAM"]
+
+    def test_offseason_and_no_finished_games_have_no_notice(self):
+        provider = _FakeProvider(_box_score().iloc[0:0])
+        lg = _make_league(provider=provider, nfl_schedule=_schedule_done_and_late())
+        assert _run_at(lg, _NOW.replace(month=7), lg.live_week_box_score_notice) == ""
+        sched = _schedule_done_and_late()
+        sched["date"] = _NOW + datetime.timedelta(days=1)
+        lg = _make_league(provider=provider, nfl_schedule=sched)
+        assert _run_at(lg, _NOW, lg.live_week_box_score_notice) == ""
+        assert provider.calls == []
+
+
 class TestApplyLiveWeekActuals:
     def test_locks_finished_starters_leaves_others(self):
         provider = _FakeProvider(_box_score())
