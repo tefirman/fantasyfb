@@ -28,13 +28,27 @@ notify() {
   osascript -e "display notification \"$1\" with title \"SFB refresh\"" >/dev/null 2>&1 || true
 }
 
+# Runs a command up to 3 times, waiting 30s then 60s between attempts, so a
+# network blip at 8:00 (Wi-Fi still reconnecting after wake, a dropped SSH
+# connection) does not cost a whole day's refresh. Set SFB_RETRY_DELAY to change
+# the base wait. Returns the failure after the last attempt.
+retry() {
+  local attempt=1 delay="${SFB_RETRY_DELAY:-30}"
+  until "$@"; do
+    [ "$attempt" -ge 3 ] && return 1
+    log "Attempt $attempt of '$*' failed; retrying in $((attempt * delay))s."
+    sleep $((attempt * delay))
+    attempt=$((attempt + 1))
+  done
+}
+
 # Clones $1 into $2 on the first run, then resets it to $3 every run.
 sync() {
   if [ ! -d "$2/.git" ]; then
-    git clone -q "$1" "$2"
+    retry git clone -q "$1" "$2"
   fi
   git -C "$2" remote set-url origin "$1"
-  git -C "$2" fetch -q origin "$3"
+  retry git -C "$2" fetch -q origin "$3"
   git -C "$2" reset -q --hard FETCH_HEAD
 }
 
@@ -98,7 +112,7 @@ update_injuries() {
     return 0
   fi
   git -C fantasy-data commit -qam "Update injured list (automated, week $week)" || return 1
-  git -C fantasy-data push -q origin HEAD:main || return 1
+  retry git -C fantasy-data push -q origin HEAD:main || return 1
 
   # raw.githubusercontent.com is cached for a few minutes, and collect reads
   # the list from there, so wait until it serves the new file.
@@ -156,7 +170,7 @@ EOF
     return 0
   fi
   git -C site commit -qam "Refresh the odds through week $week (automated)"
-  git -C site push -q origin HEAD:main
+  retry git -C site push -q origin HEAD:main
   notify "Published the odds through week $week."
 }
 
