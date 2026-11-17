@@ -629,9 +629,9 @@ class League:
         if not pending:
             return ""
         return (
-            f"Week {self.current_week} games already played ({', '.join(pending)}) have no "
-            "box scores in the NFL data yet, so their players are still counted at their "
-            "projections. Numbers sharpen once the box scores are published."
+            f"Box scores for the Week {self.current_week} games of {', '.join(pending)}, which may be "
+            "underway or finished, aren't in the NFL data yet, so those players are still counted "
+            "at their projections. Numbers sharpen once the box scores are published."
         )
 
     def _live_week_actuals(self, week: int) -> pd.Series:
