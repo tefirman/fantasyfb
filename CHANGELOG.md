@@ -6,9 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.13.0] — 2026-11-16
+## [0.13.0] — 2026-11-17
 
-A fix for Yahoo runs crashing while loading teams, correct injury data for Sleeper leagues, field-wide injury scans for the Scott Fish Bowl, and a daily refresh of the SFB playoff page.
+A fix for Yahoo runs crashing while loading teams, correct injury data for Sleeper leagues, field-wide injury scans for the Scott Fish Bowl, a daily refresh of the SFB playoff page that retries network blips, and a notice in reports when a game's box score isn't published yet.
 
 ### Fixed
 - **The laptop's daily SFB refresh skipped a whole day when GitHub was briefly unreachable** (#156): on Nov 16 the 8:00 AM launchd run died on its first `git fetch` with `Connection closed by 57.166.80.144 port 22` (GitHub's SSH endpoint, most likely before the laptop's Wi-Fi had fully reconnected), and because the job fires once a day the odds page stayed a day stale. `scripts/sfb_daily.sh` now wraps the clone, fetch and push calls in a `retry` helper that makes up to 3 attempts, waiting 30 and then 60 seconds between them (`SFB_RETRY_DELAY` changes the base wait), and logs each failed attempt. A retried push that already landed is a no-op, and a failure after the last attempt still stops the run and sends the failure notification as before.
