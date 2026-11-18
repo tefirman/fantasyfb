@@ -18,6 +18,8 @@ from typing import Iterable, Tuple
 
 import pandas as pd
 
+from ..name_utils import normalize_name_key
+
 # Sleeper's injury_status values that mean "not playing", next to the Yahoo-style
 # codes add_injuries uses. Questionable is deliberately absent, as there.
 OUT_STATUSES = frozenset({
@@ -26,6 +28,52 @@ OUT_STATUSES = frozenset({
 })
 LIST_COLUMNS = ["player_id_sr", "name", "position", "until"]
 LAST_WEEK = 18
+
+
+def fill_player_ids(players: pd.DataFrame, nfl_rosters: pd.DataFrame) -> pd.DataFrame:
+    """Backfill ``player_id_sr`` where Sleeper's payload has no ``gsis_id``.
+
+    Sleeper leaves ``gsis_id`` empty for most recent draft classes and some
+    veterans (on Nov 18, 40 of the 51 widely rostered players Sleeper listed as
+    out), and ``scan_injuries`` and ``validate_injured_list`` both need it. IDs
+    are filled from nflverse's rosters, which is what ``PlayerDataManager``
+    does for the same players: by ``yahoo_id``, then by suffix-normalized name
+    and team, then by name and position alone when that names exactly one
+    player (which covers trades and team codes that differ between feeds, like
+    LAR and LA). Anything still unmatched stays empty.
+    """
+    ids = players.player_id_sr.astype("string").str.strip().replace("", pd.NA)
+    rosters = nfl_rosters.dropna(subset=["player_id_sr"]).assign(
+        _name=lambda d: normalize_name_key(d["name"]),
+        _pos=lambda d: d["position"].replace({"PK": "K"}),
+    ).sort_values("season")
+    cands = players.assign(
+        _name=normalize_name_key(players["name"]), _pos=players["position"].replace({"PK": "K"}),
+    )
+
+    def fill(keys: list, source: pd.DataFrame, unique: bool = False) -> None:
+        missing = ids.isna()
+        if not missing.any():
+            return
+        source = source.dropna(subset=keys).drop_duplicates(keys + ["player_id_sr"], keep="last")
+        if unique:
+            source = source.drop_duplicates(keys, keep=False)
+        else:
+            source = source.drop_duplicates(keys, keep="last")
+        found = cands.loc[missing].merge(source[keys + ["player_id_sr"]].rename(
+            columns={"player_id_sr": "_found"}), on=keys, how="left")["_found"]
+        ids.loc[missing] = found.to_numpy()
+
+    if "yahoo_id" in rosters.columns and "yahoo_id" in players.columns:
+        def as_text(s: pd.Series) -> pd.Series:
+            return s.astype("string").str.replace(r"\.0$", "", regex=True)
+
+        cands["_yid"] = as_text(players["yahoo_id"])
+        fill(["_yid"], rosters.assign(_yid=as_text(rosters["yahoo_id"])))
+    cands["_team"] = players["editorial_team_abbr"] if "editorial_team_abbr" in players.columns else pd.NA
+    fill(["_name", "_pos", "_team"], rosters.assign(_team=rosters["current_team"]))
+    fill(["_name", "_pos"], rosters, unique=True)
+    return players.assign(player_id_sr=ids.astype(object).where(ids.notna(), None))
 
 
 def rostered_counts(rosters: pd.DataFrame) -> pd.Series:

@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from fantasyfb.sfb.injuries import rostered_counts, scan_injuries, validate_injured_list
+from fantasyfb.sfb.injuries import fill_player_ids, rostered_counts, scan_injuries, validate_injured_list
 
 
 def rosters(counts):
@@ -61,6 +61,59 @@ class TestScanInjuries:
     def test_a_team_rostering_a_player_twice_counts_once(self):
         doubled = pd.concat([rosters({"1": 3})] * 2)
         assert rostered_counts(doubled)["1"] == 3
+
+
+NFL_ROSTERS = pd.DataFrame({
+    "name": ["Yahoo Guy", "Puka Nacua", "Brian Robinson", "Traded Guy", "Josh Allen", "Josh Allen", "Kicker K"],
+    "current_team": ["AAA", "LA", "ATL", "NEW", "BUF", "JAX", "PIT"],
+    "position": ["WR", "WR", "RB", "WR", "QB", "LB", "PK"],
+    "player_id_sr": ["g-yahoo", "g-nacua", "g-robinson", "g-traded", "g-allen-qb", "g-allen-lb", "g-kicker"],
+    "yahoo_id": ["111", None, None, None, None, None, None],
+    "season": [2026] * 7,
+})
+
+
+class TestFillPlayerIds:
+    def fill(self, **sleeper):
+        row = {"player_id": "s", "player_id_sr": None, "name": "Nobody", "position": "WR",
+               "editorial_team_abbr": "ZZZ", "yahoo_id": None, **sleeper}
+        return fill_player_ids(pd.DataFrame([row]), NFL_ROSTERS).player_id_sr.iloc[0]
+
+    def test_an_id_sleeper_has_is_kept_and_stripped(self):
+        assert self.fill(player_id_sr=" g-own", name="Puka Nacua") == "g-own"
+
+    def test_yahoo_id_links_a_player_whose_name_differs(self):
+        assert self.fill(yahoo_id=111.0, name="Different Name") == "g-yahoo"
+
+    def test_name_and_team_link_and_suffixes_are_ignored(self):
+        assert self.fill(name="Brian Robinson Jr.", position="RB", editorial_team_abbr="ATL") == "g-robinson"
+
+    def test_a_unique_name_and_position_links_across_team_codes_and_trades(self):
+        assert self.fill(name="Puka Nacua", editorial_team_abbr="LAR") == "g-nacua"  # LAR in Sleeper, LA in nflverse
+        assert self.fill(name="Traded Guy", editorial_team_abbr="OLD") == "g-traded"
+
+    def test_position_keeps_same_named_players_apart(self):
+        assert self.fill(name="Josh Allen", position="QB") == "g-allen-qb"
+
+    def test_a_name_shared_by_two_players_at_one_position_is_left_empty(self):
+        rosters = pd.concat([NFL_ROSTERS, NFL_ROSTERS.iloc[[1]].assign(player_id_sr="g-other", current_team="DEN")])
+        players = pd.DataFrame({"player_id": ["s"], "player_id_sr": [None], "name": ["Puka Nacua"],
+                                "position": ["WR"], "editorial_team_abbr": ["LAR"], "yahoo_id": [None]})
+        assert fill_player_ids(players, rosters).player_id_sr.isna().all()
+
+    def test_kickers_match_across_pk_and_k(self):
+        assert self.fill(name="Kicker K", position="K", editorial_team_abbr="PIT") == "g-kicker"
+
+    def test_an_unknown_player_stays_empty(self):
+        assert self.fill() is None
+
+    def test_a_filled_player_is_no_longer_skipped_by_the_scan(self):
+        players = pd.DataFrame({"player_id": ["1"], "player_id_sr": [None], "name": ["Puka Nacua"],
+                                "position": ["WR"], "status": ["IR"], "editorial_team_abbr": ["LAR"], "yahoo_id": [None]})
+        r = rosters({"1": 30})
+        assert scan_injuries(r, players, LISTED, 9)[0].empty
+        new, _ = scan_injuries(r, fill_player_ids(players, NFL_ROSTERS), LISTED, 9)
+        assert new.player_id_sr.tolist() == ["g-nacua"]
 
 
 class TestValidateInjuredList:
