@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The daily SFB injury scan skipped most hurt players, and its validator would have rejected them anyway**: Sleeper's player payload has no `gsis_id` for many players who matter (recent draft classes and some veterans), and `scan_injuries` drops anyone without an ID. On Nov 18, 40 of the 51 players rostered on 20 or more field teams with an out designation had none, including Puka Nacua (400 teams), Woody Marks, Jordan Addison, Drake Maye, Jake Ferguson and Wan'Dale Robinson, so the 8 AM scan reported 3 injuries (A.J. Brown, Sam Darnold, James Conner) and the list went stale for everyone else. `sfb-field check-injuries` had the same blind spot: it only accepts players Sleeper's pool knows by ID, so a row added for any of them was rejected as `players not in Sleeper's pool`. Both commands now backfill the missing IDs from nflverse's rosters with `fill_player_ids`: by `yahoo_id`, then by suffix-normalized name and team, then by name and position when that names exactly one player (which covers trades and team codes that differ between feeds, like LAR and LA). Ambiguous names stay unmatched, and if the roster feed is unreachable the commands warn and use Sleeper's IDs as before. On Nov 18's data the scan finds 29 players instead of 3, each with the same ID the Yahoo-based scan reports, and the validator accepts the list that adds them. Tests cover each matching step, same-named players, and the scan picking up a player it used to skip.
+
 ## [0.13.0] — 2026-11-17
 
 A fix for Yahoo runs crashing while loading teams, correct injury data for Sleeper leagues, field-wide injury scans for the Scott Fish Bowl, a daily refresh of the SFB playoff page that retries network blips, and a notice in reports when a game's box score isn't published yet.

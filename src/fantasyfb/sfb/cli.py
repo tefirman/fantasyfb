@@ -7,17 +7,19 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from ..data.nflreadpy_provider import NflreadpyProvider
 from ..data.player_data_manager import INJURED_LIST_URL
 from ..data.sleeper_client import SleeperClient
 from .collect import DEFAULT_MAX_CALLS_PER_MINUTE, collect_field, collect_rosters
 from .field import FieldData, simulate_field
-from .injuries import scan_injuries, validate_injured_list
+from .injuries import fill_player_ids, scan_injuries, validate_injured_list
 from .leagues import league_list, parse_leaderboard, read_league_ids
 from .players import add_player_info
 
@@ -58,6 +60,27 @@ def _simulate(args) -> int:
     return 0
 
 
+def _sleeper_players() -> pd.DataFrame:
+    """Sleeper's player pool with ``player_id_sr`` backfilled from nflverse's rosters.
+
+    Sleeper has no ``gsis_id`` for many players who matter, so without this the
+    injury scan skips them and the validator rejects them. If the roster feed is
+    unreachable the pool comes back as Sleeper gave it, with a warning.
+    """
+    players = SleeperClient("").get_all_players()
+    now = datetime.datetime.now()
+    season = now.year - int(now.month < 6)
+    try:
+        rosters = NflreadpyProvider().get_rosters(season - 1, season)
+    except Exception as e:
+        print(f"warning: nflverse rosters unavailable ({e}); using Sleeper's IDs only", file=sys.stderr)
+        return players
+    filled = fill_player_ids(players, rosters)
+    print(f"filled {filled.player_id_sr.notna().sum() - players.player_id_sr.notna().sum()} "
+          f"missing player IDs from nflverse rosters", file=sys.stderr)
+    return filled
+
+
 def _injuries(args) -> int:
     rosters, errors = collect_rosters(read_league_ids(args.leagues))
     for league_id, error in errors:
@@ -68,7 +91,7 @@ def _injuries(args) -> int:
     week = args.week or SleeperClient("").get_current_week()
     new, old = scan_injuries(
         rosters,
-        SleeperClient("").get_all_players(),
+        _sleeper_players(),
         pd.read_csv(args.injured_list),
         week,
         args.min_teams,
@@ -83,7 +106,7 @@ def _injuries(args) -> int:
 
 def _check_injuries(args) -> int:
     after = pd.read_csv(args.after)
-    known = SleeperClient("").get_all_players().player_id_sr.dropna().str.strip().tolist()
+    known = _sleeper_players().player_id_sr.dropna().str.strip().tolist()
     try:
         validate_injured_list(pd.read_csv(args.before), after, known, args.max_changes)
     except ValueError as e:
