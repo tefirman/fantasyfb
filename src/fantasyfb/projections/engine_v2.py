@@ -51,18 +51,22 @@ _OPPORTUNITY_DEF: Dict[str, list[tuple[str, float]]] = {
 
 # Default Bayesian shrinkage strength per position, expressed as
 # "equivalent prior games to add to the player's actual game count".
-# Higher = trust position prior more. Tuned by hand for Stage 1; will
-# be replaced by least-squares fits in Stage 3.
+# Higher = trust position prior more. Backtested on 2023-2025 (walk-
+# forward, weeks 2-18): QB/RB/WR/TE predict best with a light prior of
+# about 2 games (the old 6-10 over-regressed established players), while
+# K/DEF are noisy enough to keep the heavier prior.
 _DEFAULT_SHRINKAGE: Dict[str, int] = {
-    "QB": 6, "RB": 10, "WR": 10, "TE": 10, "K": 15, "DEF": 15,
+    "QB": 2, "RB": 2, "WR": 2, "TE": 2, "K": 15, "DEF": 15,
 }
 
 
 # Default exponential time-decay rate per week. A game N weeks old gets
-# weight exp(-_DEFAULT_TIME_DECAY * N). At 0.04, a 17-week-old game
-# (one full season ago) contributes ~50% as much as last week's game,
-# which gives recent form real teeth without throwing away long history.
-_DEFAULT_TIME_DECAY: float = 0.04
+# weight exp(-_DEFAULT_TIME_DECAY * N). At 0.10, a game 7 weeks old
+# contributes ~50% as much as last week's and one a full season (17
+# weeks) ago ~18%, so recent form dominates but last season still
+# informs early-season projections. Backtested on 2023-2025: 0.10-0.15
+# was best for QB/RB/WR/TE and the surface is flat across that range.
+_DEFAULT_TIME_DECAY: float = 0.10
 
 
 class ProjectionEngineV2:

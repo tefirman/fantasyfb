@@ -64,7 +64,10 @@ def test_pickups_match_a_full_recompute(replay_league):
     base = session.standings()
     mine = league.players[(league.players.fantasy_team == me)
                           & ~league.players.name.str.contains("Average_")]
+    # Healthy only: an injured free agent can top the WAR list yet add nothing
+    # to the lineup, so the "move changed the outlook" check below would fail.
     free = league.players[league.players.fantasy_team.isnull()
+                          & ~league.players.injured.fillna(False).astype(bool)
                           & ~league.players.name.str.contains("Average_")]
     moved = 0
     for position in ["QB", "RB", "WR", "TE"]:
