@@ -142,6 +142,9 @@ def run_backtest(
     test_weeks: List[int],
     fitted_weights: Optional[Dict[str, _PositionWeights]] = None,
     provider: Optional[NFLDataProvider] = None,
+    time_decay: Optional[float] = None,
+    shrinkage_n: Optional[Dict[str, int]] = None,
+    neutral_only: bool = False,
 ) -> pd.DataFrame:
     """Per-(player, week) predictions for every model variant.
 
@@ -161,12 +164,23 @@ def run_backtest(
             nflreadpy's depth-chart feed has week-level historical data;
             omit for seasons before nflreadpy's coverage starts or when
             the string penalty isn't under test.
+        time_decay: per-week decay rate for `ProjectionEngineV2`. None
+            keeps the engine default.
+        shrinkage_n: per-position shrinkage strength for
+            `ProjectionEngineV2`. None keeps the engine default.
+        neutral_only: only emit the V2_neutral and baseline variants,
+            skipping the matchup model entirely. Much faster, for
+            sweeping engine parameters where the matchup factor is just
+            noise.
 
     Returns:
         Long DataFrame, one row per (player, week, variant). Columns:
         player_id_sr, position, season, week, variant, prediction, actual.
     """
-    engine_v2 = ProjectionEngineV2()
+    engine_v2 = ProjectionEngineV2(
+        **({} if time_decay is None else {"time_decay": time_decay}),
+        shrinkage_n=shrinkage_n,
+    )
     matchup_default = MatchupModel(weights=dict(_DEFAULT_WEIGHTS))
     matchup_fitted = (
         MatchupModel(weights=fitted_weights) if fitted_weights else None
@@ -183,27 +197,29 @@ def run_backtest(
         if history.empty:
             continue
 
-        # Refit matchup baselines (z-scoring, allowed-vs-pos table) on
-        # the history available as of this week.
-        matchup_default = MatchupModel.from_history(
-            history, sched_history, weights=dict(_DEFAULT_WEIGHTS),
-        )
-        if fitted_weights is not None:
-            matchup_fitted = MatchupModel.from_history(
-                history, sched_history, weights=fitted_weights,
-            )
-
-        strings = _historical_strings(provider, test_season, week)
         v2_neutral = _v2_predictions(engine_v2, None, history, schedule, cutoff)
-        v2_default = _v2_predictions(
-            engine_v2, matchup_default, history, schedule, cutoff, strings,
-        )
-        v2_fitted = (
-            _v2_predictions(
-                engine_v2, matchup_fitted, history, schedule, cutoff, strings,
+        v2_default = v2_fitted = None
+        if not neutral_only:
+            # Refit matchup baselines (z-scoring, allowed-vs-pos table) on
+            # the history available as of this week.
+            matchup_default = MatchupModel.from_history(
+                history, sched_history, weights=dict(_DEFAULT_WEIGHTS),
             )
-            if matchup_fitted is not None else None
-        )
+            if fitted_weights is not None:
+                matchup_fitted = MatchupModel.from_history(
+                    history, sched_history, weights=fitted_weights,
+                )
+
+            strings = _historical_strings(provider, test_season, week)
+            v2_default = _v2_predictions(
+                engine_v2, matchup_default, history, schedule, cutoff, strings,
+            )
+            v2_fitted = (
+                _v2_predictions(
+                    engine_v2, matchup_fitted, history, schedule, cutoff, strings,
+                )
+                if matchup_fitted is not None else None
+            )
 
         actuals = stats[
             (stats.season == test_season) & (stats.week == week)
@@ -227,10 +243,12 @@ def run_backtest(
                     return position_means.get(pos, 0.0)
                 return float(hit.iloc[0]["prediction"])
 
-            for variant, df in [
-                ("V2_neutral", v2_neutral),
-                ("V2_default", v2_default), ("V2_fitted", v2_fitted),
-            ]:
+            variants = [("V2_neutral", v2_neutral)]
+            if not neutral_only:
+                variants += [
+                    ("V2_default", v2_default), ("V2_fitted", v2_fitted),
+                ]
+            for variant, df in variants:
                 rows.append({
                     "player_id_sr": pid, "position": pos,
                     "season": test_season, "week": week,

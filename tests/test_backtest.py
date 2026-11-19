@@ -222,3 +222,61 @@ class TestRunBacktest:
                 "position == @pos and variant == 'V2_neutral'"
             )["mae"].iloc[0]
             assert v2 < base, f"V2 didn't beat baseline at {pos}"
+
+
+class TestRunBacktestEngineParams:
+    """`time_decay`/`shrinkage_n`/`neutral_only` pass through to the engine."""
+
+    @staticmethod
+    def _stats() -> pd.DataFrame:
+        # One WR whose output jumps from 5 to 15 points in week 4, so a
+        # heavier time decay must weight the week-4 game more.
+        rows = [
+            {"player_id_sr": "wr1", "position": "WR", "season": 2024,
+             "week": w, "points": 5.0 if w < 4 else 15.0, "rec": 4}
+            for w in range(1, 5)
+        ]
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def _schedule() -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=["season", "week", "team", "opp_team",
+                     "implied_total", "opp_implied_total"],
+        )
+
+    def _run(self, **kwargs) -> pd.DataFrame:
+        stats = self._stats()
+        # Week 5 actual row so the test week has something to score.
+        stats = pd.concat([stats, pd.DataFrame([{
+            "player_id_sr": "wr1", "position": "WR", "season": 2024,
+            "week": 5, "points": 10.0, "rec": 4,
+        }])], ignore_index=True)
+        return run_backtest(
+            stats, self._schedule(), test_season=2024, test_weeks=[5],
+            **kwargs,
+        )
+
+    def test_neutral_only_emits_only_neutral_and_baseline(self) -> None:
+        preds = self._run(neutral_only=True)
+        assert set(preds["variant"]) == {"V2_neutral", "baseline"}
+
+    def test_time_decay_changes_neutral_prediction(self) -> None:
+        def neutral(**kw) -> float:
+            preds = self._run(neutral_only=True, **kw)
+            return float(
+                preds[preds["variant"] == "V2_neutral"]["prediction"].iloc[0]
+            )
+
+        flat = neutral(time_decay=0.0)
+        steep = neutral(time_decay=1.0)
+        assert steep > flat
+
+    def test_shrinkage_n_changes_neutral_prediction(self) -> None:
+        def neutral(k: int) -> float:
+            preds = self._run(neutral_only=True, shrinkage_n={"WR": k})
+            return float(
+                preds[preds["variant"] == "V2_neutral"]["prediction"].iloc[0]
+            )
+
+        assert neutral(1) != neutral(50)
