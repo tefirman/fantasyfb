@@ -14,6 +14,7 @@ import copy
 import os
 import numpy as np
 import datetime
+import warnings
 from .scoring.fantasy_scoring import FantasyScorer, LONG_PLAY_CATEGORIES
 from .configs import get_league_config, apply_default_scoring_categories
 from .sim.schedule_manager import ScheduleManager
@@ -33,6 +34,7 @@ from .analysis.move_analyzer import MoveAnalyzer
 from .analysis.sim_session import SeasonSimSession
 from .cli import initialize_inputs
 from .data.nfl_provider import NFLDataProvider
+from .data.game_state import EspnGameStateProvider
 from .data.nflreadpy_provider import LIVE_WEEK_CACHE_SECONDS, NflreadpyProvider
 
 class League:
@@ -57,6 +59,10 @@ class League:
         earliest: integer describing the earliest week to pull statistics from (YYYYWW)
         schedule: dataframe containing the fantasy schedule for the league and season in question
     """
+
+    # Live game clock source for in-progress scoring. None disables it, which is
+    # the default for League objects built without __init__ (e.g. test doubles).
+    game_state_provider = None
 
     def __init__(
         self,
@@ -104,6 +110,7 @@ class League:
         self.latest_season = datetime.datetime.now().year - int(datetime.datetime.now().month < 6)
         """ Year of the most recent season """
         self.nfl_provider = nfl_provider if nfl_provider is not None else NflreadpyProvider()
+        self.game_state_provider = EspnGameStateProvider()
         """ Pluggable NFL data backend; defaults to nflreadpy """
         self.season = season if type(season) == int else self.latest_season
         """ Season of interest, defaults to most recent season when no value is provided """
@@ -676,6 +683,73 @@ class League:
         )
 
     def _apply_live_week_actuals(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
+        """Return ``players`` with live scoring applied for ``week``.
+
+        Starters whose NFL game is in progress are blended with the points they
+        have scored so far (``_apply_in_progress_games``), then starters whose
+        game is finished get their actual points (``_apply_finished_game_actuals``).
+        Always returns a fresh copy; ``self.players`` is never mutated.
+        """
+        players = self._apply_in_progress_games(players, week)
+        return self._apply_finished_game_actuals(players, week)
+
+    def _apply_in_progress_games(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
+        """Blend starters in games currently being played with live points.
+
+        For a starter whose game has ``r`` of regulation left, ``points_avg``
+        becomes ``points_so_far + points_avg * r`` and ``points_stdev`` shrinks
+        by ``sqrt(r)``: the projection is pro-rated over the time remaining and
+        the uncertainty of the unplayed part scales with it. This assumes scoring
+        is spread evenly over the game, so it ignores game script and cannot tell
+        that a player has left the game injured.
+
+        Needs two live feeds: the game clock (``self.game_state_provider``) and
+        the platform's points so far (``client.get_live_player_points``). If
+        either is missing or fails, the players are returned unchanged with
+        their full projections. Always returns a fresh copy.
+        """
+        players = players.copy()
+        provider = self.game_state_provider
+        client = getattr(self, "client", None)
+        if provider is None or client is None or not self._is_live_week(week):
+            return players
+
+        game_state = provider.get_game_state(week)
+        remaining = {
+            team: info["remaining"]
+            for team, info in game_state.items()
+            if info["state"] == "in"
+        }
+        if not remaining:
+            return players
+
+        try:
+            points_so_far = client.get_live_player_points(week)
+        except Exception as exc:  # live feeds are best-effort
+            warnings.warn(
+                f"Could not fetch live player points ({exc}); in-progress "
+                "games will keep their full projections.",
+                stacklevel=2,
+            )
+            return players
+        if points_so_far.empty:
+            return players
+
+        remaining_by_player = players.current_team.map(remaining)
+        in_play = players.starter & remaining_by_player.notna()
+        if not in_play.any():
+            return players
+
+        rem = remaining_by_player[in_play].astype(float)
+        # A rostered player missing from the feed hasn't scored yet.
+        so_far = (
+            players.loc[in_play, "player_id"].astype(str).map(points_so_far).fillna(0.0).astype(float)
+        )
+        players.loc[in_play, "points_avg"] = so_far + players.loc[in_play, "points_avg"] * rem
+        players.loc[in_play, "points_stdev"] = players.loc[in_play, "points_stdev"] * np.sqrt(rem)
+        return players
+
+    def _apply_finished_game_actuals(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
         """Return ``players`` with real points substituted for starters
         whose NFL game in ``week`` is already finished.
 
