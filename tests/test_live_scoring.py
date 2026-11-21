@@ -200,6 +200,44 @@ class TestPlatformPoints:
 
 
 
+def _yahoo_roster_response(players):
+    """A trimmed team roster-with-stats response in Yahoo's real shape: each
+    player is [[single-key dicts], {selected_position}, {player_stats, player_points}],
+    with the empty-list padding Yahoo scatters around."""
+    plist = {"count": len(players)}
+    for i, (pid, total) in enumerate(players):
+        plist[str(i)] = {"player": [
+            [{"player_key": f"470.p.{pid}"}, {"player_id": pid}, [], {"name": {"full": "X"}}],
+            {"selected_position": [{"coverage_type": "week"}, {"position": "RB"}]},
+            {"player_stats": {"stats": []},
+             "player_points": {"0": {"coverage_type": "week", "week": "11"}, "total": total}},
+        ]}
+    return {"fantasy_content": {"team": [[{"team_key": "t"}], {"roster": {"0": {"players": plist}}}]}}
+
+
+class TestYahooLivePoints:
+    def test_parse_roster_points(self):
+        from fantasyfb.data.yahoo_client import parse_roster_points
+        resp = _yahoo_roster_response([("30977", "21.46"), ("34019", "0.00"), ("100024", "")])
+        assert parse_roster_points(resp) == {"30977": 21.46, "34019": 0.0}
+
+    def test_client_collects_every_team(self):
+        from fantasyfb.data.yahoo_client import YahooFantasyClient
+
+        class _Handler:
+            def get(self, path):
+                key = path.split("/")[1]
+                assert "week=11" in path
+                return _yahoo_roster_response([({"t1": "1", "t2": "2"}[key], "5.50")])
+
+        client = YahooFantasyClient.__new__(YahooFantasyClient)
+        client.lg = type("L", (), {"yhandler": _Handler()})()
+        client.refresh_oauth = lambda *a, **k: None
+        client.get_fantasy_teams = lambda: [{"team_key": "t1"}, {"team_key": "t2"}]
+        pts = client.get_live_player_points(11)
+        assert pts.to_dict() == {"1": 5.5, "2": 5.5} and pts.dtype == float
+
+
 class TestStartedNflTeams:
     def test_in_progress_and_final_count_but_not_pregame(self):
         state = {"A": {"state": "in", "remaining": 0.5, "game": "x"},
@@ -226,3 +264,16 @@ class TestStartedNflTeams:
         lg.game_state_provider = _Counting(_LIVE)
         _run_at(lg, _NOW, lambda: (lg._started_nfl_teams(3), lg._started_nfl_teams(3)))
         assert calls == [3]
+
+
+def test_live_points_are_cached_briefly():
+    calls = []
+
+    class _CountingClient(_FakeClient):
+        def get_live_player_points(self, week):
+            calls.append(week)
+            return super().get_live_player_points(week)
+
+    lg = _live_league(_LIVE, _CountingClient(pd.Series({"y1": 8.0})))
+    _run_at(lg, _NOW, lambda: [lg._apply_live_week_actuals(_live_players(), 3) for _ in range(3)])
+    assert calls == [3]
