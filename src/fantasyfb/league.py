@@ -14,6 +14,7 @@ import copy
 import os
 import numpy as np
 import datetime
+import time
 import warnings
 from .scoring.fantasy_scoring import FantasyScorer, LONG_PLAY_CATEGORIES
 from .configs import get_league_config, apply_default_scoring_categories
@@ -574,7 +575,30 @@ class League:
             self.nfl_schedule,
             self.matchup_model,
             teams=teams,
+            started_teams=self._started_nfl_teams(week),
         )
+
+    def _live_game_state(self, week: int) -> dict:
+        """``{team: {state, remaining, game}}`` from the live game-state feed.
+
+        Empty outside a live week or when the feed is disabled or down. Cached
+        for 30 seconds, since one run asks for it from several places.
+        """
+        provider = self.game_state_provider
+        if provider is None or not self._is_live_week(week):
+            return {}
+        cache = self.__dict__.setdefault("_game_state_cache", {})
+        cached = cache.get(week)
+        if cached is not None and time.monotonic() - cached[0] < 30:
+            return cached[1]
+        state = provider.get_game_state(week)
+        cache[week] = (time.monotonic(), state)
+        return state
+
+    def _started_nfl_teams(self, week: int) -> list:
+        """NFL teams whose ``week`` game has kicked off (in progress or final)
+        according to the live game clock, so their players' lineup spots are locked."""
+        return [t for t, info in self._live_game_state(week).items() if info["state"] != "pre"]
 
     def _completed_nfl_teams(self, week: int) -> list:
         """NFL teams whose game for ``week`` of the current season has
@@ -694,7 +718,11 @@ class League:
         return self._apply_finished_game_actuals(players, week)
 
     def _apply_in_progress_games(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
-        """Blend starters in games currently being played with live points.
+        """Blend starters in games that have kicked off with live points.
+
+        Finished games count too, with nothing remaining: until the schedule's
+        kickoff-date heuristic and nflverse's box scores catch up (hours later),
+        the platform's points are already final.
 
         For a starter whose game has ``r`` of regulation left, ``points_avg``
         becomes ``points_so_far + points_avg * r`` and ``points_stdev`` shrinks
@@ -714,11 +742,10 @@ class League:
         if provider is None or client is None or not self._is_live_week(week):
             return players
 
-        game_state = provider.get_game_state(week)
         remaining = {
             team: info["remaining"]
-            for team, info in game_state.items()
-            if info["state"] == "in"
+            for team, info in self._live_game_state(week).items()
+            if info["state"] != "pre"
         }
         if not remaining:
             return players
