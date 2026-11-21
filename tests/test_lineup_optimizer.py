@@ -183,3 +183,56 @@ class TestHandleLiveWeekLineupInactiveSlots:
         )
         starters = set(out.loc[out.starter, "player_id_sr"])
         assert {"wr_done", "wr_late"} <= starters
+
+
+class TestStartedTeamsLock:
+    """A game underway can't be re-optimized either. The schedule's kickoff
+    dates only call a game finished a day later, so a live feed's started teams
+    must lock those players too, or a mid-game starter could be swapped for a
+    higher-projected player who hasn't played, dropping his points."""
+
+    def _schedule(self) -> pd.DataFrame:
+        future = datetime.datetime.now() + datetime.timedelta(days=1)
+        return pd.DataFrame({
+            "season": [2026, 2026],
+            "week": [1, 1],
+            "team": ["LIVE_TEAM", "FRESH_TEAM"],
+            "opp_team": ["FRESH_TEAM", "LIVE_TEAM"],
+            "date": [future, future],
+            "implied_total": [22.0, 22.0],
+            "opp_implied_total": [22.0, 22.0],
+        })
+
+    def _players(self) -> pd.DataFrame:
+        return pd.DataFrame({
+            "player_id_sr": ["rb_live_1", "rb_live_2", "rb_fresh"],
+            "player_id": ["1", "2", "3"],
+            "name": ["Live One", "Live Two", "Fresh"],
+            "position": ["RB", "RB", "RB"],
+            "current_team": ["LIVE_TEAM", "LIVE_TEAM", "FRESH_TEAM"],
+            "fantasy_team": ["A", "A", "A"],
+            "selected_position": ["RB", "RB", "BN"],
+            "points_rate": [5.0, 4.0, 30.0],
+            "string": [1.0, 1.0, 1.0],
+            "until": [None, None, None],
+            "bye_week": [99, 99, 99],
+        })
+
+    def _run(self, **kwargs) -> pd.Series:
+        # Two RB slots and no flex, so the third RB has to sit.
+        spots = pd.DataFrame({"position": ["RB", "BN", "IR"], "count": [2, 5, 1]})
+        out = LineupOptimizer(spots, _TEAMS, _StubClient()).set_optimal_lineup(
+            self._players(), week=1, season=2026, current_week=1, latest_season=2026,
+            nfl_schedule=self._schedule(), matchup_model=_neutral_matchup_model(),
+            **kwargs,
+        )
+        return out.set_index("player_id_sr")["starter"]
+
+    def test_without_live_feed_higher_projected_bench_player_displaces_starter(self) -> None:
+        starters = self._run()
+        assert bool(starters["rb_fresh"]) and not bool(starters["rb_live_2"])
+
+    def test_started_team_players_stay_locked_in(self) -> None:
+        starters = self._run(started_teams=["LIVE_TEAM"])
+        assert bool(starters["rb_live_1"]) and bool(starters["rb_live_2"])
+        assert not bool(starters["rb_fresh"])

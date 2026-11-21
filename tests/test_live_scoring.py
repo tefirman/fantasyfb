@@ -140,6 +140,16 @@ class TestInProgressBlend:
         out = _run_at(lg, _NOW, lambda: lg._apply_live_week_actuals(players, 3))
         pd.testing.assert_frame_equal(out, players)
 
+    def test_finished_game_uses_points_so_far_with_no_variance(self):
+        # Before the kickoff-date heuristic and the box score catch up, a game
+        # ESPN calls final is already settled on the platform.
+        state = {"LIVE_TEAM": {"state": "post", "remaining": 0.0, "game": "x"}}
+        lg = _live_league(state, _FakeClient(pd.Series({"y1": 8.0})))
+        out = _run_at(lg, _NOW, lambda: lg._apply_live_week_actuals(_live_players(), 3)) \
+            .set_index("player_id")
+        assert out.loc["y1", "points_avg"] == pytest.approx(8.0)
+        assert out.loc["y1", "points_stdev"] == 0.0
+
     def test_no_game_in_progress_keeps_projections(self):
         state = {"LIVE_TEAM": {"state": "pre", "remaining": 1.0, "game": "x"}}
         lg = _live_league(state, _FakeClient(pd.Series({"y1": 8.0})))
@@ -188,3 +198,31 @@ class TestPlatformPoints:
         monkeypatch.setattr(sc, "fetch_matchups", lambda lid, wk: [])
         assert SleeperClient("1").get_live_player_points(3).empty
 
+
+
+class TestStartedNflTeams:
+    def test_in_progress_and_final_count_but_not_pregame(self):
+        state = {"A": {"state": "in", "remaining": 0.5, "game": "x"},
+                 "B": {"state": "post", "remaining": 0.0, "game": "x"},
+                 "C": {"state": "pre", "remaining": 1.0, "game": "y"}}
+        lg = _live_league(state, _FakeClient())
+        assert sorted(_run_at(lg, _NOW, lambda: lg._started_nfl_teams(3))) == ["A", "B"]
+
+    def test_empty_offseason_or_disabled(self):
+        lg = _live_league(_LIVE, _FakeClient())
+        assert _run_at(lg, _NOW.replace(month=6), lambda: lg._started_nfl_teams(3)) == []
+        lg.game_state_provider = None
+        assert _run_at(lg, _NOW, lambda: lg._started_nfl_teams(3)) == []
+
+    def test_game_state_is_cached_briefly(self):
+        calls = []
+
+        class _Counting(_FakeGameState):
+            def get_game_state(self, week=None):
+                calls.append(week)
+                return super().get_game_state(week)
+
+        lg = _live_league(_LIVE, _FakeClient())
+        lg.game_state_provider = _Counting(_LIVE)
+        _run_at(lg, _NOW, lambda: (lg._started_nfl_teams(3), lg._started_nfl_teams(3)))
+        assert calls == [3]
