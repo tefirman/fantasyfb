@@ -628,6 +628,23 @@ class SleeperClient(FantasyPlatformClient):
             "sleeper_rank",
         ])
 
+    def get_live_player_points(self, week: int) -> pd.Series:
+        """
+        Points each rostered player has scored so far in ``week``, as scored
+        by Sleeper under this league's settings (``players_points`` in the
+        matchups feed, which updates while games are in progress).
+
+        Returns:
+            Series indexed by Sleeper player_id (string). Empty for weeks
+            with no matchup data. Only rostered players appear.
+        """
+        points = {}
+        for entry in fetch_matchups(self.league_id, week):
+            for player_id, pts in (entry.get("players_points") or {}).items():
+                if pts is not None:
+                    points[str(player_id)] = float(pts)
+        return pd.Series(points, dtype=float, name="points")
+
     def get_team_rosters(self, teams: List[Dict], week: int) -> pd.DataFrame:
         """
         Get rosters for all teams for a given week.
