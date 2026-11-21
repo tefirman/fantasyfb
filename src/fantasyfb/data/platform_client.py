@@ -82,6 +82,20 @@ class FantasyPlatformClient(ABC):
     def get_my_team_key(self) -> Optional[str]:
         """team_key of the team this client is scoped to, if known."""
 
+    def get_live_player_points(self, week: int) -> pd.Series:
+        """Fantasy points each rostered player has scored so far in ``week``.
+
+        Scored by the platform under the league's own rules, so in-progress
+        games can be blended with projections without re-scoring raw stats.
+
+        Returns:
+            Series of points indexed by ``player_id`` (as a string, matching
+            the ``player_id`` column of ``get_all_players``). Empty by default,
+            for backends with no live-points source; callers then keep
+            in-progress players at their full projection.
+        """
+        return pd.Series(dtype=float, name="points")
+
     def refresh_oauth(self, threshold: int = 59) -> None:
         """Refresh the auth token if it's near expiration.
 

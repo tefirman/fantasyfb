@@ -302,7 +302,7 @@ def build_league(meta: dict[str, Any], provider: Any, client: Any):
     from fantasyfb import League
 
     np.random.seed(meta.get("seed", 0))
-    return League(
+    league = League(
         name=meta["team"],
         season=meta["season"],
         week=meta.get("week"),
@@ -311,6 +311,10 @@ def build_league(meta: dict[str, Any], provider: Any, client: Any):
         client=client,
         fit_matchup=True,
     )
+    # Snapshots don't record ESPN's game clock, so in-game blending stays off
+    # to keep recording and replay deterministic and offline.
+    league.game_state_provider = None
+    return league
 
 
 def run_weekly(league, output_dir: Path | None = None) -> dict[str, Any]:

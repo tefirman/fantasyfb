@@ -32,7 +32,7 @@ class LineupOptimizer:
         self.client = client
 
     def set_optimal_lineup(self, players, week, season, current_week, latest_season,
-                        nfl_schedule, matchup_model, teams=None):
+                        nfl_schedule, matchup_model, teams=None, started_teams=None):
         """
         Identifies which players should be started on each fantasy team
         based on fantasy point projections and available roster spots.
@@ -51,6 +51,10 @@ class LineupOptimizer:
                 Lineups are chosen team by team, so the rest are not
                 guaranteed to be optimized (usually left with ``starter``
                 False). Defaults to every team.
+            started_teams: Optional NFL team codes whose game has already kicked
+                off (in progress or final) according to a live feed. Their
+                fantasy owners' active players are locked into the lineup
+                alongside the teams the schedule's kickoff dates call finished.
 
         Returns:
             DataFrame with players marked as starters and injury/game factors added
@@ -81,15 +85,23 @@ class LineupOptimizer:
         # Handle current week with completed games
         if (week == as_of % 100 and as_of // 100 == latest_season and 
             datetime.datetime.now().month > 8):
-            players = self._handle_live_week_lineup(players, week, nfl_schedule, as_of, teams)
+            players = self._handle_live_week_lineup(
+                players, week, nfl_schedule, as_of, teams, started_teams
+            )
         # Handle future weeks
         elif week >= as_of % 100:
             players = self._set_future_week_lineup(players, week)
         
         return players
 
-    def _handle_live_week_lineup(self, players, week, nfl_schedule, as_of, teams=None):
-        """Handle lineup setting for the current week with some completed games."""
+    def _handle_live_week_lineup(self, players, week, nfl_schedule, as_of, teams=None,
+                                 started_teams=None):
+        """Handle lineup setting for the current week with some completed games.
+
+        ``started_teams`` adds NFL teams a live feed says have kicked off, so a
+        player whose game is underway can't be swapped out for someone who
+        hasn't played (which would drop his points from the team total).
+        """
         # Determine completed games
         cutoff = datetime.datetime.now()
         if datetime.datetime.now().hour < 20:
@@ -101,6 +113,7 @@ class LineupOptimizer:
             & (nfl_schedule.date < cutoff),
             "team",
         ].tolist()
+        completed = list(set(completed) | set(started_teams or []))
         
         # Set starters for each team
         for team in self.teams:
