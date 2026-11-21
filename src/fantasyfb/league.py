@@ -595,6 +595,19 @@ class League:
         cache[week] = (time.monotonic(), state)
         return state
 
+    def _live_player_points(self, week: int) -> pd.Series:
+        """Points scored so far this week, from the platform, cached for 30 seconds.
+
+        Yahoo needs one request per team, and one run asks from several places.
+        """
+        cache = self.__dict__.setdefault("_live_points_cache", {})
+        cached = cache.get(week)
+        if cached is not None and time.monotonic() - cached[0] < 30:
+            return cached[1]
+        points = self.client.get_live_player_points(week)
+        cache[week] = (time.monotonic(), points)
+        return points
+
     def _started_nfl_teams(self, week: int) -> list:
         """NFL teams whose ``week`` game has kicked off (in progress or final)
         according to the live game clock, so their players' lineup spots are locked."""
@@ -751,7 +764,7 @@ class League:
             return players
 
         try:
-            points_so_far = client.get_live_player_points(week)
+            points_so_far = self._live_player_points(week)
         except Exception as exc:  # live feeds are best-effort
             warnings.warn(
                 f"Could not fetch live player points ({exc}); in-progress "

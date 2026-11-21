@@ -22,6 +22,32 @@ from .platform_client import FantasyPlatformClient
 from .yahoo_auth import YahooTokenAuth
 
 
+def parse_roster_points(response: dict) -> Dict[str, float]:
+    """Pull ``{player_id: points}`` out of a ``team/{key}/roster/players/stats`` response.
+
+    Yahoo wraps each player in a list of single-key dicts (padded with empty
+    lists whose number and order change), so everything is looked up by key
+    name rather than position. ``player_points.total`` is the week's points
+    under the league's own scoring, updated while games are in progress.
+    """
+    team = response["fantasy_content"]["team"]
+    roster = next(item["roster"] for item in team if isinstance(item, dict) and "roster" in item)
+    players = roster["0"]["players"]
+
+    points: Dict[str, float] = {}
+    for ind in range(int(players["count"])):
+        parts = players[str(ind)]["player"]
+        info: Dict = {}
+        for item in parts:
+            for entry in item if isinstance(item, list) else [item]:
+                if isinstance(entry, dict):
+                    info.update(entry)
+        total = (info.get("player_points") or {}).get("total")
+        if info.get("player_id") is not None and total not in (None, ""):
+            points[str(info["player_id"])] = float(total)
+    return points
+
+
 class YahooFantasyClient(FantasyPlatformClient):
     """
     Client for interacting with Yahoo Fantasy API.
@@ -488,6 +514,31 @@ class YahooFantasyClient(FantasyPlatformClient):
         
         return selected
     
+    def get_live_player_points(self, week: int) -> pd.Series:
+        """
+        Points each rostered player has scored so far in ``week``, as scored by
+        Yahoo under this league's settings (``player_points`` from each team's
+        roster stats, which update while games are in progress).
+
+        One request per team. Errors propagate rather than being retried, since
+        callers treat live points as best-effort and fall back to projections.
+
+        Returns:
+            Series indexed by Yahoo player_id (string), covering rostered
+            players only.
+        """
+        if not self.lg:
+            raise ValueError("Must connect to league first")
+
+        self.refresh_oauth()
+        points: Dict[str, float] = {}
+        for team in self.get_fantasy_teams():
+            response = self.lg.yhandler.get(
+                f"team/{team['team_key']}/roster;week={week}/players/stats;type=week;week={week}"
+            )
+            points.update(parse_roster_points(response))
+        return pd.Series(points, dtype=float, name="points")
+
     def get_roster_percentages(self, players_df: pd.DataFrame, chunk_size: int = 25) -> pd.DataFrame:
         """
         Get roster percentages for players.
