@@ -9,6 +9,7 @@ raising: callers then fall back to the finished-or-not behavior.
 
 from __future__ import annotations
 
+import time
 import warnings
 from typing import Dict, Optional
 
@@ -79,9 +80,17 @@ def parse_scoreboard(payload: dict) -> Dict[str, dict]:
 class EspnGameStateProvider:
     """Fetches per-team game progress from ESPN's scoreboard."""
 
-    def __init__(self, url: str = ESPN_SCOREBOARD_URL, timeout: float = 15.0):
+    def __init__(
+        self,
+        url: str = ESPN_SCOREBOARD_URL,
+        timeout: float = 15.0,
+        attempts: int = 2,
+        retry_wait: float = 2.0,
+    ):
         self.url = url
         self.timeout = timeout
+        self.attempts = attempts
+        self.retry_wait = retry_wait
 
     def get_game_state(self, week: Optional[int] = None) -> Dict[str, dict]:
         """``{team: {state, remaining, game}}`` for the current scoreboard.
@@ -92,14 +101,20 @@ class EspnGameStateProvider:
         isn't what we expect.
         """
         params = {"week": week} if week is not None else None
-        try:
-            resp = requests.get(self.url, params=params, timeout=self.timeout)
-            resp.raise_for_status()
-            return parse_scoreboard(resp.json())
-        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-            warnings.warn(
-                f"Could not fetch live game state from ESPN ({exc}); "
-                "in-progress games will keep their full projections.",
-                stacklevel=2,
-            )
-            return {}
+        exc: Exception = RuntimeError("no attempt made")
+        for attempt in range(self.attempts):
+            try:
+                resp = requests.get(self.url, params=params, timeout=self.timeout)
+                resp.raise_for_status()
+                return parse_scoreboard(resp.json())
+            except (requests.RequestException, ValueError, KeyError, TypeError) as err:
+                exc = err
+                if attempt + 1 < self.attempts:
+                    time.sleep(self.retry_wait)
+        warnings.warn(
+            f"Could not fetch live game state from ESPN ({exc}); "
+            "in-progress games will keep their full projections "
+            "and lineups won't lock for games that have started.",
+            stacklevel=2,
+        )
+        return {}

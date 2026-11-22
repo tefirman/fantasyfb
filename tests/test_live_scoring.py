@@ -63,7 +63,27 @@ class TestParseScoreboard:
             raise requests.ConnectionError("offline")
         monkeypatch.setattr(gs.requests, "get", boom)
         with pytest.warns(UserWarning, match="ESPN"):
-            assert gs.EspnGameStateProvider().get_game_state(3) == {}
+            assert gs.EspnGameStateProvider(retry_wait=0).get_game_state(3) == {}
+
+    def test_one_blip_is_retried(self, monkeypatch):
+        calls = []
+
+        class _Resp:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"events": [_event("A @ B", "in", 4, "15:00", "B", "A")]}
+
+        def flaky(*a, **k):
+            calls.append(1)
+            if len(calls) == 1:
+                raise requests.Timeout("slow")
+            return _Resp()
+
+        monkeypatch.setattr(gs.requests, "get", flaky)
+        out = gs.EspnGameStateProvider(retry_wait=0).get_game_state(3)
+        assert len(calls) == 2 and set(out) == {"A", "B"}
 
 
 class _FakeGameState:
@@ -277,3 +297,36 @@ def test_live_points_are_cached_briefly():
     lg = _live_league(_LIVE, _CountingClient(pd.Series({"y1": 8.0})))
     _run_at(lg, _NOW, lambda: [lg._apply_live_week_actuals(_live_players(), 3) for _ in range(3)])
     assert calls == [3]
+
+
+class TestFinishedGamesPreferPlatformPoints:
+    """For a finished game both the platform and nflverse's box score have the
+    points. The platform's match the league app, so they win; the box score
+    only fills in players the platform's feed doesn't have."""
+
+    _FINAL = {"DONE_TEAM": {"state": "post", "remaining": 0.0, "game": "x"}}
+
+    def _run(self, feed):
+        lg = _live_league(self._FINAL, _FakeClient(pd.Series(feed, dtype=float)))
+        players = _players()  # p_done_1/p_done_2 start on DONE_TEAM, finished by date
+        players["player_id"] = ["d1", "d2", "d3", "d4"]
+        out = _run_at(lg, _NOW, lambda: lg._apply_live_week_actuals(players, 3))
+        return out.set_index("player_id_sr")
+
+    def test_platform_points_win_over_box_score(self):
+        out = self._run({"d1": 15.5, "d2": 17.0})
+        # The box score would give 16.0 and 18.0.
+        assert out.loc["p_done_1", "points_avg"] == pytest.approx(15.5)
+        assert out.loc["p_done_2", "points_avg"] == pytest.approx(17.0)
+        assert out.loc["p_done_1", "points_stdev"] == 0.0
+
+    def test_player_missing_from_feed_falls_back_to_box_score(self):
+        out = self._run({"d1": 15.5})
+        assert out.loc["p_done_1", "points_avg"] == pytest.approx(15.5)
+        assert out.loc["p_done_2", "points_avg"] == pytest.approx(18.0)
+        assert out.loc["p_done_2", "points_stdev"] == 0.0
+
+    def test_empty_feed_uses_box_score_as_before(self):
+        out = self._run({})
+        assert out.loc["p_done_1", "points_avg"] == pytest.approx(16.0)
+        assert out.loc["p_done_2", "points_avg"] == pytest.approx(18.0)

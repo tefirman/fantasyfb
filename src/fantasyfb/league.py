@@ -722,15 +722,17 @@ class League:
     def _apply_live_week_actuals(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
         """Return ``players`` with live scoring applied for ``week``.
 
-        Starters whose NFL game is in progress are blended with the points they
-        have scored so far (``_apply_in_progress_games``), then starters whose
-        game is finished get their actual points (``_apply_finished_game_actuals``).
+        Starters whose NFL game has kicked off are blended with the points they
+        have scored so far, taken from the platform (``_apply_in_progress_games``),
+        so finished games match the league's own scoring too. Any other starter
+        whose game is finished gets their actual points from nflverse's box
+        scores, scored by us (``_apply_finished_game_actuals``).
         Always returns a fresh copy; ``self.players`` is never mutated.
         """
-        players = self._apply_in_progress_games(players, week)
-        return self._apply_finished_game_actuals(players, week)
+        players, settled = self._apply_in_progress_games(players, week)
+        return self._apply_finished_game_actuals(players, week, skip=settled)
 
-    def _apply_in_progress_games(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
+    def _apply_in_progress_games(self, players: pd.DataFrame, week: int):
         """Blend starters in games that have kicked off with live points.
 
         Finished games count too, with nothing remaining: until the schedule's
@@ -747,13 +749,19 @@ class League:
         Needs two live feeds: the game clock (``self.game_state_provider``) and
         the platform's points so far (``client.get_live_player_points``). If
         either is missing or fails, the players are returned unchanged with
-        their full projections. Always returns a fresh copy.
+        their full projections. A player in a finished game who is missing from
+        the platform's feed is left alone, for the box-score path to handle.
+
+        Returns:
+            ``(players, settled)``: a fresh copy, and the index of the rows
+            this method set, which the finished-game step must not overwrite.
         """
         players = players.copy()
+        nothing = players.index[:0]
         provider = self.game_state_provider
         client = getattr(self, "client", None)
         if provider is None or client is None or not self._is_live_week(week):
-            return players
+            return players, nothing
 
         remaining = {
             team: info["remaining"]
@@ -761,7 +769,7 @@ class League:
             if info["state"] != "pre"
         }
         if not remaining:
-            return players
+            return players, nothing
 
         try:
             points_so_far = self._live_player_points(week)
@@ -771,25 +779,31 @@ class League:
                 "games will keep their full projections.",
                 stacklevel=2,
             )
-            return players
+            return players, nothing
         if points_so_far.empty:
-            return players
+            return players, nothing
 
         remaining_by_player = players.current_team.map(remaining)
-        in_play = players.starter & remaining_by_player.notna()
+        in_feed = players.player_id.astype(str).isin(points_so_far.index)
+        # Mid-game, a rostered player missing from the feed hasn't scored yet.
+        # After the final whistle he's more likely missing from the feed itself.
+        in_play = players.starter & remaining_by_player.notna() & (
+            (remaining_by_player > 0) | in_feed
+        )
         if not in_play.any():
-            return players
+            return players, nothing
 
         rem = remaining_by_player[in_play].astype(float)
-        # A rostered player missing from the feed hasn't scored yet.
         so_far = (
             players.loc[in_play, "player_id"].astype(str).map(points_so_far).fillna(0.0).astype(float)
         )
         players.loc[in_play, "points_avg"] = so_far + players.loc[in_play, "points_avg"] * rem
         players.loc[in_play, "points_stdev"] = players.loc[in_play, "points_stdev"] * np.sqrt(rem)
-        return players
+        return players, players.index[in_play]
 
-    def _apply_finished_game_actuals(self, players: pd.DataFrame, week: int) -> pd.DataFrame:
+    def _apply_finished_game_actuals(
+        self, players: pd.DataFrame, week: int, skip: pd.Index = None
+    ) -> pd.DataFrame:
         """Return ``players`` with real points substituted for starters
         whose NFL game in ``week`` is already finished.
 
@@ -798,6 +812,9 @@ class League:
         current-week matchup is deterministic for the part of the slate
         already played and only pending games contribute uncertainty.
         Everyone else is returned unchanged.
+
+        Rows in ``skip`` are left as they are, because the platform's own
+        points were already applied to them.
 
         Always returns a fresh copy -- ``self.players`` is never mutated.
         This matters because ``starters()`` recomputes ``points_avg`` but
@@ -811,6 +828,8 @@ class League:
             return players
 
         locked = players.starter & players.player_id_sr.isin(real_points.index)
+        if skip is not None:
+            locked &= ~players.index.isin(skip)
         # Nobody to lock happens whenever only some teams are projected (the
         # move analysis projects one team) and none of theirs has played.
         # Mapping an empty selection of string ids returns an empty string
