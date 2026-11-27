@@ -649,11 +649,14 @@ class League:
         ``_completed_nfl_teams`` calls a game finished from its kickoff date, but
         nflverse publishes box scores hours after the final whistle (Monday night
         games usually show up early Tuesday). Until then those teams' starters keep
-        their projections, with full variance, in ``_live_week_actuals``.
+        their projections, with full variance, in ``_live_week_actuals``, unless
+        the live feeds cover them: teams whose game has kicked off are left out
+        when the platform is reporting points, since ``_apply_in_progress_games``
+        already scores those players.
 
         Returns:
             Sorted team abbreviations, empty outside a live week or when every
-            finished game has its box score.
+            finished game has its box score or live points.
         """
         week = self.current_week
         if not self._is_live_week(week):
@@ -665,7 +668,15 @@ class League:
             self.season * 100 + week, self.season * 100 + week
         )
         published = set(box.team) if not box.empty else set()
-        return sorted(completed - published)
+        pending = completed - published
+        if pending and self._started_nfl_teams(week):
+            try:
+                covered = not self._live_player_points(week).empty
+            except Exception:  # best-effort, same as the blend itself
+                covered = False
+            if covered:
+                pending -= set(self._started_nfl_teams(week))
+        return sorted(pending)
 
     def live_week_box_score_notice(self) -> str:
         """A one-sentence caveat for reports and pages when box scores are pending, else ``""``."""
