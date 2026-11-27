@@ -143,10 +143,24 @@ refresh() {
   fi
   tail -1 collect.log
 
-  sfb-field simulate sfb/data --out-dir sfb
-  python fantasyfb/app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
-    --leaderboard site/inputs/SFB16Leaderboard.html --data sfb/data \
-    --players sfb/players.csv --out sfb/index.html --ga-id "$SFB_GA_ID"
+  # Once the playoffs start the SFB site lists the real field for the current
+  # round, so simulate only the rounds still to play. Before that no round page
+  # has teams and the field step exits 2, which falls back to the full simulation
+  # (any other failure, such as the SFB site being down, stops the run).
+  local rc=0
+  sfb-field field --out-dir sfb || rc=$?
+  [ "$rc" = 0 ] || [ "$rc" = 2 ] || return 1
+  if [ "$rc" = 0 ]; then
+    sfb-field simulate sfb/data --out-dir sfb --field sfb/field.csv
+    python fantasyfb/app/sfb_site/build.py --odds sfb/odds.csv --field sfb/field.json \
+      --leaderboard site/inputs/SFB16Leaderboard.html --data sfb/data \
+      --out sfb/index.html --ga-id "$SFB_GA_ID"
+  else
+    sfb-field simulate sfb/data --out-dir sfb
+    python fantasyfb/app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
+      --leaderboard site/inputs/SFB16Leaderboard.html --data sfb/data \
+      --players sfb/players.csv --out sfb/index.html --ga-id "$SFB_GA_ID"
+  fi
   python - <<'EOF'
 import pandas as pd
 odds = pd.read_csv("sfb/odds.csv")

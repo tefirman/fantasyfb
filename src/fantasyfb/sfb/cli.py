@@ -3,11 +3,17 @@
     sfb-field leagues leaderboard.html --out-dir sfb/          # once per season
     sfb-field collect sfb/leagues.csv --out-dir sfb/data       # pulls Sleeper (~20 minutes)
     sfb-field simulate sfb/data --out-dir sfb                  # offline, under a minute
+
+Once the regular season is over, add a step that reads the real playoff field and simulate from it:
+
+    sfb-field field --out-dir sfb                              # who is alive in the current round
+    sfb-field simulate sfb/data --out-dir sfb --field sfb/field.csv
 """
 from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import sys
 from pathlib import Path
 
@@ -22,6 +28,7 @@ from .field import FieldData, simulate_field
 from .injuries import fill_player_ids, scan_injuries, validate_injured_list
 from .leagues import league_list, parse_leaderboard, read_league_ids
 from .players import add_player_info
+from .playoffs import fetch_field
 
 
 def _leagues(args) -> int:
@@ -45,14 +52,42 @@ def _collect(args) -> int:
     return 1 if errors else 0
 
 
+def _field(args) -> int:
+    try:
+        found = fetch_field()
+    except ValueError as e:  # no round page lists teams yet: the regular season isn't over
+        print(e, file=sys.stderr)
+        return 2
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    found.teams.to_csv(out_dir / "field.csv", index=False)
+    meta = dict(round=found.round, size=found.size, advance=found.advance, needed=found.needed,
+                updated=found.updated, simulated=len(found.teams))
+    (out_dir / "field.json").write_text(json.dumps(meta), encoding="utf-8")
+    print(f"round {found.round}: {found.size} teams ({len(found.teams)} on Sleeper), top {found.advance} advance; "
+          f"wrote field.csv and field.json to {out_dir}")
+    return 0
+
+
 def _simulate(args) -> int:
-    result = simulate_field(FieldData.load(args.data), num_sims=args.num_sims,
+    data = FieldData.load(args.data)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if args.field:
+        field_path = Path(args.field)
+        meta = json.loads(field_path.with_name("field.json").read_text(encoding="utf-8"))
+        field = pd.read_csv(field_path, dtype={"league_id": str})
+        result = simulate_field(data, num_sims=args.num_sims, playoff_reps=args.playoff_reps, seed=args.seed,
+                                field=field, start_round=meta["round"] - 1)
+        print(f"round {meta['round']}: {len(field)} of {meta['size']} teams simulated")
+        result.teams.to_csv(out_dir / "odds.csv", index=False)
+        print(f"wrote odds.csv to {out_dir}")
+        return 0
+    result = simulate_field(data, num_sims=args.num_sims,
                             playoff_reps=args.playoff_reps, seed=args.seed)
     cut = result.cut_line
     print(f"{len(result.teams)} teams, quota {result.quota}; points cut line {np.nanmean(cut):.0f} "
           f"(sd {np.nanstd(cut):.1f}, 5-95%: {np.nanpercentile(cut, 5):.0f}-{np.nanpercentile(cut, 95):.0f})")
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
     result.teams.to_csv(out_dir / "odds.csv", index=False)
     pd.DataFrame({"num_sim": np.arange(len(cut)), "cut_line": cut}).to_csv(out_dir / "cut_line.csv", index=False)
     add_player_info(result.players).to_csv(out_dir / "players.csv", index=False)
@@ -156,7 +191,12 @@ def main(argv=None) -> int:
     simulate.add_argument("--num-sims", type=int, default=1000)
     simulate.add_argument("--playoff-reps", type=int, default=20)
     simulate.add_argument("--seed", type=int, default=1)
+    simulate.add_argument("--field", help="field.csv from the field step: simulate only the playoff rounds still to play")
     simulate.set_defaults(run=_simulate)
+
+    field = commands.add_parser("field", help="read the real playoff field for the current round from scottfishbowl.com")
+    field.add_argument("--out-dir", default=".", help="where to write field.csv and field.json (default: here)")
+    field.set_defaults(run=_field)
 
     args = parser.parse_args(argv)
     return args.run(args)

@@ -180,7 +180,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
     <div class="hero-l">
       <div class="kicker" id="sim-line"></div>
       <h1>Who will be the Big&nbsp;Fish?</h1>
-      <p class="lede">Every Sleeper team in the field, simulated through the regular season and all six playoff rounds. Find your team to see how far it goes.</p>
+      <p class="lede" id="lede">Every Sleeper team in the field, simulated through the regular season and all six playoff rounds. Find your team to see how far it goes.</p>
       <div class="find">
         <label for="q">Find a team — Sleeper handle, manager, team or league name</label>
         <div class="find-box">
@@ -201,7 +201,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
 
   <section class="blueprint team" id="team" hidden></section>
 
-  <section class="sec">
+  <section class="sec" id="sec-cut">
     <div class="rail">
       <div class="kicker">01 — The cut line</div>
       <h2>How many points does it take to get in?</h2>
@@ -218,7 +218,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
     </div>
   </section>
 
-  <section class="sec">
+  <section class="sec" id="sec-field">
     <div class="rail">
       <div class="kicker">02 — The field</div>
       <h2>Where every team stands</h2>
@@ -243,13 +243,13 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
 
   <section class="sec">
     <div class="rail">
-      <div class="kicker">03 — Contenders</div>
+      <div class="kicker" id="k-top">03 — Contenders</div>
       <h2>Most likely champions</h2>
       <p id="contenders-note"></p>
     </div>
     <div class="body scroll">
       <table class="table">
-        <thead><tr><th>#</th><th>Team</th><th>League</th><th class="r">Playoffs</th><th class="r">Semis</th><th class="r">Finals</th><th class="title-cell">Title</th></tr></thead>
+        <thead><tr><th>#</th><th>Team</th><th>League</th><th class="r" id="th-first">Playoffs</th><th class="r">Semis</th><th class="r">Finals</th><th class="title-cell">Title</th></tr></thead>
         <tbody id="top"></tbody>
       </table>
     </div>
@@ -278,15 +278,15 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
   </section>
 
   <section class="sec-method">
-    <div class="kicker">05 — Method</div>
+    <div class="kicker" id="k-method">05 — Method</div>
     <h2>How these odds are made</h2>
     <div class="hair method">
-      <div><div class="n">01</div><h4>Every league, every week</h4><p>Each Sleeper league is simulated through week __REG_WEEKS__ with the weekly median game, using fantasyfb's player projections. Completed weeks use real scores.</p></div>
+      <div id="m1"><div class="n">01</div><h4>Every league, every week</h4><p>Each Sleeper league is simulated through week __REG_WEEKS__ with the weekly median game, using fantasyfb's player projections. Completed weeks use real scores.</p></div>
       <div><div class="n">02</div><h4>Shared player draws</h4><p>Each NFL player gets one random performance per week and simulation, shared by every team starting him, so big games lift the whole field together instead of canceling out across leagues.</p></div>
-      <div><div class="n">03</div><h4>Qualifying</h4><p>Teams with __AUTO_WINS__ or more wins qualify; the rest of the field fills by points, scaled to the teams simulated (__QUOTA__ of __TEAMS__). Wins and points are simulation averages, so teams near a line can go either way.</p></div>
-      <div><div class="n">04</div><h4>Playoff rounds</h4><p>In weeks 12-17 a team's round score is its points-per-game average (times 1 in weeks 12-14, times 0.5 in weeks 15-17) plus that week's score. The field shrinks to __ROUND_SIZES__ teams, and the top week 17 score wins.</p></div>
-      <div><div class="n">05</div><h4>Player swing</h4><p>Reads the shared draws back as an experiment, for a one-standard-deviation better stretch. Qualification swing covers the remaining regular-season weeks; playoff swing covers weeks 12-17. It reflects projected mean and spread, not scouting, and only players started on at least 50 teams are shown.</p></div>
-      <div><div class="n">06</div><h4>Limits</h4><p>The 17 MyFantasyLeague leagues are not simulated. Projections reflect rosters, injuries, and lineups when the data was collected, so they will move. Seeding and tiebreakers are not described in the SFB rules, so ties are not specially handled. These are estimates, not official standings.</p></div>
+      <div id="m3"><div class="n">03</div><h4>Qualifying</h4><p>Teams with __AUTO_WINS__ or more wins qualify; the rest of the field fills by points, scaled to the teams simulated (__QUOTA__ of __TEAMS__). Wins and points are simulation averages, so teams near a line can go either way.</p></div>
+      <div id="m4"><div class="n">04</div><h4>Playoff rounds</h4><p>In weeks 12-17 a team's round score is its points-per-game average (times 1 in weeks 12-14, times 0.5 in weeks 15-17) plus that week's score. The field shrinks to __ROUND_SIZES__ teams, and the top week 17 score wins.</p></div>
+      <div id="m5"><div class="n">05</div><h4>Player swing</h4><p>Reads the shared draws back as an experiment, for a one-standard-deviation better stretch. Qualification swing covers the remaining regular-season weeks; playoff swing covers weeks 12-17. It reflects projected mean and spread, not scouting, and only players started on at least 50 teams are shown.</p></div>
+      <div id="m6"><div class="n">06</div><h4>Limits</h4><p>The 17 MyFantasyLeague leagues are not simulated. Projections reflect rosters, injuries, and lineups when the data was collected, so they will move. Seeding and tiebreakers are not described in the SFB rules, so ties are not specially handled. These are estimates, not official standings.</p></div>
     </div>
   </section>
 
@@ -301,7 +301,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
 (function () {
   "use strict";
   var D = JSON.parse(document.getElementById("odds-data").textContent);
-  var T = D.teams, P = D.players || [], RW = D.reg_weeks, CUT = D.cut;
+  var T = D.teams, P = D.players || [], RW = D.reg_weeks, CUT = D.cut, PO = D.mode === "playoffs";
   var byKey = {}, byLeague = {};
   T.forEach(function (t) {
     byKey[t.l + "-" + t.i] = t;
@@ -364,8 +364,20 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
   Array.prototype.forEach.call(document.querySelectorAll(".when"), function (e) { e.textContent = updated; });
   if (D.notice) { $("notice").textContent = D.notice; $("notice").hidden = false; }
   $("sim-line").textContent = "SFB16 playoff projections · " + fmt(D.sims) + " simulations";
-  $("plate").innerHTML = [["Teams simulated", fmt(D.teams_count)], ["Sleeper leagues", fmt(D.leagues_count)],
-    ["Simulations", fmt(D.sims)], ["Median points cut", fmt(CUT.p50)]].map(function (s) {
+  if (PO) {
+    $("sim-line").textContent = "SFB16 playoffs · " + D.round_name.replace(/^Wild Card /, "Wild Card round ") + " in progress";
+    $("lede").textContent = "The regular season is over and the " + fmt(D.field_size) + "-team field is set. Every Sleeper team still alive is simulated through the remaining rounds. Find your team to see how far it goes.";
+    $("sec-cut").hidden = true; $("sec-field").hidden = true;
+    $("k-top").textContent = "01 — Contenders"; $("k-method").textContent = "02 — Method";
+    $("th-first").textContent = D.round < 6 ? "Advance" : "Title";
+    $("m1").innerHTML = '<div class="n">01</div><h4>The real field</h4><p>The regular season is finished, so nobody is forecast to qualify: the teams still alive, and the season average each one carries, come straight from the SFB playoff page for the current round.</p>';
+    $("m3").innerHTML = '<div class="n">03</div><h4>Who advances</h4><p>Each round the top teams by score move on (' + fmt(D.advance) + " of " + fmt(D.field_size) + " this round), scaled to the " + fmt(D.field_simulated) + " Sleeper teams simulated. Teams already out of the playoffs show as not in the field.</p>";
+    $("m5").hidden = true;
+  }
+  $("plate").innerHTML = (PO ? [["Teams alive", fmt(D.field_size)], ["Simulated (Sleeper)", fmt(D.field_simulated)],
+    ["Advance this round", fmt(D.advance)], ["Score to advance now", D.needed ? fmt(D.needed, 1) : "—"]] :
+    [["Teams simulated", fmt(D.teams_count)], ["Sleeper leagues", fmt(D.leagues_count)],
+    ["Simulations", fmt(D.sims)], ["Median points cut", fmt(CUT.p50)]]).map(function (s) {
     return '<div><div class="lab">' + s[0] + '</div><div class="num">' + s[1] + "</div></div>";
   }).join("");
 
@@ -381,7 +393,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
     hits = hits.slice(0, 8); first = hits[0];
     $("results-list").innerHTML = hits.length ? hits.map(function (t) {
       return '<button type="button" data-k="' + t.l + "-" + t.i + '"><span class="who"><span class="nm">' + esc(t.t) +
-        '</span><span class="dt">' + esc(detail(t)) + '</span></span><span class="pc">' + pct(t.q) + "</span></button>";
+        '</span><span class="dt">' + esc(detail(t)) + '</span></span><span class="pc">' + (PO ? (t.q ? pct(t.w) : "Out") : pct(t.q)) + "</span></button>";
     }).join("") : '<div class="none">No matching team. The 17 MyFantasyLeague leagues are not simulated.</div>';
   }
   input.addEventListener("input", renderResults);
@@ -402,7 +414,7 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
     window.scrollTo({top: 0, behavior: "smooth"});
   }
   function setTeam(t) {
-    sel = t; renderTeam(); drawField();
+    sel = t; renderTeam(); if (!PO) drawField();
   }
   function clearTeam() {
     history.replaceState(null, "", location.pathname + location.search);
@@ -413,10 +425,10 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
     var root = $("team"), t = sel;
     root.hidden = !t;
     if (!t) { root.innerHTML = ""; return; }
-    var vals = [t.q].concat(t.r, [t.w]), season = t.p * RW, margin = season - CUT.p50;
-    var status = t.g >= D.auto_wins ? "On pace for " + D.auto_wins + "+ wins" :
+    var vals = [t.q].concat(t.r, [t.w]), season = t.p * RW, margin = PO ? 0 : season - CUT.p50;
+    var status = PO ? (t.q ? "In " + D.round_name : "Not in " + D.round_name) : t.g >= D.auto_wins ? "On pace for " + D.auto_wins + "+ wins" :
       margin >= 0 ? fmt(margin) + " pts above the cut" : fmt(-margin) + " pts below the cut";
-    var tiles = [[t.q, "Make the playoffs"], [t.r[3], "Reach the semis"], [t.r[4], "Reach the finals"], [t.w, "Win the title"]].map(function (x) {
+    var tiles = [[PO ? t.r[D.round - 1] || 0 : t.q, PO ? (D.round < 6 ? "Advance this round" : "Reach the finals") : "Make the playoffs"], [t.r[3], "Reach the semis"], [t.r[4], "Reach the finals"], [t.w, "Win the title"]].map(function (x) {
       return '<div><div class="num">' + pct(x[0]) + '</div><div class="lab">' + x[1] + "</div></div>";
     }).join("");
     var ladder = D.round_labels.map(function (lab, k) {
@@ -424,9 +436,11 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
       return '<div class="l">' + esc(lab) + '</div><div class="track"><div class="fill" style="width:' + (Math.max(0, Math.min(1, vals[k])) * 100).toFixed(1) +
         '%"></div></div><div class="p num">' + pct(vals[k]) + '</div><div class="s">' + surv + "</div>";
     }).join("");
-    var rows = (byLeague[t.l] || []).slice().sort(function (a, b) { return b.q - a.q; }).map(function (m, i) {
+    var out = PO && !t.q;
+    if (out) ladder = '<p class="helper" style="grid-column:1/-1">This team is not in ' + esc(D.round_name) + ', so it has no odds left.</p>';
+    var rows = (byLeague[t.l] || []).slice().sort(function (a, b) { return PO ? (b.w - a.w) || (b.q - a.q) : b.q - a.q; }).map(function (m, i) {
       return '<tr class="go' + (m === t ? " me" : "") + '" data-k="' + m.l + "-" + m.i + '"><td class="rk">' + (i + 1) + '</td><td class="ellip">' + esc(m.t) +
-        '</td><td class="r">' + pct(m.q) + '</td><td class="r">' + pct(m.r[3]) + '</td><td class="r">' + pct(m.w) + "</td></tr>";
+        '</td><td class="r">' + (PO ? (m.q ? "Yes" : "–") : pct(m.q)) + '</td><td class="r">' + pct(m.r[3]) + '</td><td class="r">' + pct(m.w) + "</td></tr>";
     }).join("");
     root.innerHTML = corners() +
       '<div class="team-head"><div><div class="kicker">Team file · ' + esc(t.s || "Sleeper league") + "</div><h2>" + esc(t.t) + '</h2><div class="team-who"><span>' +
@@ -437,10 +451,12 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
       '<div class="hair tiles">' + tiles + "</div>" +
       '<div class="team-cols"><div class="team-l"><h3>Chance to reach each round</h3><p class="helper">Right column: share of simulations where the team, having reached the previous stage, survived to this one.</p>' +
       '<div class="ladder">' + ladder + "</div>" +
+      (out ? "</div>" : PO ? '<div class="hair proj"><div><div class="lab">Season average</div><div class="num">' + fmt(t.p, 1) + '</div></div>' +
+      '<div><div class="lab">Score to advance now</div><div class="num">' + (D.needed ? fmt(D.needed, 1) : "—") + "</div></div></div></div>" :
       '<div class="hair proj"><div><div class="lab">Projected wins</div><div class="num">' + fmt(t.g, 1) + '</div></div>' +
       '<div><div class="lab">Points per game</div><div class="num">' + fmt(t.p, 1) + '</div></div>' +
-      '<div><div class="lab">Season pts vs cut</div><div class="num">' + fmt(season) + " <small>/ " + fmt(CUT.p50) + "</small></div></div></div></div>" +
-      '<div class="team-r"><h3 style="margin-bottom:12px">League table</h3><div class="scroll"><table class="table" style="font-size:13px"><thead><tr><th>#</th><th>Team</th><th class="r">Playoffs</th><th class="r">Semis</th><th class="r">Title</th></tr></thead><tbody>' +
+      '<div><div class="lab">Season pts vs cut</div><div class="num">' + fmt(season) + " <small>/ " + fmt(CUT.p50) + "</small></div></div></div></div>") +
+      '<div class="team-r"><h3 style="margin-bottom:12px">League table</h3><div class="scroll"><table class="table" style="font-size:13px"><thead><tr><th>#</th><th>Team</th><th class="r">' + (PO ? "In" : "Playoffs") + '</th><th class="r">Semis</th><th class="r">Title</th></tr></thead><tbody>' +
       rows + "</tbody></table></div></div></div>";
     $("team-close").addEventListener("click", clearTeam);
   }
@@ -555,10 +571,10 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
   function drawTop() {
     var N = 25, top = T.slice().sort(function (a, b) { return b.w - a.w; }).slice(0, N), maxW = top.length ? top[0].w : 1;
     $("contenders-note").textContent = "The " + top.length + " teams that win the whole thing most often. Even the favorite wins only about 1 in " + fmt(1 / maxW) +
-      " — a " + fmt(D.teams_count) + "-team bracket is a lottery with weighted tickets.";
+      " — a " + fmt(PO ? D.field_size : D.teams_count) + "-team bracket is a lottery with weighted tickets.";
     $("top").innerHTML = top.map(function (c, i) {
       return '<tr class="go" data-k="' + c.l + "-" + c.i + '"><td class="rk">' + (i + 1) + '</td><td><div style="font-weight:600">' + esc(c.t) + '</div><div class="sub">' + esc(handle(c)) +
-        '</div></td><td class="league-cell">' + esc(c.s) + '</td><td class="r">' + pct(c.q) + '</td><td class="r">' + pct(c.r[3]) + '</td><td class="r">' + pct(c.r[4]) +
+        '</div></td><td class="league-cell">' + esc(c.s) + '</td><td class="r">' + (PO ? (D.round < 6 ? pct(c.r[D.round - 1]) : pct(c.w)) : pct(c.q)) + '</td><td class="r">' + pct(c.r[3]) + '</td><td class="r">' + pct(c.r[4]) +
         '</td><td class="title-cell"><div><div class="bar"><i style="width:' + (c.w / maxW * 100).toFixed(1) + '%"></i></div><span class="num">' + pct(c.w) + "</span></div></td></tr>";
     }).join("");
   }
@@ -631,8 +647,9 @@ footer .logo { width: 16px; height: 24px; background: var(--color-neutral-700); 
   $("player-more").addEventListener("click", function () { showAll = !showAll; playerTable(); });
 
   // ---- go ----
-  function drawAll() { drawHist(); drawField(); if (P.length) drawPlayers(); }
-  histText(); drawTop();
+  function drawAll() { if (!PO) { drawHist(); drawField(); } if (P.length) drawPlayers(); }
+  if (!PO) histText();
+  drawTop();
   if (P.length) { $("players").hidden = false; playerTable(); }
   sel = fromHash();
   if (!sel && D.default_team) {

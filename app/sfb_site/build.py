@@ -65,10 +65,16 @@ def player_rows(players: pd.DataFrame, min_teams: int = 50) -> list:
     ]
 
 
-def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, through_week: int,
+def page_data(odds: pd.DataFrame, cut_line: Optional[np.ndarray], names: pd.DataFrame, through_week: int,
               rules: Rules = Rules(), bin_width: int = 5, players: Optional[pd.DataFrame] = None,
-              updated: str = "", default_team: str = "", notice: str = "") -> dict:
-    """The JSON the page reads: a row per team, the cut-line histogram, labels, and the player swings."""
+              updated: str = "", default_team: str = "", notice: str = "",
+              field: Optional[dict] = None) -> dict:
+    """The JSON the page reads: a row per team, the cut-line histogram, labels, and the player swings.
+
+    With ``field`` (the round metadata ``sfb-field field`` writes) the page is in playoff mode: the
+    regular season is over, so there is no cut line, ``qualify`` is a fact, and the odds cover
+    only the rounds still to play. ``cut_line`` is ignored.
+    """
     odds = odds.merge(
         names.loc[names.platform == "sleeper", ["league_id", "roster_id", "manager", "handle", "league_name"]],
         on=["league_id", "roster_id"], how="left",
@@ -80,13 +86,37 @@ def page_data(odds: pd.DataFrame, cut_line: np.ndarray, names: pd.DataFrame, thr
          "w": round(float(r.win), 4), "g": round(float(r.wins), 2), "p": round(float(r.avg_ppg), 2)}
         for r in odds.itertuples(index=False)
     ]
+    rounds = [_label(n) for n in rules.round_names]
+    if field:
+        return {
+            "mode": "playoffs",
+            "updated": updated,
+            "notice": notice,
+            "default_team": default_team,
+            "through_week": through_week,
+            "sims": int(field.get("sims", 0)),
+            "teams_count": len(teams),
+            "leagues_count": int(odds.league_id.nunique()),
+            "reg_weeks": rules.regular_season_weeks,
+            "auto_wins": rules.auto_wins,
+            "cut": None,
+            "round": int(field["round"]),
+            "round_name": rounds[int(field["round"]) - 1],
+            "field_size": int(field["size"]),
+            "field_simulated": int(field["simulated"]),
+            "advance": int(field["advance"]),
+            "needed": field.get("needed"),
+            "sfb_updated": field.get("updated", ""),
+            "round_labels": ["In the playoffs"] + [f"Reach {r}" for r in rounds[1:]] + ["Win the title"],
+            "teams": teams,
+            "players": [],
+        }
     cut = np.asarray(cut_line, dtype=float)
     cut = cut[~np.isnan(cut)]
     start = int(np.floor(cut.min() / bin_width) * bin_width)
     edges = np.arange(start, cut.max() + bin_width, bin_width)
     counts, _ = np.histogram(cut, bins=edges)
     p5, p50, p95 = np.percentile(cut, [5, 50, 95])
-    rounds = [_label(n) for n in rules.round_names]
     return {
         "updated": updated,
         "notice": notice,
@@ -136,10 +166,12 @@ def render(data: dict, title: str, rules: Rules = Rules(), ga_id: str = "") -> s
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--odds", required=True, help="odds.csv from sfb-field simulate")
-    parser.add_argument("--cut-line", required=True, help="cut_line.csv from sfb-field simulate")
+    parser.add_argument("--cut-line", help="cut_line.csv from sfb-field simulate (not needed with --field)")
+    parser.add_argument("--field", help="field.json from sfb-field field: build the playoff-mode page, for after the regular season")
     parser.add_argument("--leaderboard", required=True, help="saved SFB leaderboard page")
     parser.add_argument("--data", required=True, help="collected data directory (for the week)")
     parser.add_argument("--players", help="players.csv from sfb-field simulate (adds the player section)")
+    parser.add_argument("--sims", type=int, default=1000, help="playoff replays behind a --field page (default: %(default)s)")
     parser.add_argument("--out", default="index.html")
     parser.add_argument("--title", default="SFB16 playoff projections")
     parser.add_argument("--ga-id", default="",
@@ -149,7 +181,14 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     odds = pd.read_csv(args.odds, dtype={"league_id": str})
-    cut = pd.read_csv(args.cut_line).cut_line.to_numpy()
+    field = json.loads(Path(args.field).read_text(encoding="utf-8")) if args.field else None
+    if field:
+        field["sims"] = int(args.sims)
+        cut = None
+    elif args.cut_line:
+        cut = pd.read_csv(args.cut_line).cut_line.to_numpy()
+    else:
+        parser.error("--cut-line is required unless --field is given")
     names = parse_leaderboard(Path(args.leaderboard).read_text(encoding="utf-8", errors="replace"))
     first_week = int(pd.read_parquet(Path(args.data) / "settings.parquet").first_week.min())
     players = pd.read_csv(args.players, dtype={"player_id": str}) if args.players else None
@@ -158,7 +197,7 @@ def main(argv=None) -> int:
     notices_path = Path(args.data) / "notices.json"
     notice = json.loads(notices_path.read_text(encoding="utf-8")).get("box_scores", "") if notices_path.exists() else ""
     data = page_data(odds, cut, names, through_week=first_week - 1, players=players, updated=updated,
-                     default_team=args.default_team, notice=notice)
+                     default_team=args.default_team, notice=notice, field=field)
     Path(args.out).write_text(render(data, args.title, ga_id=args.ga_id), encoding="utf-8")
     print(f"wrote {args.out} ({Path(args.out).stat().st_size / 1e6:.2f} MB, {len(data['teams'])} teams)")
     return 0

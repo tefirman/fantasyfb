@@ -88,8 +88,14 @@ def simulate_field(
     playoff_reps: int = 20,
     seed: int = 1,
     rules: Rules = Rules(),
+    field: Optional[pd.DataFrame] = None,
+    start_round: int = 0,
 ) -> FieldResult:
     """Simulates every league's regular season, the qualification cut, and the playoffs.
+
+    With ``field`` (the real teams still alive, see ``sfb.playoffs``) the regular
+    season is over: qualification is fact, nothing before ``start_round`` is
+    simulated, and ``num_sims`` is just the number of playoff replays.
 
     Args:
         data: collected league data.
@@ -99,7 +105,12 @@ def simulate_field(
             the late-round odds without more regular-season work.
         seed: random seed.
         rules: qualification and playoff rules.
+        field: teams alive in round ``start_round``: ``league_id``, ``roster_id`` and ``avg``
+            (the season average the round adds). Sleeper teams missing from ``data`` raise.
+        start_round: index into ``rules.round_names`` of the round being played (0 = wild card 1).
     """
+    if field is not None:
+        return _simulate_remaining_rounds(data, field, start_round, num_sims, playoff_reps, seed, rules)
     rng = np.random.default_rng(seed)
     weeks, num_players = team_week_matrices(data)
     player_draws = {}
@@ -142,6 +153,49 @@ def simulate_field(
                             standardized_output(player_draws, player_sds(weeks, reg_weeks), reg_weeks)),
         swing.swing(), swing.playoff_share(), own_regular, own_playoff)
     return FieldResult(teams=teams, cut_line=cut_line, quota=quota, players=players)
+
+
+def _simulate_remaining_rounds(data, field, start_round, num_sims, playoff_reps, seed, rules) -> FieldResult:
+    """``simulate_field`` once the field is known: only the rounds from ``start_round`` on are played."""
+    teams = data.teams.copy()
+    key = pd.MultiIndex.from_frame(teams[["league_id", "roster_id"]].astype(str))
+    where = key.get_indexer(pd.MultiIndex.from_frame(field[["league_id", "roster_id"]].astype(str)))
+    if (where < 0).any():
+        raise ValueError(f"{(where < 0).sum()} teams in the field are missing from the collected data")
+    if len(set(where)) != len(where):
+        raise ValueError("the field lists a team twice")
+    weeks, _ = team_week_matrices(data)
+    playoff_weeks = list(rules.playoff_weeks)
+    missing = [w for w in playoff_weeks[start_round:] if w not in weeks]
+    if missing:
+        raise ValueError(f"no collected projections for weeks {missing}")
+    zeros = np.zeros(len(teams))
+    mu = np.column_stack([weeks[w][1] if w in weeks else zeros for w in playoff_weeks])
+    sd = np.column_stack([weeks[w][2] if w in weeks else zeros for w in playoff_weeks])
+
+    alive = np.zeros(len(teams), dtype=bool)
+    alive[where] = True
+    average = np.zeros(len(teams))
+    average[where] = field.avg.to_numpy(dtype=float)
+    # The rounds score total / (weeks played), so seed the total from the average.
+    total = np.tile(average * (rules.regular_season_weeks + start_round), (num_sims, 1))
+    qualified = np.tile(alive, (num_sims, 1))
+
+    def draws(prng, r):
+        return standardized_noise(weeks[playoff_weeks[r]][0], weeks[playoff_weeks[r]][2],
+                                  prng.standard_normal((weeks[playoff_weeks[r]][0].shape[1], num_sims),
+                                                       dtype=np.float32)).T
+
+    reach = simulate_playoffs(qualified, total, mu, sd, rules, seed=seed, reps=playoff_reps, draws=draws,
+                              start_round=start_round, scale=alive.sum() / rules.round_starts[start_round])
+    teams["qualify"] = alive.astype(float)
+    for i, name in enumerate(rules.round_names[1:], start=1):
+        teams[f"reach_{name}"] = reach[:, i]
+    teams["win"] = reach[:, -1]
+    teams["wins"] = 0.0  # the round pages don't list wins
+    teams["avg_ppg"] = average
+    teams["points"] = average * rules.regular_season_weeks
+    return FieldResult(teams=teams, cut_line=np.array([]), quota=int(alive.sum()), players=None)
 
 
 def team_week_matrices(data: FieldData):
@@ -256,6 +310,8 @@ def simulate_playoffs(
     reps: int = 1,
     draws: Optional[Callable] = None,
     on_replay: Optional[Callable] = None,
+    start_round: int = 0,
+    scale: Optional[float] = None,
 ) -> np.ndarray:
     """Plays the playoff rounds for each simulation.
 
@@ -272,20 +328,27 @@ def simulate_playoffs(
         reps: replays per regular-season simulation, averaged.
         on_replay: optional ``on_replay(advanced)`` called after each replay with the
             (num_sim, num_team) number of rounds each team advanced (0 if it missed the playoffs).
+        start_round: the round ``qualified`` is the starting field of; earlier rounds are not played,
+            and every team in the field counts as having started them. ``total`` must then be the
+            points through the weeks before this round.
+        scale: size of the simulated field relative to the real one, which sets each round's cut
+            (default: teams simulated over ``rules.field_teams``).
 
     Returns:
         (num_team, num_rounds + 1): the probability of starting each round, then of winning.
     """
     if reps > 1:
         return np.mean([simulate_playoffs(qualified, total, mu, sd, rules, seed + i, draws=draws,
-                                          on_replay=on_replay) for i in range(reps)], axis=0)
+                                          on_replay=on_replay, start_round=start_round, scale=scale)
+                        for i in range(reps)], axis=0)
     rng = np.random.default_rng(seed)
-    scale = qualified.shape[1] / rules.field_teams
+    if scale is None:
+        scale = qualified.shape[1] / rules.field_teams
     alive = qualified.copy()
     total = total.astype(np.float64)
-    reached = []
+    reached = [alive.mean(0)] * start_round
     advanced = np.zeros(total.shape, dtype=np.float32)
-    for r in range(len(rules.round_starts)):
+    for r in range(start_round, len(rules.round_starts)):
         reached.append(alive.mean(0))
         z = draws(rng, r) if draws else rng.standard_normal(total.shape)
         week = mu[:, r] + sd[:, r] * z

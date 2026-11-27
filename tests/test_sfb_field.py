@@ -328,3 +328,44 @@ def test_simulate_field_reports_a_positive_swing_for_a_shared_starter():
     assert players.loc["shared", "qual_swing"] > 0
     assert players.loc["shared", "playoff_swing"] > 0
     assert len(players) == 2 * 4 - 2 + 1
+
+
+# ---- playoff-field mode (regular season over) ----
+
+ROUND_PAGE = """<p>2 Teams - Top 1 advance</p><span>Current score needed to advance: 226.1</span>
+<table><tbody>
+<tr><td>1</td><td>Sleeper</td><td>A (@a) <br> Team A Live</td><td>250.50</td><td>0.00</td><td><a href="javascript:openWin('https://sleeper.com/roster/111/2')">250.50</a></td><td>+1</td></tr>
+<tr><td>2</td><td>MFL</td><td>B <br> Team B</td><td>240.00</td><td>0.00</td><td>240.00</td><td>-1</td></tr>
+</tbody></table>"""
+
+
+def test_parse_round_reads_sleeper_teams_and_counts_the_rest():
+    from fantasyfb.sfb.playoffs import parse_round
+    found = parse_round(ROUND_PAGE, 1)
+    assert (found.size, found.advance, found.needed) == (2, 1, 226.1)
+    assert found.teams.to_dict("records") == [dict(league_id="111", roster_id=2, avg=250.5)]
+    assert parse_round("<table><tbody></tbody></table>", 2) is None
+
+
+def test_fetch_field_returns_the_latest_round_with_teams():
+    from fantasyfb.sfb.playoffs import fetch_field
+    empty = "<table><tbody></tbody></table>"
+    pages = {1: ROUND_PAGE, 2: ROUND_PAGE}
+    found = fetch_field(lambda url: pages.get(int(url.rsplit("=", 1)[1]), empty))
+    assert found.round == 2
+    with pytest.raises(ValueError):
+        fetch_field(lambda url: empty)
+
+
+def test_simulate_field_with_a_known_field_only_plays_the_remaining_rounds():
+    data = make_field()
+    field = pd.DataFrame({"league_id": ["L0", "L0", "L1", "L1"], "roster_id": [1, 4, 2, 3],
+                          "avg": [100.0, 130.0, 110.0, 120.0]})
+    result = simulate_field(data, num_sims=200, playoff_reps=2, rules=TINY, field=field, start_round=0)
+    odds = result.teams.set_index(["league_id", "roster_id"])
+    assert odds.qualify.sum() == 4
+    assert odds.loc[("L0", 2), "qualify"] == 0 and odds.loc[("L0", 2), "win"] == 0
+    assert odds.win.sum() == pytest.approx(1.0)
+    assert odds.reach_r2.sum() == pytest.approx(2.0)  # the field of 4 cuts to 2
+    with pytest.raises(ValueError, match="missing"):
+        simulate_field(data, rules=TINY, field=field.assign(roster_id=[1, 4, 2, 99]))
