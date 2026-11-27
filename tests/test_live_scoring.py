@@ -330,3 +330,34 @@ class TestFinishedGamesPreferPlatformPoints:
         out = self._run({})
         assert out.loc["p_done_1", "points_avg"] == pytest.approx(16.0)
         assert out.loc["p_done_2", "points_avg"] == pytest.approx(18.0)
+
+
+class TestPendingBoxScoreNotice:
+    """The "box scores pending" caveat says those players are counted at their
+    projections, so it must skip teams the live feeds already score."""
+
+    def _league(self, state, client):
+        lg = _live_league(state, client)
+        # DONE_TEAM counts as finished by date; the box score isn't published.
+        lg.nfl_provider = _FakeProvider(_box_score().query("team != 'DONE_TEAM'"))
+        return lg
+
+    _FINAL = {"DONE_TEAM": {"state": "post", "remaining": 0.0, "game": "x"}}
+
+    def test_still_pending_without_live_points(self):
+        lg = self._league(self._FINAL, _FakeClient())
+        assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == ["DONE_TEAM"]
+
+    def test_not_pending_when_platform_reports_points(self):
+        lg = self._league(self._FINAL, _FakeClient(pd.Series({"d1": 5.0})))
+        assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == []
+        assert _run_at(lg, _NOW, lg.live_week_box_score_notice) == ""
+
+    def test_still_pending_when_points_feed_fails(self):
+        lg = self._league(self._FINAL, _FakeClient(raises=True))
+        assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == ["DONE_TEAM"]
+
+    def test_still_pending_when_clock_feed_disabled(self):
+        lg = self._league(self._FINAL, _FakeClient(pd.Series({"d1": 5.0})))
+        lg.game_state_provider = None
+        assert _run_at(lg, _NOW, lg.live_week_pending_box_scores) == ["DONE_TEAM"]
