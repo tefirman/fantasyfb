@@ -194,8 +194,21 @@ jobs:
           echo "Retrying: $failed"
           sfb-field collect site/inputs/leagues.csv --out-dir sfb/data --only "$failed"
 
+      # Once the playoffs start, the SFB site lists the real field for the current
+      # round and only the rounds still to play are simulated. Before that no round
+      # page has teams, `field` exits 2, and the whole season is simulated. Any
+      # other failure stops the run.
       - name: Simulate the field
-        run: sfb-field simulate sfb/data --out-dir sfb
+        run: |
+          rc=0
+          sfb-field field --out-dir sfb || rc=$?
+          if [ "$rc" = 0 ]; then
+            sfb-field simulate sfb/data --out-dir sfb --field sfb/field.csv
+          elif [ "$rc" = 2 ]; then
+            sfb-field simulate sfb/data --out-dir sfb
+          else
+            exit 1
+          fi
 
       # The measurement ID is public but deliberately kept out of the repo, so
       # it comes from the SFB_GA_ID repository variable. Fail rather than
@@ -208,9 +221,15 @@ jobs:
             echo "Set the SFB_GA_ID repository variable (Settings > Variables)." >&2
             exit 1
           fi
-          python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
-            --leaderboard site/inputs/SFB16Leaderboard.html --data sfb/data \
-            --players sfb/players.csv --out sfb/index.html --ga-id "$GA_ID"
+          if [ -f sfb/field.json ]; then
+            python app/sfb_site/build.py --odds sfb/odds.csv --field sfb/field.json \
+              --leaderboard site/inputs/SFB16Leaderboard.html --data sfb/data \
+              --out sfb/index.html --ga-id "$GA_ID"
+          else
+            python app/sfb_site/build.py --odds sfb/odds.csv --cut-line sfb/cut_line.csv \
+              --leaderboard site/inputs/SFB16Leaderboard.html --data sfb/data \
+              --players sfb/players.csv --out sfb/index.html --ga-id "$GA_ID"
+          fi
 
       - name: Sanity-check the output
         run: |
